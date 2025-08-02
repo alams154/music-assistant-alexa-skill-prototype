@@ -47,16 +47,7 @@ You will need to comply to the prerequisites below and to change a few configura
 2. ```./lambda/py/alexa/data.py```
 
    - Locale specific card data, radio URL, jingle URL has to be modified with correct runtime values.
-   ```start_jingle``` is an optional property defining a Jingle to be played before the live stream. 
-   Be sure to modify the value for each language supported by your skill.
-   
-   - When playing a jingle before your stream, you can choose the name of the database table where the "last played" 
-   information will be stored.  If the table does not exist, the persistence code will create the table at the first 
-   invocation of the skill. You can manually create the DynamoDB table with the following command:
-
-    ```bash
-    aws dynamodb create-table --table-name my_radio --attribute-definitions AttributeName=id,AttributeType=S --key-schema AttributeName=id,KeyType=HASH --provisioned-throughput ReadCapacityUnits=5,WriteCapacityUnits=5
-    ```
+  Locale specific card data and radio URL have to be modified with correct runtime values.
 
         To minimize latency, we recommend to create the DynamoDB table in the same region as the Lambda function.
         

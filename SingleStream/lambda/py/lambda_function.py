@@ -12,10 +12,18 @@ from ask_sdk_model import Response
 
 from alexa import data, util
 
-sb = StandardSkillBuilder(
-    table_name=data.jingle["db_table"], auto_create_table=True)
+sb = StandardSkillBuilder()
+# sb = StandardSkillBuilder(
+#     table_name=data.jingle["db_table"], auto_create_table=True)
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s"
+)
+
+supports_apl = False
 
 # ######################### INTENT HANDLERS #########################
 # This section contains handlers for the built-in intents and generic
@@ -77,21 +85,12 @@ class LaunchRequestOrPlayAudioHandler(AbstractRequestHandler):
         _ = handler_input.attributes_manager.request_attributes["_"]
         request = handler_input.request_envelope.request
 
-        if util.audio_data(request)["start_jingle"]:
-            if util.should_play_jingle(handler_input):
-                return util.play(url=util.audio_data(request)["start_jingle"],
-                                 offset=0,
-                                 text=_(data.WELCOME_MSG).format(
-                                     util.audio_data(request)["card"]["title"]),
-                                 card_data=util.audio_data(request)["card"],
-                                 response_builder=handler_input.response_builder)
-
         return util.play(url=util.audio_data(request)["url"],
                          offset=0,
-                         text=_(data.WELCOME_MSG).format(
-                             util.audio_data(request)["card"]["title"]),
+                         text=data.WELCOME_MSG,
                          card_data=util.audio_data(request)["card"],
-                         response_builder=handler_input.response_builder)
+                         response_builder=handler_input.response_builder,
+                         supports_apl=supports_apl)
 
 
 class HelpIntentHandler(AbstractRequestHandler):
@@ -181,7 +180,8 @@ class ResumeIntentHandler(AbstractRequestHandler):
         return util.play(
             url=util.audio_data(request)["url"], offset=0,
             text=speech, card_data=util.audio_data(request)["card"],
-            response_builder=handler_input.response_builder)
+            response_builder=handler_input.response_builder,
+            supports_apl=supports_apl)
 
 
 class StartOverIntentHandler(AbstractRequestHandler):
@@ -294,7 +294,8 @@ class PlaybackFailedHandler(AbstractRequestHandler):
         return util.play(
             url=util.audio_data(request)["url"], offset=0, text=None,
             card_data=None,
-            response_builder=handler_input.response_builder)
+            response_builder=handler_input.response_builder,
+            supports_apl=supports_apl)
 
 
 class ExceptionEncounteredHandler(AbstractRequestHandler):
@@ -334,19 +335,12 @@ class PlayCommandHandler(AbstractRequestHandler):
         _ = handler_input.attributes_manager.request_attributes["_"]
         request = handler_input.request_envelope.request
 
-        if util.audio_data(request)["start_jingle"]:
-            if util.should_play_jingle(handler_input):
-                return util.play(url=util.audio_data(request)["start_jingle"],
-                                 offset=0,
-                                 text=None,
-                                 card_data=None,
-                                 response_builder=handler_input.response_builder)
-
         return util.play(url=util.audio_data(request)["url"],
                          offset=0,
                          text=None,
                          card_data=None,
-                         response_builder=handler_input.response_builder)
+                         response_builder=handler_input.response_builder,
+                         supports_apl=supports_apl)
 
 
 class NextOrPreviousCommandHandler(AbstractRequestHandler):
@@ -414,6 +408,19 @@ class CatchAllExceptionHandler(AbstractExceptionHandler):
 # ###################################################################
 
 # ############# REQUEST / RESPONSE INTERCEPTORS #####################
+
+class APLSupportRequestInterceptor(AbstractRequestInterceptor):
+    """Request Interceptor to check if the device supports APL and update the global supports_apl variable."""
+    def process(self, handler_input):
+        global supports_apl
+        if hasattr(handler_input, 'request_envelope'):
+            supported_interfaces = getattr(
+                handler_input.request_envelope.context.system.device.supported_interfaces,
+                'alexa_presentation_apl', None)
+            supports_apl = supported_interfaces is not None
+        else:
+            supports_apl = False
+
 class RequestLogger(AbstractRequestInterceptor):
     """Log the alexa requests."""
     def process(self, handler_input):
@@ -488,6 +495,7 @@ sb.add_request_handler(PlaybackFailedHandler())
 sb.add_exception_handler(CatchAllExceptionHandler())
 
 # Interceptors
+sb.add_global_request_interceptor(APLSupportRequestInterceptor())
 sb.add_global_request_interceptor(RequestLogger())
 sb.add_global_request_interceptor(LocalizationInterceptor())
 sb.add_global_response_interceptor(ResponseLogger())

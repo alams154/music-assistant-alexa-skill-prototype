@@ -1,2 +1,4 @@
 ask-sdk
 babel
+flask
+flask_ask_sdk
