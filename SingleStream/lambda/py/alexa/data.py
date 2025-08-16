@@ -23,7 +23,7 @@ en = {
         "large_image_url": 'https://raw.githubusercontent.com/music-assistant/server/refs/heads/dev/music_assistant/logo.png',
         "small_image_url": 'https://raw.githubusercontent.com/music-assistant/server/refs/heads/dev/music_assistant/logo.png'
     },
-    "url": 'https://audio1.maxi80.com',
+    "url": 'https://streams.80s80s.de/web/mp3-192/streams.80s80s.de',
 }
 
 fr = {
@@ -33,7 +33,7 @@ fr = {
         "large_image_url": 'https://raw.githubusercontent.com/music-assistant/server/refs/heads/dev/music_assistant/logo.png',
         "small_image_url": 'https://raw.githubusercontent.com/music-assistant/server/refs/heads/dev/music_assistant/logo.png'
     },
-    "url": 'https://audio1.maxi80.com',
+    "url": 'https://streams.80s80s.de/web/mp3-192/streams.80s80s.de',
 }
 
 it = {
@@ -43,7 +43,7 @@ it = {
         "large_image_url": 'https://raw.githubusercontent.com/music-assistant/server/refs/heads/dev/music_assistant/logo.png',
         "small_image_url": 'https://raw.githubusercontent.com/music-assistant/server/refs/heads/dev/music_assistant/logo.png'
     },
-    "url": 'https://audio1.maxi80.com',
+    "url": 'https://streams.80s80s.de/web/mp3-192/streams.80s80s.de',
 }
 
 es = {
@@ -53,5 +53,5 @@ es = {
         "large_image_url": 'https://raw.githubusercontent.com/music-assistant/server/refs/heads/dev/music_assistant/logo.png',
         "small_image_url": 'https://raw.githubusercontent.com/music-assistant/server/refs/heads/dev/music_assistant/logo.png'
     },
-    "url": 'https://audio1.maxi80.com',
+    "url": 'https://streams.80s80s.de/web/mp3-192/streams.80s80s.de',
 }
