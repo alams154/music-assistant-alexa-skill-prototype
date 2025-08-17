@@ -50,22 +50,23 @@ def play(url, offset, text, card_data, response_builder, supports_apl=False):
     """
     # type: (str, int, str, Dict, ResponseFactory) -> Response
 
-    # Using URL as token as they are all unique
-    response_builder.add_directive(
-        PlayDirective(
-            play_behavior=PlayBehavior.REPLACE_ALL,
-            audio_item=AudioItem(
-                stream=Stream(
-                    token=url,
-                    url=url,
-                    offset_in_milliseconds=offset,
-                    expected_previous_token=None),
-                metadata=add_screen_background(card_data) if card_data else None
+    if supports_apl:
+        add_apl(response_builder)
+    else:
+        # Using URL as token as they are all unique
+        response_builder.add_directive(
+            PlayDirective(
+                play_behavior=PlayBehavior.REPLACE_ALL,
+                audio_item=AudioItem(
+                    stream=Stream(
+                        token=url,
+                        url=url,
+                        offset_in_milliseconds=offset,
+                        expected_previous_token=None),
+                    metadata=add_screen_background(card_data) if card_data else None
+                )
             )
-        )
-    ).set_should_end_session(True)
-
-    add_apl(response_builder) if supports_apl else None
+        ).set_should_end_session(True)
 
     if text:
         response_builder.speak(text)
@@ -148,7 +149,6 @@ def add_apl(response_builder):
     apl_document = {
         "type": "APL",
         "version": "2024.3",
-        "license": "Copyright 2024 Amazon.com, Inc. or its affiliates. All Rights Reserved.\nSPDX-License-Identifier: LicenseRef-.amazon.com.-AmznSL-1.0\nLicensed under the Amazon Software License  http://aws.amazon.com/asl/",
         "theme": "dark",
         "import": [
             {
@@ -580,20 +580,20 @@ def add_apl(response_builder):
             "items": [
                 {
                     "type": "AudioPlayer",
-                    "audioControlType": "${payload.audioPlayerTemplateData.properties.audioControlType}",
-                    "audioSources": "${payload.audioPlayerTemplateData.properties.audioSources}",
-                    "backgroundImageSource": "${payload.audioPlayerTemplateData.properties.backgroundImage}",
-                    "coverImageSource": "${payload.audioPlayerTemplateData.properties.coverImageSource}",
-                    "headerAttributionImage": "${payload.audioPlayerTemplateData.properties.logoUrl}",
-                    "headerTitle": "${payload.audioPlayerTemplateData.properties.headerTitle}",
-                    "headerSubtitle": "",
-                    "primaryText": "${payload.audioPlayerTemplateData.properties.primaryText}",
-                    "secondaryText": "${payload.audioPlayerTemplateData.properties.secondaryText}",
-                    "sliderType": "${payload.audioPlayerTemplateData.properties.sliderType}"
+                    "audioSources": data.en["url"],
+                    "backgroundImageSource": "https://d2o906d8ln7ui1.cloudfront.net/images/response_builder/background-rose.png",
+                    "coverImageSource": "https://d2o906d8ln7ui1.cloudfront.net/images/response_builder/card-rose.jpeg",
+                    "headerAttributionImage": "",
+                    "headerTitle": "title",
+                    "headerSubtitle": "subtitle",
+                    "primaryText": "prime",
+                    "secondaryText": "second",
+                    "sliderType": "determinate"
                 }
             ]
         }
     }
+
     response_builder.add_directive(
         RenderDocumentDirective(
             token="playbackToken",
