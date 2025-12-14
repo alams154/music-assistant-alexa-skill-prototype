@@ -15,28 +15,13 @@ from . import data
 
 def audio_data(request):
     # type: (Request) -> Dict
-    default_locale = "en-US"
-    if request.locale is None:
-        locale = default_locale
-    else:
-        locale = request.locale
-
-    if locale.startswith("en"):
-        test = data.en
-        test["card"]["large_image_url"] = "https://raw.githubusercontent.com/music-assistant/server/refs/heads/dev/music_assistant/logo.png"
-        test["card"]["small_image_url"] = "https://raw.githubusercontent.com/music-assistant/server/refs/heads/dev/music_assistant/logo.png"
-        return test
-    elif locale.startswith("fr"):
-        return data.fr
-    elif locale.startswith("it"):
-        return data.it
-    elif locale.startswith("es"):
-        return data.es
-    else:
-        return {}
+    try:
+        return data.get_latest(reload=True)
+    except Exception:
+        return
 
 
-def play(url, offset, text, card_data, response_builder, supports_apl=False):
+def play(url, offset, text, response_builder, supports_apl=False):
     """Function to play audio.
 
     Using the function to begin playing audio when:
@@ -62,8 +47,8 @@ def play(url, offset, text, card_data, response_builder, supports_apl=False):
                         token=url,
                         url=url,
                         offset_in_milliseconds=offset,
-                        expected_previous_token=None),
-                    metadata=add_screen_background(card_data) if card_data else None
+                        expected_previous_token=None
+                    )
                 )
             )
         ).set_should_end_session(True)
@@ -74,7 +59,7 @@ def play(url, offset, text, card_data, response_builder, supports_apl=False):
     return response_builder.response
 
 
-def stop(text, response_builder):
+def stop(text, response_builder, supports_apl=False):
     """Issue stop directive to stop the audio.
 
     Issuing AudioPlayer.Stop directive to stop the audio.
@@ -82,6 +67,19 @@ def stop(text, response_builder):
     """
     # type: (str, ResponseFactory) -> Response
     response_builder.add_directive(StopDirective())
+    if supports_apl:
+    # Add blank APL directive to clear the screen
+        blank_apl_document = {
+            "type": "APL",
+            "version": "1.0",
+            "mainTemplate": {
+                "items": []
+            }
+        }
+        response_builder.add_directive(RenderDocumentDirective(
+            token="blankToken",
+            document=blank_apl_document
+        ))
     if text:
         response_builder.speak(text)
 
@@ -93,31 +91,6 @@ def clear(response_builder):
     response_builder.add_directive(ClearQueueDirective(
         clear_behavior=ClearBehavior.CLEAR_ENQUEUED))
     return response_builder.response
-
-def add_screen_background(card_data):
-    # type: (Dict) -> Optional[AudioItemMetadata]
-    if card_data:
-        metadata = AudioItemMetadata(
-            title=card_data["title"],
-            subtitle=card_data["text"],
-            art=display.Image(
-                content_description=card_data["title"],
-                sources=[
-                    display.ImageInstance(
-                        url=data.en["card"]["large_image_url"])
-                ]
-            )
-            , background_image=display.Image(
-                content_description=card_data["title"],
-                sources=[
-                    display.ImageInstance(
-                        url=data.en["card"]["small_image_url"])
-                ]
-            )
-        )
-        return metadata
-    else:
-        return None
 
 def add_apl(response_builder):
     """Add the RenderDocumentDirective"""
@@ -580,24 +553,24 @@ def add_apl(response_builder):
             "items": [
                 {
                     "type": "AudioPlayer",
-                    "audioSources": data.en["url"],
-                    "backgroundImageSource": "https://d2o906d8ln7ui1.cloudfront.net/images/response_builder/background-rose.png",
-                    "coverImageSource": "https://d2o906d8ln7ui1.cloudfront.net/images/response_builder/card-rose.jpeg",
-                    "headerAttributionImage": "",
-                    "headerTitle": "title",
-                    "headerSubtitle": "subtitle",
-                    "primaryText": "prime",
-                    "secondaryText": "second",
-                    "sliderType": "determinate"
+                    "audioSources": "${payload.audioSources}",
+                    "backgroundImageSource": "${payload.backgroundImageSource}",
+                    "coverImageSource": "${payload.coverImageSource}",
+                    "headerAttributionImage": "${payload.headerAttributionImage}",
+                    "headerTitle": "${payload.headerTitle}",
+                    "headerSubtitle": "${payload.headerSubtitle}",
+                    "primaryText": "${payload.primaryText}",
+                    "secondaryText": "${payload.secondaryText}",
+                    "sliderType": "${payload.sliderType}"
                 }
             ]
         }
     }
-
+    payload = data.get_latest()
     response_builder.add_directive(
         RenderDocumentDirective(
             token="playbackToken",
             document=apl_document,
-            datasources={}
+            datasources={"payload": payload}
         )
     )
