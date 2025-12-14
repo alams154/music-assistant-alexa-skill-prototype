@@ -49,9 +49,9 @@ def get_latest(hostname: Optional[str] = None,
     empty-string defaults.
     """
     if hostname is None:
-        hostname = os.environ.get('DATA_API_HOST')
+        hostname = os.environ.get('API_HOSTNAME')
     if not hostname:
-        logging.debug('No hostname provided for get_latest and DATA_API_HOST unset.')
+        logging.debug('No hostname provided for get_latest and API_HOSTNAME unset.')
         return {
             'audioSources': '',
             'backgroundImageSource': '',
