@@ -88,7 +88,6 @@ class LaunchRequestOrPlayAudioHandler(AbstractRequestHandler):
         return util.play(url=util.audio_data(request)["url"],
                          offset=0,
                          text=data.WELCOME_MSG,
-                         card_data=util.audio_data(request)["card"],
                          response_builder=handler_input.response_builder,
                          supports_apl=supports_apl)
 
@@ -106,7 +105,7 @@ class HelpIntentHandler(AbstractRequestHandler):
         handler_input.response_builder.speak(
             _(data.HELP_MSG).format(
                 util.audio_data(
-                    handler_input.request_envelope.request)["card"]["title"])
+                    handler_input.request_envelope.request))
         ).set_should_end_session(False)
         return handler_input.response_builder.response
 
@@ -161,7 +160,7 @@ class CancelOrStopIntentHandler(AbstractRequestHandler):
         # type: (HandlerInput) -> Response
         logger.info("In CancelOrStopIntentHandler")
         _ = handler_input.attributes_manager.request_attributes["_"]
-        return util.stop(_(data.STOP_MSG), handler_input.response_builder)
+        return util.stop(_(data.STOP_MSG), handler_input.response_builder, supports_apl=supports_apl)
 
 
 class ResumeIntentHandler(AbstractRequestHandler):
@@ -176,10 +175,10 @@ class ResumeIntentHandler(AbstractRequestHandler):
         request = handler_input.request_envelope.request
         _ = handler_input.attributes_manager.request_attributes["_"]
         speech = _(data.RESUME_MSG).format(
-            util.audio_data(request)["card"]["title"])
+            util.audio_data(request))
         return util.play(
             url=util.audio_data(request)["url"], offset=0,
-            text=speech, card_data=util.audio_data(request)["card"],
+            text=speech,
             response_builder=handler_input.response_builder,
             supports_apl=supports_apl)
 
@@ -273,7 +272,6 @@ class PlaybackNearlyFinishedHandler(AbstractRequestHandler):
         request = handler_input.request_envelope.request
         return util.play_later(
             url=util.audio_data(request)["url"],
-            card_data=util.audio_data(request)["card"],
             response_builder=handler_input.response_builder)
 
 
@@ -293,7 +291,6 @@ class PlaybackFailedHandler(AbstractRequestHandler):
         logger.info("Playback failed: {}".format(request.error))
         return util.play(
             url=util.audio_data(request)["url"], offset=0, text=None,
-            card_data=None,
             response_builder=handler_input.response_builder,
             supports_apl=supports_apl)
 
@@ -338,7 +335,6 @@ class PlayCommandHandler(AbstractRequestHandler):
         return util.play(url=util.audio_data(request)["url"],
                          offset=0,
                          text=None,
-                         card_data=None,
                          response_builder=handler_input.response_builder,
                          supports_apl=supports_apl)
 
@@ -380,7 +376,8 @@ class PauseCommandHandler(AbstractRequestHandler):
         # type: (HandlerInput) -> Response
         logger.info("In PauseCommandHandler")
         return util.stop(text=None,
-                         response_builder=handler_input.response_builder)
+                         response_builder=handler_input.response_builder,
+                         supports_apl=supports_apl)
 
 # ###################################################################
 
@@ -400,8 +397,7 @@ class CatchAllExceptionHandler(AbstractExceptionHandler):
         _ = handler_input.attributes_manager.request_attributes["_"]
         handler_input.response_builder.speak(_(data.UNHANDLED_MSG)).ask(
             _(data.HELP_MSG).format(
-                util.audio_data(
-                    handler_input.request_envelope.request)["card"]["title"]))
+                util.audio_data(handler_input.request_envelope.request)))
 
         return handler_input.response_builder.response
 
