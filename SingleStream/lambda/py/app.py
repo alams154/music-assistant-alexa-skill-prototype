@@ -53,6 +53,7 @@ def status():
             <html>
             <head>
                 <meta charset="utf-8">
+                <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0%200%20100%20100'><circle cx='50' cy='50' r='50' fill='%2300A4E3'/><circle cx='50' cy='50' r='34' fill='none' stroke='%23FFFFFF' stroke-width='8' opacity='0.8'/></svg>">
                 <title>Service Status</title>
                 <style>
                 body {{ font-family: Arial, Helvetica, sans-serif; padding: 20px; }}
