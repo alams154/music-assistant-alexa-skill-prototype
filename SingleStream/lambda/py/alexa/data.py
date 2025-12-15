@@ -51,7 +51,6 @@ info = {
 }
 
 def get_latest(api_hostname: Optional[str] = None,
-               ma_hostname: Optional[str] = None,
                path: str = '/ma/latest-url',
                scheme: str = 'http',
                timeout: int = 5,
@@ -69,12 +68,6 @@ def get_latest(api_hostname: Optional[str] = None,
         logging.debug('No api_hostname provided for get_latest and API_HOSTNAME unset.')
         return
     
-    if ma_hostname is None:
-        ma_hostname = os.environ.get('MA_HOSTNAME')
-    if not ma_hostname:
-        logging.debug('No ma_hostname provided for get_latest and MA_HOSTNAME unset.')
-        return
-
     url = f"{scheme}://{api_hostname.rstrip('/')}{path if path.startswith('/') else '/' + path}"
     # Prepare Authorization header if credentials provided (params or env)
     headers = {}

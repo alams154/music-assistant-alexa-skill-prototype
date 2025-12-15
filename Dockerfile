@@ -27,9 +27,8 @@ ENV AWS_DEFAULT_REGION=us-east-1
 
 # API / Music Assistant configuration (set these when running the container)
 # Examples:
-#  docker run -e API_HOSTNAME=api.example.com -e MA_HOSTNAME=ma.example.com ...
+#  docker run -e API_HOSTNAME=api.example.com ...
 ENV API_HOSTNAME=""
-ENV MA_HOSTNAME=""
 ENV API_USERNAME=""
 ENV API_PASSWORD=""
 
