@@ -121,29 +121,12 @@ def get_latest(api_hostname: Optional[str] = None,
             elif album:
                 secondary = album
 
-            # Rewrite stream host to MA host if provided (ma_hostname param or MA_HOSTNAME env)
-            if stream_url:
-                target_host = ma_hostname or os.environ.get('MA_HOSTNAME')
-                if target_host:
-                    try:
-                        # strip any scheme and trailing slash from provided host
-                        target_host = re.sub(r'^https?:\/\/', '', str(target_host)).rstrip('/')
-                        # replace original scheme+host with https://{target_host}
-                        stream_url = re.sub(r'^https?:\/\/[^\/]+', f'https://{target_host}', stream_url)
-                    except Exception:
-                        logging.exception('Failed rewriting stream URL host for %s', stream_url)
-
-            # # Rewrite image host to MA host if provided (ma_hostname param or MA_HOSTNAME env)
-            # if image:
-            #     target_host = ma_hostname or os.environ.get('MA_HOSTNAME')
-            #     if target_host:
-            #         try:
-            #             # strip any scheme and trailing slash from provided host
-            #             target_host = re.sub(r'^https?:\/\/', '', str(target_host)).rstrip('/')
-            #             # replace original scheme+host with https://{target_host}
-            #             image = re.sub(r'^https?:\/\/[^\/]+', f'https://{target_host}', image)
-            #         except Exception:
-            #             logging.exception('Failed rewriting image URL host for %s', image)
+            # If the stream URL points to a FLAC file, rewrite to MP3 for compatibility
+            if stream_url and isinstance(stream_url, str):
+                try:
+                    stream_url = re.sub(r'(?i)\.flac(?=$|\?)', '.mp3', stream_url)
+                except Exception:
+                    logging.exception('Failed rewriting stream URL extension for %s', stream_url)
 
             info.update({
                 'audioSources': stream_url,
