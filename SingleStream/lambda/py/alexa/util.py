@@ -17,7 +17,7 @@ def audio_data(request):
     # type: (Request) -> Dict
     try:
         data.get_latest()
-        return data.test
+        return data.info
     except Exception:
         return
 
@@ -554,14 +554,14 @@ def add_apl(response_builder):
             "items": [
                 {
                     "type": "AudioPlayer",
-                    "audioSources": data.test["audioSources"],
-                    "backgroundImageSource": data.test["backgroundImageSource"],
-                    "coverImageSource": data.test["coverImageSource"],
-                    "headerAttributionImage": data.test["headerAttributionImage"],
-                    "headerTitle": data.test["headerTitle"],
-                    "headerSubtitle": data.test["headerSubtitle"],
-                    "primaryText": data.test["primaryText"],
-                    "secondaryText": data.test["secondaryText"],
+                    "audioSources": data.info["audioSources"],
+                    "backgroundImageSource": data.info["backgroundImageSource"],
+                    "coverImageSource": data.info["coverImageSource"],
+                    "headerAttributionImage": data.info["headerAttributionImage"],
+                    "headerTitle": data.info["headerTitle"],
+                    "headerSubtitle": data.info["headerSubtitle"],
+                    "primaryText": data.info["primaryText"],
+                    "secondaryText": data.info["secondaryText"],
                     "sliderType": "determinate"
                 }
             ]

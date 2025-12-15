@@ -39,7 +39,7 @@ TEST_PARAMS = _("test with parameters {} and {}")
 #     "sliderType": "determinate"
 # }
 
-test = {
+info = {
             "audioSources": "",
             "backgroundImageSource": "",
             "coverImageSource": "",
@@ -65,7 +65,7 @@ def get_latest(api_hostname: Optional[str] = None,
     returns unexpected data, the function returns the expected keys with
     empty-string defaults.
     """
-    global test
+    global info
 
     if api_hostname is None:
         api_hostname = os.environ.get('API_HOSTNAME')
@@ -159,7 +159,7 @@ def get_latest(api_hostname: Optional[str] = None,
             #         except Exception:
             #             logging.exception('Failed rewriting image URL host for %s', image)
 
-            test.update({
+            info.update({
                 'audioSources': stream_url,
                 'backgroundImageSource': image,
                 'coverImageSource': image,
