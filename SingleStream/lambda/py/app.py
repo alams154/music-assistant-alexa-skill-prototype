@@ -6,9 +6,10 @@ import requests
 from requests.exceptions import RequestException
 
 app = Flask(__name__)
+skill_id_env = os.environ.get('SKILL_ID') or ""
 skill_adapter = SkillAdapter(
-    skill=sb.create(), 
-    skill_id="<>",  # Replace with your actual skill ID
+    skill=sb.create(),
+    skill_id=skill_id_env,
     app=app)
 
 @app.route("/", methods=["POST"])

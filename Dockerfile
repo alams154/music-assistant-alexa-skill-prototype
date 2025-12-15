@@ -24,6 +24,7 @@ EXPOSE 5000
 EXPOSE 5678
 
 ENV AWS_DEFAULT_REGION=us-east-1
+ENV SKILL_ID=""
 
 # API / Music Assistant configuration (set these when running the container)
 # Examples:
