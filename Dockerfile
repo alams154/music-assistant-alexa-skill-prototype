@@ -25,5 +25,13 @@ EXPOSE 5678
 
 ENV AWS_DEFAULT_REGION=us-east-1
 
+# API / Music Assistant configuration (set these when running the container)
+# Examples:
+#  docker run -e API_HOSTNAME=api.example.com -e MA_HOSTNAME=ma.example.com ...
+ENV API_HOSTNAME=""
+ENV MA_HOSTNAME=""
+ENV API_USERNAME=""
+ENV API_PASSWORD=""
+
 CMD ["/app/venv/bin/python", "-m", "debugpy", "--listen", "0.0.0.0:5678", "src/app.py"]
 # docker run -it   -v $(pwd)/SingleStream/lambda/py:/app/src   -p 5000:5000   -p 5678:5678   alexa-skill
