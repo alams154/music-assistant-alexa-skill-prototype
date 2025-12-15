@@ -56,14 +56,10 @@ def get_latest(api_hostname: Optional[str] = None,
                scheme: str = 'http',
                timeout: int = 5,
                username: Optional[str] = None,
-               password: Optional[str] = None,
-               auth_header: Optional[str] = None) -> dict:
+               password: Optional[str] = None) -> dict:
     """Fetch latest stream info from music-assistant API and map to APL fields.
 
     Expected JSON shape: {"streamUrl":..., "title":..., "artist":..., "album":..., "imageUrl":...}
-    Returns a dict with APL-friendly keys. If the API cannot be reached or
-    returns unexpected data, the function returns the expected keys with
-    empty-string defaults.
     """
     global info
 
@@ -82,9 +78,6 @@ def get_latest(api_hostname: Optional[str] = None,
     url = f"{scheme}://{api_hostname.rstrip('/')}{path if path.startswith('/') else '/' + path}"
     # Prepare Authorization header if credentials provided (params or env)
     headers = {}
-    # Priority: explicit auth_header param -> API_BASIC_AUTH env -> username/password params -> API_USERNAME/API_PASSWORD env
-    if not auth_header:
-        auth_header = os.environ.get('API_BASIC_AUTH')
 
     env_user = os.environ.get('API_USERNAME')
     env_pass = os.environ.get('API_PASSWORD')
@@ -95,14 +88,7 @@ def get_latest(api_hostname: Optional[str] = None,
 
     # If auth_header looks like 'user:pass' (no 'Basic '), convert to Basic
     auth_value = None
-    if auth_header:
-        if ':' in auth_header and ' ' not in auth_header:
-            u, p = auth_header.split(':', 1)
-            b64 = base64.b64encode(f"{u}:{p}".encode('utf-8')).decode('ascii')
-            auth_value = f"Basic {b64}"
-        else:
-            auth_value = auth_header if auth_header.lower().startswith('basic ') else f"Basic {auth_header}"
-    elif username and password:
+    if username and password:
         b64 = base64.b64encode(f"{username}:{password}".encode('utf-8')).decode('ascii')
         auth_value = f"Basic {b64}"
 
