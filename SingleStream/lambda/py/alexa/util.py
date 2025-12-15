@@ -16,7 +16,8 @@ from . import data
 def audio_data(request):
     # type: (Request) -> Dict
     try:
-        return data.get_latest(reload=True)
+        data.get_latest()
+        return data.test
     except Exception:
         return
 
@@ -553,24 +554,23 @@ def add_apl(response_builder):
             "items": [
                 {
                     "type": "AudioPlayer",
-                    "audioSources": "${payload.audioSources}",
-                    "backgroundImageSource": "${payload.backgroundImageSource}",
-                    "coverImageSource": "${payload.coverImageSource}",
-                    "headerAttributionImage": "${payload.headerAttributionImage}",
-                    "headerTitle": "${payload.headerTitle}",
-                    "headerSubtitle": "${payload.headerSubtitle}",
-                    "primaryText": "${payload.primaryText}",
-                    "secondaryText": "${payload.secondaryText}",
-                    "sliderType": "${payload.sliderType}"
+                    "audioSources": data.test["audioSources"],
+                    "backgroundImageSource": data.test["backgroundImageSource"],
+                    "coverImageSource": data.test["coverImageSource"],
+                    "headerAttributionImage": data.test["headerAttributionImage"],
+                    "headerTitle": data.test["headerTitle"],
+                    "headerSubtitle": data.test["headerSubtitle"],
+                    "primaryText": data.test["primaryText"],
+                    "secondaryText": data.test["secondaryText"],
+                    "sliderType": "determinate"
                 }
             ]
         }
     }
-    payload = data.get_latest()
     response_builder.add_directive(
         RenderDocumentDirective(
             token="playbackToken",
             document=apl_document,
-            datasources={"payload": payload}
+            datasources={}
         )
     )

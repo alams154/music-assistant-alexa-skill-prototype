@@ -25,6 +25,28 @@ logging.basicConfig(
 
 supports_apl = False
 
+
+def _get_stream_url(request):
+    """Return (url, audio_data) where url is resolved from util.audio_data.
+
+    Handles multiple shapes returned by util.audio_data and never raises.
+    """
+    try:
+        audio = util.audio_data(request)
+    except Exception:
+        audio = None
+
+    url = None
+    if isinstance(audio, dict):
+        url = (audio.get('url') or audio.get('audioSources') or
+               audio.get('audio_sources') or audio.get('stream') or '')
+    elif isinstance(audio, str):
+        url = audio
+
+    if url == '':
+        url = None
+    return url, audio
+
 # ######################### INTENT HANDLERS #########################
 # This section contains handlers for the built-in intents and generic
 # request handlers like launch, session end, skill events etc.
@@ -84,8 +106,14 @@ class LaunchRequestOrPlayAudioHandler(AbstractRequestHandler):
 
         _ = handler_input.attributes_manager.request_attributes["_"]
         request = handler_input.request_envelope.request
+        url, _audio = _get_stream_url(request)
+        if not url:
+            logger.warning("No streamUrl available for Launch/Play request")
+            handler_input.response_builder.speak(
+                "Sorry, I could not retrieve the latest music stream from the API. Please check your setup.").set_should_end_session(True)
+            return handler_input.response_builder.response
 
-        return util.play(url=util.audio_data(request)["url"],
+        return util.play(url=url,
                          offset=0,
                          text=data.WELCOME_MSG,
                          response_builder=handler_input.response_builder,
@@ -176,8 +204,15 @@ class ResumeIntentHandler(AbstractRequestHandler):
         _ = handler_input.attributes_manager.request_attributes["_"]
         speech = _(data.RESUME_MSG).format(
             util.audio_data(request))
+        url, _audio = _get_stream_url(request)
+        if not url:
+            logger.warning("No stream url available for Resume request")
+            handler_input.response_builder.speak(
+                "Sorry, I couldn't reach the stream right now.").set_should_end_session(True)
+            return handler_input.response_builder.response
+
         return util.play(
-            url=util.audio_data(request)["url"], offset=0,
+            url=url, offset=0,
             text=speech,
             response_builder=handler_input.response_builder,
             supports_apl=supports_apl)
@@ -270,8 +305,13 @@ class PlaybackNearlyFinishedHandler(AbstractRequestHandler):
         logger.info("In PlaybackNearlyFinishedHandler")
         logger.info("Playback nearly finished")
         request = handler_input.request_envelope.request
+        url, _audio = _get_stream_url(request)
+        if not url:
+            logger.warning("No stream url available for PlaybackNearlyFinished")
+            return handler_input.response_builder.response
+
         return util.play_later(
-            url=util.audio_data(request)["url"],
+            url=url,
             response_builder=handler_input.response_builder)
 
 
@@ -289,8 +329,13 @@ class PlaybackFailedHandler(AbstractRequestHandler):
         logger.info("In PlaybackFailedHandler")
         request = handler_input.request_envelope.request
         logger.info("Playback failed: {}".format(request.error))
+        url, _audio = _get_stream_url(request)
+        if not url:
+            logger.warning("No stream url available for PlaybackFailed; skipping restart")
+            return handler_input.response_builder.response
+
         return util.play(
-            url=util.audio_data(request)["url"], offset=0, text=None,
+            url=url, offset=0, text=None,
             response_builder=handler_input.response_builder,
             supports_apl=supports_apl)
 
@@ -331,8 +376,14 @@ class PlayCommandHandler(AbstractRequestHandler):
         logger.info("In PlayCommandHandler")
         _ = handler_input.attributes_manager.request_attributes["_"]
         request = handler_input.request_envelope.request
+        url, _audio = _get_stream_url(request)
+        if not url:
+            logger.warning("No stream url available for PlayCommand; notifying user")
+            handler_input.response_builder.speak(
+                "Sorry, I couldn't reach the stream right now.").set_should_end_session(True)
+            return handler_input.response_builder.response
 
-        return util.play(url=util.audio_data(request)["url"],
+        return util.play(url=url,
                          offset=0,
                          text=None,
                          response_builder=handler_input.response_builder,
@@ -421,8 +472,26 @@ class RequestLogger(AbstractRequestInterceptor):
     """Log the alexa requests."""
     def process(self, handler_input):
         # type: (HandlerInput) -> None
-        logger.debug("Alexa Request: {}".format(
-            handler_input.request_envelope.request))
+        request = handler_input.request_envelope.request
+        try:
+            req_type = getattr(request, 'object_type', type(request).__name__)
+            # If this is an IntentRequest, log intent name and slots
+            if hasattr(request, 'intent') and request.intent:
+                intent_name = getattr(request.intent, 'name', None)
+                slots = {}
+                intent_slots = getattr(request.intent, 'slots', None)
+                if intent_slots:
+                    for slot_key, slot_obj in intent_slots.items():
+                        slots[slot_key] = getattr(slot_obj, 'value', None)
+
+                logger.info("Incoming Intent: %s - Slots: %s", intent_name, slots)
+            else:
+                logger.info("Incoming Request Type: %s", req_type)
+        except Exception:
+            logger.exception("Failed to log incoming request details")
+
+        # Keep a debug-level dump of the full request for deep troubleshooting
+        logger.debug("Alexa Request: %s", request)
 
 
 class LocalizationInterceptor(AbstractRequestInterceptor):
