@@ -32,4 +32,3 @@ ENV API_USERNAME=""
 ENV API_PASSWORD=""
 
 CMD ["/app/venv/bin/python", "-m", "debugpy", "--listen", "0.0.0.0:5678", "src/app.py"]
-# docker run -it   -v $(pwd)/app/lambda/py:/app/src   -p 5000:5000   -p 5678:5678   alexa-skill
