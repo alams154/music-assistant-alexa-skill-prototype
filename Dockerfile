@@ -30,5 +30,6 @@ ENV SKILL_ID=""
 ENV MA_HOSTNAME=""
 ENV API_USERNAME=""
 ENV API_PASSWORD=""
+ENV PORT=5000
 
-CMD ["/app/venv/bin/python", "-m", "debugpy", "--listen", "0.0.0.0:5678", "src/app.py"]
+CMD ["/bin/sh", "-lc", "/app/venv/bin/python -m debugpy --listen 0.0.0.0:5678 src/app.py"]
