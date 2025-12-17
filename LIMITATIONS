@@ -1,3 +1,10 @@
+Supported Region and Language:
+Currently, only en-US is supported by this prototype.
+
+Supported Devices (Tested):
+Echo (Gen1)
+Echo Show 8 (Gen2)
+
 Technical Limitations:
 Non-APL devices require proxied, internet accessible https endpoints for media streaming.
 
