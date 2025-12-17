@@ -4,6 +4,8 @@ from flask_ask_sdk.skill_adapter import SkillAdapter
 from lambda_function import sb  # sb is the SkillBuilder from lambda_function.py
 import requests
 from requests.exceptions import RequestException
+import music_assistant_alexa_api as maa_api
+from werkzeug.middleware.dispatcher import DispatcherMiddleware
 
 app = Flask(__name__)
 skill_id_env = os.environ.get('SKILL_ID') or ""
@@ -11,6 +13,11 @@ skill_adapter = SkillAdapter(
     skill=sb.create(),
     skill_id=skill_id_env,
     app=app)
+
+# Mount the Music Assistant Alexa API
+ma_app = maa_api.create_app()
+app.wsgi_app = DispatcherMiddleware(app.wsgi_app, {'/ma': ma_app.wsgi_app})
+app.logger.info('Mounted music-assistant-alexa-api app at /ma')
 
 @app.route("/", methods=["POST"])
 def invoke_skill():

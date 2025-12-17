@@ -10,7 +10,7 @@ RUN apt-get update && \
 WORKDIR /app
 
 # Copy only requirements first, then install dependencies
-COPY SingleStream/lambda/py/requirements.txt /app/requirements.txt
+COPY app/lambda/py/requirements.txt /app/requirements.txt
 RUN python3.10 -m venv venv && \
     . venv/bin/activate && \
     pip install --upgrade pip && \
@@ -18,7 +18,7 @@ RUN python3.10 -m venv venv && \
     pip install debugpy
 
 # Now copy the rest of your source code (commented out for dynamic development)
-COPY SingleStream/lambda/py /app/src
+COPY app/lambda/py /app/src
 
 EXPOSE 5000
 EXPOSE 5678
@@ -35,4 +35,4 @@ ENV API_USERNAME=""
 ENV API_PASSWORD=""
 
 CMD ["/app/venv/bin/python", "-m", "debugpy", "--listen", "0.0.0.0:5678", "src/app.py"]
-# docker run -it   -v $(pwd)/SingleStream/lambda/py:/app/src   -p 5000:5000   -p 5678:5678   alexa-skill
+# docker run -it   -v $(pwd)/app/lambda/py:/app/src   -p 5000:5000   -p 5678:5678   alexa-skill
