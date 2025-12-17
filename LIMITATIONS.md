@@ -1,18 +1,30 @@
-## Supported Regions & Languages
+## Supported Languages & Regions
 
-- **Prototype support:** en-US only
+- en-US
 
-## Supported Devices (tested)
+## Supported Devices
 
+### Non-APL devices: 
 - **Echo (Gen 1)**
-- **Echo Show 8 (Gen 2)** — supports APL
+### APL devices: 
+- **Echo Show 8 (Gen 2)**
 
 ## Technical Limitations
 
-- Non-APL devices require proxied, internet-accessible HTTPS endpoints for media streaming
+- Non-APL devices requires a proxied, internet-accessible HTTPS endpoint for the Music Assistant stream
+ 
+  [This means your Music Assistant stream will be publicly accessible on the internet. Take appropriate security measures to protect your Music Assistant instance.]
 
 ## Known Issues
 
-- APL devices: pause and stop intents are not currently working
-- All devices: there is a noticeable delay when pausing; this is caused by the AlexaPy library
-- APL devices: album art is not currently working
+### All devices:
+- There is a noticeable delay when pausing; this is caused by the AlexaPy library
+
+### APL devices: 
+- Pause and stop are not currently working
+- Album art is not currently working
+
+## Future Improvements (Organized by priority)
+- MA stream control from Non-APL devices
+- Support for additional languages and regions
+
