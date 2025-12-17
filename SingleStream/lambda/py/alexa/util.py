@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 
 import datetime
+import os
+import re
 from typing import Dict, Optional
 from ask_sdk_model import Request, Response
 from ask_sdk_model.ui import StandardCard, Image
@@ -39,7 +41,11 @@ def play(url, offset, text, response_builder, supports_apl=False):
     if supports_apl:
         add_apl(response_builder)
     else:
-        # Using URL as token as they are all unique
+        hostname = os.environ.get('MA_HOSTNAME', '')
+        hostname = f'https://{hostname}'
+
+        url = re.sub(r'^https?://\d+\.\d+\.\d+\.\d+(?::\d+)?', hostname, url)
+        url = url.replace(' ', '%20')
         response_builder.add_directive(
             PlayDirective(
                 play_behavior=PlayBehavior.REPLACE_ALL,
