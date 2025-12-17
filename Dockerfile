@@ -20,14 +20,17 @@ RUN python3.10 -m venv venv && \
 # Now copy the rest of your source code (commented out for dynamic development)
 COPY app/lambda/py /app/src
 
+# Amazon Skill Configuration
 ENV AWS_DEFAULT_REGION=us-east-1
 ENV SKILL_ID=""
 
-# API / Music Assistant configuration
+# Music Assistant Configuration
 ENV MA_HOSTNAME=""
 ENV API_USERNAME=""
 ENV API_PASSWORD=""
 ENV PORT=5000
+
+# Debugging Configuration
 ENV DEBUG_PORT=5678
 
 # Expose the port the app runs on
