@@ -20,7 +20,6 @@ RUN python3.10 -m venv venv && \
 # Now copy the rest of your source code (commented out for dynamic development)
 COPY app/lambda/py /app/src
 
-EXPOSE 5000
 EXPOSE 5678
 
 ENV AWS_DEFAULT_REGION=us-east-1
@@ -31,5 +30,8 @@ ENV MA_HOSTNAME=""
 ENV API_USERNAME=""
 ENV API_PASSWORD=""
 ENV PORT=5000
+
+# Expose the port the app runs on
+EXPOSE ${PORT}
 
 CMD ["/bin/sh", "-lc", "/app/venv/bin/python -m debugpy --listen 0.0.0.0:5678 src/app.py"]
