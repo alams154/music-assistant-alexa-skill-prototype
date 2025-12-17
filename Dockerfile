@@ -22,7 +22,6 @@ COPY app/lambda/py /app/src
 
 # Amazon Skill Configuration
 ENV AWS_DEFAULT_REGION=us-east-1
-ENV SKILL_ID=""
 
 # Music Assistant Configuration
 ENV MA_HOSTNAME=""

@@ -8,10 +8,9 @@ import music_assistant_alexa_api as maa_api
 from werkzeug.middleware.dispatcher import DispatcherMiddleware
 
 app = Flask(__name__)
-skill_id_env = os.environ.get('SKILL_ID') or ""
 skill_adapter = SkillAdapter(
     skill=sb.create(),
-    skill_id=skill_id_env,
+    skill_id="",
     app=app)
 
 # Mount the Music Assistant Alexa API
