@@ -71,9 +71,6 @@ docker-compose.local.yml
 Dockerfile.*
 docker-compose*.yml
 
-# VS Code
-.vscode/
-
 # macOS
 .DS_Store
 
