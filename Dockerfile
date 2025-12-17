@@ -30,6 +30,7 @@ ENV SKILL_ID=""
 # Examples:
 #  docker run -e API_HOSTNAME=api.example.com ...
 ENV API_HOSTNAME=""
+ENV MA_HOSTNAME=""
 ENV API_USERNAME=""
 ENV API_PASSWORD=""
 
