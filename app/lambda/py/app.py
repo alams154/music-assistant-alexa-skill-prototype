@@ -1,5 +1,5 @@
 import os
-from flask import Flask, request, jsonify, Response
+from flask import Flask, request, jsonify, Response, redirect
 from flask_ask_sdk.skill_adapter import SkillAdapter
 from lambda_function import sb  # sb is the SkillBuilder from lambda_function.py
 import requests
@@ -27,34 +27,25 @@ def invoke_skill():
 @app.route("/status", methods=["GET"])
 def status():
     """Simple GET status page for health checks and browsing."""
-    api_host = os.environ.get("API_HOSTNAME")
-    api_user = os.environ.get("API_USERNAME")
-    api_pass = os.environ.get("API_PASSWORD")
+    api_user = os.environ.get('API_USERNAME')
+    api_pass = os.environ.get('API_PASSWORD')
 
     # Skill adapter status (we're running if this handler is invoked)
     skill_html = '<span class="led green"></span> Skill adapter running'
+    # API status: call the locally mounted /ma/latest-url endpoint on this service.
+    # Use the current request host (including port) so this works in container
+    # and local runs without requiring an external API_HOSTNAME env var.
+    endpoint = request.host_url.rstrip('/') + '/ma/latest-url'
 
-    # API status
-    if not api_host:
-        api_html = '<span class="led red"></span> API_HOSTNAME not set'
-    else:
-        # Ensure scheme and target the /ma/latest-url endpoint
-        if api_host.startswith("http://") or api_host.startswith("https://"):
-            base = api_host
+    try:
+        auth = (api_user, api_pass) if api_user and api_pass else None
+        resp = requests.get(endpoint, timeout=2, auth=auth)
+        if resp.ok:
+            api_html = f'<span class="led green"></span> API reachable ({resp.status_code}) — /ma/latest-url'
         else:
-            base = f"http://{api_host}"
-
-        endpoint = base.rstrip('/') + '/ma/latest-url'
-
-        try:
-            auth = (api_user, api_pass) if api_user and api_pass else None
-            resp = requests.get(endpoint, timeout=2, auth=auth)
-            if resp.ok:
-                api_html = f'<span class="led green"></span> API reachable ({resp.status_code}) — /ma/latest-url'
-            else:
-                api_html = f'<span class="led red"></span> API responded {resp.status_code} for /ma/latest-url'
-        except RequestException as e:
-            api_html = f'<span class="led red"></span> Error: {str(e)}'
+            api_html = f'<span class="led red"></span> API responded {resp.status_code} for /ma/latest-url'
+    except RequestException as e:
+        api_html = f'<span class="led red"></span> Error: {str(e)}'
 
     html = f"""<!doctype html>
             <html>
@@ -76,8 +67,8 @@ def status():
                 <div class="row">{skill_html}</div>
                 <div class="row">{api_html}</div>
                 <hr>
-                <div class="muted">API host: {api_host or 'not set'}</div>
-                <div class="muted">Checked endpoint: {endpoint if api_host else 'n/a'}</div>
+                <div class="muted">API host: local (mounted /ma)</div>
+                <div class="muted">Checked endpoint: {endpoint}</div>
             </body>
             </html>"""
 

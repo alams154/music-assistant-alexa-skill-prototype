@@ -63,10 +63,8 @@ def get_latest(api_hostname: Optional[str] = None,
     global info
 
     if api_hostname is None:
-        api_hostname = os.environ.get('API_HOSTNAME')
-    if not api_hostname:
-        logging.debug('No api_hostname provided for get_latest and API_HOSTNAME unset.')
-        return
+        # API now runs locally on the same service; default to localhost:5000
+        api_hostname = '127.0.0.1:5000'
     
     url = f"{scheme}://{api_hostname.rstrip('/')}{path if path.startswith('/') else '/' + path}"
     # Prepare Authorization header if credentials provided (params or env)

@@ -26,10 +26,7 @@ EXPOSE 5678
 ENV AWS_DEFAULT_REGION=us-east-1
 ENV SKILL_ID=""
 
-# API / Music Assistant configuration (set these when running the container)
-# Examples:
-#  docker run -e API_HOSTNAME=api.example.com ...
-ENV API_HOSTNAME=""
+# API / Music Assistant configuration
 ENV MA_HOSTNAME=""
 ENV API_USERNAME=""
 ENV API_PASSWORD=""
