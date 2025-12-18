@@ -41,10 +41,34 @@ def play(url, offset, text, response_builder, supports_apl=False):
     if supports_apl:
         add_apl(response_builder)
     else:
-        hostname = os.environ.get('MA_HOSTNAME', '')
-        hostname = f'https://{hostname}'
+        # Read and sanitize MA_HOSTNAME environment variable.
+        # Accept values like example.com, https://example.com:8443, 'example.com', or "example.com"
+        hostname_raw = os.environ.get('MA_HOSTNAME', '')
+        hostname_raw = hostname_raw.strip()
+        # strip surrounding single/double quotes
+        if len(hostname_raw) >= 2 and ((hostname_raw[0] == hostname_raw[-1] == '"') or (hostname_raw[0] == hostname_raw[-1] == "'")):
+            hostname_raw = hostname_raw[1:-1].strip()
+        # final cleanup of stray quotes/whitespace
+        hostname_raw = hostname_raw.strip('"\' ')
 
-        url = re.sub(r'^https?://\d+\.\d+\.\d+\.\d+(?::\d+)?', hostname, url)
+        if hostname_raw == '':
+            hostname = ''
+        else:
+            # remove trailing slash(es)
+            hostname_clean = hostname_raw.rstrip('/')
+            # keep provided scheme if present, otherwise default to https
+            if hostname_clean.startswith('http://') or hostname_clean.startswith('https://'):
+                hostname = hostname_clean
+            else:
+                hostname = f'https://{hostname_clean}'
+
+        # Only replace IP-host in URL when we have a valid hostname to insert
+        if hostname:
+            url = re.sub(r'^https?://\d+\.\d+\.\d+\.\d+(?::\d+)?', hostname, url)
+        else:
+            response_builder.speak(
+                "You did not specify a valid hostname. Please check your environment variable MA_HOSTNAME.").set_should_end_session(True)
+            return response_builder.response
         url = url.replace(' ', '%20')
         response_builder.add_directive(
             PlayDirective(
