@@ -91,7 +91,7 @@ def play(url, offset, text, response_builder, supports_apl=False):
                 response_builder.set_should_end_session(True)
                 return response_builder.response
         except requests.RequestException:
-            logging.exception('Error while checking audio URL: %s', url)
+            logging.exception('Play Function URL: %s', url)
             response_builder.speak(
                 "Sorry, I can't reach the audio file. Please check the URL in the play function.")
             response_builder.set_should_end_session(True)
