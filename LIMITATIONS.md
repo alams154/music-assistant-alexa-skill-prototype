@@ -25,6 +25,7 @@
 - Album art is not currently working
 
 ## Future Improvements (Organized by priority)
+- Improve README documentation
 - MA stream control from Non-APL devices
 - Support for additional languages and regions
 

@@ -1,13 +1,25 @@
-# Skill Sample Python Audio Player
+# Music Assistant Alexa Skill Prototype
+This project is an Alexa skill prototype for controlling the Music Assistant server. It provides a Flask-based web service, Alexa skill handler, and API, with support for Docker deployment.
 
-This project demonstrates the use of Alexa Audio Player for skills using ASK Python SDK.
+## How to Run
 
-- Multiple-streams folder contains an example skill to play multiple, pre-recorded audio streams, such as a basic podcast skill.
+### 1. Using Docker (Recommended)
 
-- Single-stream folder contains an example skill to play a single stream, such as a live radio skill.
+The easiest way to run the project is with Docker Compose. This will build and start the Alexa skill container with all required environment variables and secrets.
 
-This code is using the [Alexa Skill Kit SDK for Python](https://github.com/alexa/alexa-skills-kit-sdk-for-python).  
+#### Steps:
 
-## License
+1. **Copy the docker-compose.yml** and ensure Docker and Docker Compose are installed
+2. **Set up secrets (if needed):**
+	- Place your API username in `./secrets/api_username.txt` (Relative to your docker-compose.yml file)
+	- Place your API password in `./secrets/api_password.txt` (Relative to your docker-compose.yml file)
+3. **Edit environment variables** in `docker-compose.yml` as needed (e.g., `MA_HOSTNAME`, `PORT`)
+4. **Start the service:**
 
-This library is licensed under the Amazon Software License.
+	```sh
+	docker compose up -d
+	```
+
+5. The service will be available at `http://localhost:5000` (or the port you set)
+6. Setup a reverse proxy for the Alexa skill endpoint
+7. Create a skill in the Alexa Developer Console pointing to your public HTTPS endpoint
