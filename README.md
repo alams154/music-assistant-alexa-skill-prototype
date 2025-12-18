@@ -23,3 +23,7 @@ The easiest way to run the project is with Docker Compose. This will build and s
 5. The service will be available at `http://localhost:5000` (or the port you set)
 6. Setup a reverse proxy for the Alexa skill endpoint
 7. Create a skill in the Alexa Developer Console pointing to your public HTTPS endpoint
+
+---
+
+See [LIMITATIONS.md](LIMITATIONS.md) for known limitations and future improvements.
