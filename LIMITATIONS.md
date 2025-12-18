@@ -21,8 +21,9 @@
 - There is a noticeable delay when pausing; this is caused by the AlexaPy library
 
 ### APL devices: 
-- Pause and stop are not currently working
+- Pause and stop from Music Assistant are not currently working
 - Album art is not currently working
+- Next and previous track from device are not currently working
 
 ## Future Improvements (Organized by priority)
 - Improve README documentation
