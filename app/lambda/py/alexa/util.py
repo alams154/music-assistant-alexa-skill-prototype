@@ -152,31 +152,6 @@ def clear(response_builder):
 
 def add_apl(response_builder):
     """Add the RenderDocumentDirective"""
-    # apl_document = {
-    #     "type": "APL",
-    #     "version": "2024.3.0",
-    #     "mainTemplate": {
-    #         "items": [
-    #             {
-    #                 "type": "Container",
-    #                 "alignItems": "center",
-    #                 "items": [
-    #                     {
-    #                         "type": "Text",
-    #                         "text": "Now Playing",
-    #                         "textAlign": "center",
-    #                         "textAlignVertical": "center"
-    #                     },
-    #                     {
-    #                         "type": "Image",
-    #                         "source": "https://raw.githubusercontent.com/music-assistant/server/refs/heads/dev/music_assistant/logo.png",
-    #                         "scale": "best-fill",
-    #                     }
-    #                 ]
-    #             }
-    #         ]
-    #     }
-    # }
     apl_document = {
         "type": "APL",
         "version": "2024.3",
