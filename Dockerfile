@@ -25,8 +25,6 @@ ENV AWS_DEFAULT_REGION=us-east-1
 
 # Music Assistant Configuration
 ENV MA_HOSTNAME=""
-# ENV API_USERNAME Pass this via Docker secrets or environment variables in production
-# ENV API_PASSWORD Pass this via Docker secrets or environment variables in production
 ENV PORT=5000
 
 # Debugging Configuration

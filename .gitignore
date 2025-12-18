@@ -69,7 +69,6 @@ docker-compose.override.yml
 docker-compose.local.yml
 .docker/
 Dockerfile.*
-docker-compose*.yml
 
 # macOS
 .DS_Store

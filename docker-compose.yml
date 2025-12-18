@@ -1,0 +1,23 @@
+services:
+  music-assistant-skill:
+    image: music-assistant-skill:dev
+    environment:
+      - MA_HOSTNAME="" # Base domain name, DO NOT INCLUDE https:// #optional, if only using APL devices
+      - API_USERNAME=/run/secrets/API_USERNAME #optional
+      - API_PASSWORD=/run/secrets/API_PASSWORD #optional
+      - PORT=5000 #optional
+      - DEBUG_PORT=5678 #optional
+      - AWS_DEFAULT_REGION=us-east-1 #optional
+    secrets:
+      - API_USERNAME
+      - API_PASSWORD
+    ports:
+      - 5000:5000 # Must match PORT
+      - 5678:5678 # Must match DEBUG_PORT #optional
+    restart: unless-stopped
+
+secrets:
+  API_USERNAME:
+    file: ./secrets/api_username.txt
+  API_PASSWORD:
+    file: ./secrets/api_password.txt
