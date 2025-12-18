@@ -8,6 +8,8 @@ import os
 import logging
 from typing import Optional
 
+from env_secrets import get_env_secret
+
 import urllib.request
 import urllib.error
 import base64
@@ -69,8 +71,8 @@ def get_latest(api_hostname: Optional[str] = None,
     # Prepare Authorization header if credentials provided (params or env)
     headers = {}
 
-    env_user = os.environ.get('API_USERNAME')
-    env_pass = os.environ.get('API_PASSWORD')
+    env_user = get_env_secret('API_USERNAME')
+    env_pass = get_env_secret('API_PASSWORD')
     if not username and env_user:
         username = env_user
     if not password and env_pass:

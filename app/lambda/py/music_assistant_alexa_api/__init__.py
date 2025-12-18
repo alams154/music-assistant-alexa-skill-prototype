@@ -13,6 +13,7 @@ Routes provided:
 """
 
 import os
+from env_secrets import get_env_secret
 from flask import Flask, Blueprint, jsonify, request, Response, send_file
 
 
@@ -29,8 +30,8 @@ def create_blueprint():
     bp = Blueprint('music_assistant_alexa_api', __name__)
 
     # Optional basic auth if USERNAME and PASSWORD are provided.
-    USERNAME = os.environ.get('API_USERNAME')
-    PASSWORD = os.environ.get('API_PASSWORD')
+    USERNAME = get_env_secret('API_USERNAME')
+    PASSWORD = get_env_secret('API_PASSWORD')
 
     if USERNAME is not None and PASSWORD is not None:
         @bp.before_request

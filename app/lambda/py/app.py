@@ -6,6 +6,7 @@ import requests
 from requests.exceptions import RequestException
 import music_assistant_alexa_api as maa_api
 from werkzeug.middleware.dispatcher import DispatcherMiddleware
+from env_secrets import get_env_secret
 
 app = Flask(__name__)
 skill_adapter = SkillAdapter(
@@ -26,8 +27,8 @@ def invoke_skill():
 @app.route("/status", methods=["GET"])
 def status():
     """Simple GET status page for health checks and browsing."""
-    api_user = os.environ.get('API_USERNAME')
-    api_pass = os.environ.get('API_PASSWORD')
+    api_user = get_env_secret('API_USERNAME')
+    api_pass = get_env_secret('API_PASSWORD')
 
     # Skill adapter status (we're running if this handler is invoked)
     skill_html = '<span class="led green"></span> Skill adapter running'
