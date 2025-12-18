@@ -24,6 +24,58 @@ The easiest way to run the project is with Docker Compose. This will build and s
 6. Setup a reverse proxy for the Alexa skill endpoint
 7. Create a skill in the Alexa Developer Console pointing to your public HTTPS endpoint
 
+## Basic Troubleshooting
+
+### API Endpoints
+
+Returns 401 Unauthorized when the authentication environment variables are provided and the requests does not provide  correct credentials.
+
+#### POST `/ma/push-url`
+
+**Body:**
+
+```json
+{
+  "album": null,
+  "artist": null,
+  "imageUrl": "https://github.com/music-assistant/server/blob/dev/music_assistant/logo.png",
+  "streamUrl": "https://example.com/stream.mp3",
+  "title": "Music Assistant"
+}
+```
+
+**Response:**
+
+```json
+{ "status": "ok" }
+```
+
+#### GET `/ma/latest-url`
+
+**Response:**
+
+```json
+{
+  "album": null,
+  "artist": null,
+  "imageUrl": "https://github.com/music-assistant/server/blob/dev/music_assistant/logo.png",
+  "streamUrl": "https://example.com/stream.mp3",
+  "title": "Music Assistant"
+}
+```
+Returns `404` if no URL has been received yet:
+```json
+{
+  "error": "No URL available, please check if Music Assistant has pushed a URL to the API"
+}
+```
+
+### Status Page
+`/status`
+
+Returns a simple status page API return code and checked endpoint
+
+
 ---
 
 See [LIMITATIONS.md](LIMITATIONS.md) for known limitations and future improvements.
