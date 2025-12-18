@@ -3,6 +3,8 @@
 import datetime
 import os
 import re
+import logging
+import requests
 from typing import Dict, Optional
 from ask_sdk_model import Request, Response
 from ask_sdk_model.ui import StandardCard, Image
@@ -57,8 +59,12 @@ def play(url, offset, text, response_builder, supports_apl=False):
             # remove trailing slash(es)
             hostname_clean = hostname_raw.rstrip('/')
             # keep provided scheme if present, otherwise default to https
-            if hostname_clean.startswith('http://') or hostname_clean.startswith('https://'):
+            if hostname_clean.startswith('https://'):
                 hostname = hostname_clean
+            elif hostname_clean.startswith('http://'):
+                response_builder.speak(
+                "The domain uses an unsupported scheme (http). Please check your environment variable MA_HOSTNAME.").set_should_end_session(True)
+                return response_builder.response
             else:
                 hostname = f'https://{hostname_clean}'
 
@@ -68,8 +74,29 @@ def play(url, offset, text, response_builder, supports_apl=False):
         else:
             response_builder.speak(
                 "You did not specify a valid hostname. Please check your environment variable MA_HOSTNAME.").set_should_end_session(True)
-            return response_builder.response
+            return response_builder.response  
         url = url.replace(' ', '%20')
+
+        # Ensure the resource exists and appears playable. Try HEAD first, fall back to GET.
+        try:
+            head_resp = requests.head(url, allow_redirects=True, timeout=5)
+            resp = head_resp
+            if head_resp.status_code >= 400:
+                resp = requests.get(url, stream=True, allow_redirects=True, timeout=5)
+
+            if resp.status_code >= 400:
+                logging.error('Audio URL returned HTTP %s: %s', resp.status_code, url)
+                response_builder.speak(
+                    "Sorry, I can't play the requested audio because the file is not available.")
+                response_builder.set_should_end_session(True)
+                return response_builder.response
+        except requests.RequestException:
+            logging.exception('Error while checking audio URL: %s', url)
+            response_builder.speak(
+                "Sorry, I can't reach the audio file. Please check the URL in the play function.")
+            response_builder.set_should_end_session(True)
+            return response_builder.response
+
         response_builder.add_directive(
             PlayDirective(
                 play_behavior=PlayBehavior.REPLACE_ALL,
