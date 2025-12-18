@@ -1,6 +1,6 @@
 services:
   music-assistant-skill:
-    image: music-assistant-skill:dev
+    image: ghcr.io/alams154/music-assistant-skill:dev
     environment:
       - MA_HOSTNAME=<domain> # Domain name, including subdomain #optional, if only using APL devices
       - API_USERNAME=/run/secrets/API_USERNAME #optional
