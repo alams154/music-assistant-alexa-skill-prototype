@@ -1,8 +1,8 @@
-## Supported Languages & Regions
+## Supported Languages & Regions (tested)
 
 - en-US
 
-## Supported Devices
+## Supported Devices (tested)
 
 ### Non-APL devices: 
 - **Echo (Gen 1)**
