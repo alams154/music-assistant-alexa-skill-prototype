@@ -31,6 +31,7 @@ ENV PORT=5000
 
 # Debugging Configuration
 ARG DEBUG_PORT=0
+ # default 0 (disabled); launch.json default 5678
 ENV DEBUG_PORT=${DEBUG_PORT}
 
 # Expose the port the app runs on
