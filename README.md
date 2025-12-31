@@ -21,8 +21,20 @@ The easiest way to run the project is with Docker Compose. This will build and s
 	```
 
 5. The service will be available at `http://localhost:5000` (or the port you set)
-6. Setup a reverse proxy for the Alexa skill endpoint
+6. Setup a reverse proxy for the Alexa skill endpoint (port 443 requiered)
 7. Create a skill in the Alexa Developer Console pointing to your public HTTPS endpoint
+    -   Click Create Skill and give it a Name
+    -   Choose your default Language
+    -   Select Music & Audio as the experience, Custom as the model, and "Provision your own" as the hosting service.
+    -   Choose "Start from Scratch
+	-   Go to the Build tab in the Alexa Developer Console.
+    -   Click the Invocation Name field and type in "music assistant" and hit save
+    -   Click the Endpoint field and change it to https
+    -   Fill the Default Region with https://<your api host> and click save
+    -   On the left Side goto Interaction Model > Intents
+    -   Add an Intend named PlayAudio with the Sampe Utterances "play audio" "start" and "play"
+    -   Now Click Build Skill and Activate it in your Alexa App
+	
 
 ## Basic Troubleshooting
 
