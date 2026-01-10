@@ -328,7 +328,11 @@ class PlaybackFailedHandler(AbstractRequestHandler):
         # type: (HandlerInput) -> Response
         logger.info("In PlaybackFailedHandler")
         request = handler_input.request_envelope.request
-        logger.info("Playback failed: {}".format(request.error))
+        logger.error("=== PLAYBACK FAILED ===")
+        logger.error("Error type: %s", getattr(request.error, 'type', 'Unknown'))
+        logger.error("Error message: %s", getattr(request.error, 'message', 'No message'))
+        logger.error("Full error details: %s", request.error)
+        logger.error("Current stream token: %s", getattr(request.current_playback_state, 'token', 'Unknown'))
         url, _audio = _get_stream_url(request)
         if not url:
             logger.warning("No stream url available for PlaybackFailed; skipping restart")
