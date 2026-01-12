@@ -90,7 +90,9 @@ Returns a simple status page API return code and checked endpoint
 
 ---
 
-See [COMPATIBILITY.md] for known supported devices, languages, and regions.
+See [COMPATIBILITY.md](COMPATIBILITY.md) for known supported devices, languages, and regions.
+
 See [LIMITATIONS.md](LIMITATIONS.md) for known limitations.
-See [TODO.md] for future improvements
+
+See [TODO.md](TODO.md) for future improvements
 
