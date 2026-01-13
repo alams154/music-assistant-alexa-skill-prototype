@@ -6,10 +6,9 @@ original `server.js`: optional basic auth, a POST endpoint to push
 stream metadata and a GET endpoint to return the latest pushed URL.
 
 Routes provided:
-- GET  /latest-url         : simple status URL (kept for compatibility)
 - POST /ma/push-url        : accept JSON payload with stream metadata
 - GET  /ma/latest-url      : return last pushed stream metadata
-- GET  /favicon.ico        : serve package favicon if present
+- GET  /ma/favicon.ico        : serve package favicon if present
 """
 
 import os

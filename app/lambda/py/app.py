@@ -1,12 +1,16 @@
 import os
 from flask import Flask, request, jsonify, Response, redirect
+from markupsafe import escape
 from flask_ask_sdk.skill_adapter import SkillAdapter
 from lambda_function import sb  # sb is the SkillBuilder from lambda_function.py
 import requests
+import json
 from requests.exceptions import RequestException
 import music_assistant_alexa_api as maa_api
 from werkzeug.middleware.dispatcher import DispatcherMiddleware
+from werkzeug.middleware.proxy_fix import ProxyFix
 from env_secrets import get_env_secret
+from music_assistant_alexa_api import swagger_ui as maa_swagger
 
 app = Flask(__name__)
 skill_adapter = SkillAdapter(
@@ -16,6 +20,12 @@ skill_adapter = SkillAdapter(
 
 # Mount the Music Assistant Alexa API
 ma_app = maa_api.create_app()
+
+# Respect X-Forwarded-* headers when running behind a reverse proxy so
+# `request.host_url` and `request.scheme` reflect the external client URL.
+# Apply ProxyFix to both apps before wiring the dispatcher.
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+ma_app.wsgi_app = ProxyFix(ma_app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 app.wsgi_app = DispatcherMiddleware(app.wsgi_app, {'/ma': ma_app.wsgi_app})
 app.logger.info('Mounted music-assistant-alexa-api app at /ma')
 
@@ -31,7 +41,7 @@ def status():
     api_pass = get_env_secret('API_PASSWORD')
 
     # Skill adapter status (we're running if this handler is invoked)
-    skill_html = '<span class="led green"></span> Skill adapter running'
+    skill_html = '<span class="led green"></span> Skill running'
     # API status: call the locally mounted /ma/latest-url endpoint on this service.
     # Use the current request host (including port) so this works in container
     # and local runs without requiring an external API_HOSTNAME env var.
@@ -40,10 +50,35 @@ def status():
     try:
         auth = (api_user, api_pass) if api_user and api_pass else None
         resp = requests.get(endpoint, timeout=2, auth=auth)
+        # Include a short, escaped preview of the response content when the API responded
+        try:
+            content_text = resp.content.decode('utf-8', errors='replace')
+        except Exception:
+            content_text = str(resp.content)
+
+        # If the response is JSON, pretty-print it for readability; otherwise escape raw text.
+        try:
+            parsed = json.loads(content_text)
+            pretty = json.dumps(parsed, indent=2, ensure_ascii=False)
+            content_preview = escape(pretty)
+        except Exception:
+            content_preview = escape(content_text)
+
+        if len(content_preview) > 500:
+            content_preview = content_preview[:500] + '...'
+
         if resp.ok:
-            api_html = f'<span class="led green"></span> API reachable ({resp.status_code}) — /ma/latest-url'
+            api_html = (
+                f'<span class="led green"></span> API reachable ({resp.status_code}) — /ma/latest-url'
+                f"<pre style='white-space:pre-wrap;background:#f6f6f6;padding:8px;border-radius:4px;max-height:200px;overflow:auto'>"
+                f"{content_preview}</pre>"
+            )
         else:
-            api_html = f'<span class="led red"></span> API responded {resp.status_code} for /ma/latest-url'
+            api_html = (
+                f'<span class="led red"></span> API responded {resp.status_code} for /ma/latest-url'
+                f"<pre style='white-space:pre-wrap;background:#fdf2f2;padding:8px;border-radius:4px;max-height:200px;overflow:auto'>"
+                f"{content_preview}</pre>"
+            )
     except RequestException as e:
         api_html = f'<span class="led red"></span> Error: {str(e)}'
 
@@ -66,13 +101,23 @@ def status():
                 <h1>Service Status</h1>
                 <div class="row">{skill_html}</div>
                 <div class="row">{api_html}</div>
-                <hr>
-                <div class="muted">API host: local (mounted /ma)</div>
-                <div class="muted">Checked endpoint: {endpoint}</div>
             </body>
             </html>"""
 
     return Response(html, status=200, mimetype="text/html")
+
+
+# Expose OpenAPI spec and Swagger UI from the main app so docs are available
+# at `/openapi.json` and `/docs` (keeps documentation separate from the API
+# implementation which is mounted at `/ma`).
+@app.route('/openapi.json', methods=['GET'])
+def openapi_json():
+    return maa_swagger.openapi_spec()
+
+
+@app.route('/docs', methods=['GET'])
+def docs():
+    return maa_swagger.render()
 
 if __name__ == "__main__":
     port = int(os.environ.get('PORT', '5000'))
