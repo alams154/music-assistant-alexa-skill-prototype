@@ -11,12 +11,10 @@ Routes provided:
 - GET  /ma/favicon.ico        : serve package favicon if present
 """
 
-import os
 from env_secrets import get_env_secret
-from flask import Flask, Blueprint, jsonify, request, Response, send_file
+from flask import Flask, Blueprint, request, Response
 
-
-_store = None
+from .ma_routes import register_routes
 
 
 def _unauthorized():
@@ -26,7 +24,17 @@ def _unauthorized():
 
 
 def create_blueprint():
+    # Base blueprint for non-/ma endpoints. Keep empty for now.
     bp = Blueprint('music_assistant_alexa_api', __name__)
+    return bp
+
+
+def create_ma_blueprint():
+    """Create a blueprint with the ma routes and optional basic auth.
+
+    This blueprint is intended to be mounted at the `/ma` path only.
+    """
+    bp = Blueprint('music_assistant_alexa_api_ma', __name__)
 
     # Optional basic auth if USERNAME and PASSWORD are provided.
     USERNAME = get_env_secret('API_USERNAME')
@@ -39,50 +47,23 @@ def create_blueprint():
             if not auth or auth.username != USERNAME or auth.password != PASSWORD:
                 return _unauthorized()
 
-    @bp.route('/favicon.ico', methods=['GET'])
-    def favicon():
-        # Try to serve a favicon located next to this package; if missing,
-        # return an empty 204 so clients don't keep retrying.
-        pkg_root = os.path.dirname(__file__)
-        fav_path = os.path.join(pkg_root, 'favicon.ico')
-        if os.path.exists(fav_path):
-            return send_file(fav_path)
-        return ('', 204)
-
-    @bp.route('/push-url', methods=['POST'])
-    def push_url():
-        """Accept JSON with streamUrl and optional metadata and store it.
-
-        Expected JSON body: { streamUrl, title, artist, album, imageUrl }
-        """
-        global _store
-        data = request.get_json(silent=True) or {}
-        stream_url = data.get('streamUrl')
-        if not stream_url:
-            return jsonify({'error': 'Missing required fields'}), 400
-
-        _store = {
-            'streamUrl': stream_url,
-            'title': data.get('title'),
-            'artist': data.get('artist'),
-            'album': data.get('album'),
-            'imageUrl': data.get('imageUrl'),
-        }
-        print('Received:', _store)
-        return jsonify({'status': 'ok'})
-
-    @bp.route('/latest-url', methods=['GET'])
-    def latest_url_ma():
-        """Return the last pushed stream metadata for the Alexa skill.
-        """
-        if not _store:
-            return jsonify({'error': 'No URL available, please check if Music Assistant has pushed a URL to the API'}), 404
-        return jsonify(_store)
-
+    # Register endpoints implemented in the separate ma_routes module
+    register_routes(bp)
     return bp
 
 
 def create_app():
+    # Create and return a base app (no /ma routes mounted here).
     app = Flask('music_assistant_alexa_api')
     app.register_blueprint(create_blueprint(), url_prefix='')
+    return app
+
+
+def create_ma_app():
+    """Create a Flask app that exposes only the `/` endpoints from `ma_routes`.
+
+    This app is intended to be mounted under `/ma` by the main application.
+    """
+    app = Flask('music_assistant_alexa_api_ma')
+    app.register_blueprint(create_ma_blueprint(), url_prefix='')
     return app

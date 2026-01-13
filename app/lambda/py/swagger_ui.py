@@ -40,7 +40,21 @@ def openapi_spec():
                 "get": {
                     "summary": "Get last pushed stream metadata",
                     "responses": {
-                        "200": {"description": "ok", "content": {"application/json": {"schema": {"type": "object"}}}},
+                        "200": {
+                            "description": "ok",
+                            "content": {
+                                "application/json": {
+                                    "schema": {"type": "object"},
+                                    "example": {
+                                        "streamUrl": "https://example.com/stream.mp3",
+                                        "title": "Example Song",
+                                        "artist": "Example Artist",
+                                        "album": "Example Album",
+                                        "imageUrl": "https://example.com/cover.jpg"
+                                    }
+                                }
+                            }
+                        },
                         "404": {"description": "No URL available"}
                     }
                 }

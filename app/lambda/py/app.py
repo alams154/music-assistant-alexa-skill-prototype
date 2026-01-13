@@ -10,7 +10,7 @@ import music_assistant_alexa_api as maa_api
 from werkzeug.middleware.dispatcher import DispatcherMiddleware
 from werkzeug.middleware.proxy_fix import ProxyFix
 from env_secrets import get_env_secret
-from music_assistant_alexa_api import swagger_ui as maa_swagger
+import swagger_ui as maa_swagger
 
 app = Flask(__name__)
 skill_adapter = SkillAdapter(
@@ -18,8 +18,8 @@ skill_adapter = SkillAdapter(
     skill_id="",
     app=app)
 
-# Mount the Music Assistant Alexa API
-ma_app = maa_api.create_app()
+# Mount the Music Assistant Alexa API (only ma routes will be mounted at /ma)
+ma_app = maa_api.create_ma_app()
 
 # Respect X-Forwarded-* headers when running behind a reverse proxy so
 # `request.host_url` and `request.scheme` reflect the external client URL.
