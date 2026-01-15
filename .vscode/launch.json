@@ -16,5 +16,23 @@
                 }
             ]
         }
+        ,
+        {
+            "name": "Music Assistant Alexa Skill: Server",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "app",
+            "python": "${workspaceFolder}/venv/bin/python",
+            "cwd": "${workspaceFolder}/app/lambda/py",
+            "justMyCode": false,
+            "args": [],
+            "env": {
+                "PYTHONDEVMODE": "1",
+                "AWS_DEFAULT_REGION": "us-east-1",
+                "AWS_REGION": "us-east-1",
+                "PORT": "5000"
+            },
+            "console": "integratedTerminal"
+        }
     ]
 }
