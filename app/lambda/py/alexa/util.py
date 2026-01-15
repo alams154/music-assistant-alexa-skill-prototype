@@ -40,12 +40,20 @@ def play(url, offset, text, response_builder, supports_apl=False):
     """
     # type: (str, int, str, Dict, ResponseFactory) -> Response
 
+    logging.info('=== PLAY FUNCTION CALLED ===')
+    logging.info('Device supports APL: %s', supports_apl)
+    logging.info('URL received: %s', url)
+
     if supports_apl:
         add_apl(response_builder)
     else:
+        logging.info('=== NON-APL PLAYBACK PATH (Samsung Family Hub) ===')
+        logging.info('Original URL from Music Assistant: %s', url)
+
         # Read and sanitize MA_HOSTNAME environment variable.
         # Accept values like example.com, https://example.com:8443, 'example.com', or "example.com"
         hostname_raw = os.environ.get('MA_HOSTNAME', '')
+        logging.info('MA_HOSTNAME environment variable (raw): %s', repr(hostname_raw))
         hostname_raw = hostname_raw.strip()
         # strip surrounding single/double quotes
         if len(hostname_raw) >= 2 and ((hostname_raw[0] == hostname_raw[-1] == '"') or (hostname_raw[0] == hostname_raw[-1] == "'")):
@@ -68,9 +76,17 @@ def play(url, offset, text, response_builder, supports_apl=False):
             else:
                 hostname = f'https://{hostname_clean}'
 
+        logging.info('MA_HOSTNAME after sanitization: %s', hostname)
+
         # Only replace IP-host in URL when we have a valid hostname to insert
         if hostname:
+            original_url = url
             url = re.sub(r'^https?://\d+\.\d+\.\d+\.\d+(?::\d+)?', hostname, url)
+            logging.info('URL after rewriting: %s', url)
+            if original_url == url:
+                logging.warning('URL was NOT rewritten! Regex did not match. This will cause HTTPS issues on real devices.')
+            else:
+                logging.info('URL successfully rewritten from IP to hostname')
         else:
             response_builder.speak(
                 "You did not specify a valid hostname. Please check your environment variable MA_HOSTNAME.").set_should_end_session(True)
@@ -78,8 +94,10 @@ def play(url, offset, text, response_builder, supports_apl=False):
         url = url.replace(' ', '%20')
 
         # Ensure the resource exists and appears playable. Try HEAD first, fall back to GET.
+        logging.info('Validating URL accessibility: %s', url)
         try:
             head_resp = requests.head(url, allow_redirects=True, timeout=5)
+            logging.info('HEAD request returned status: %s', head_resp.status_code)
             resp = head_resp
             if head_resp.status_code >= 400:
                 resp = requests.get(url, stream=True, allow_redirects=True, timeout=5)
@@ -90,6 +108,8 @@ def play(url, offset, text, response_builder, supports_apl=False):
                     "Sorry, I can't play the requested audio because the file is not available.")
                 response_builder.set_should_end_session(True)
                 return response_builder.response
+            else:
+                logging.info('URL validation successful (status %s)', resp.status_code)
         except requests.RequestException:
             logging.exception('Play Function URL: %s', url)
             response_builder.speak(
@@ -97,6 +117,8 @@ def play(url, offset, text, response_builder, supports_apl=False):
             response_builder.set_should_end_session(True)
             return response_builder.response
 
+        logging.info('Sending PlayDirective to Alexa device with final URL: %s', url)
+        logging.info('URL scheme: %s', 'HTTPS' if url.startswith('https://') else 'HTTP (WARNING: Real devices require HTTPS!)')
         response_builder.add_directive(
             PlayDirective(
                 play_behavior=PlayBehavior.REPLACE_ALL,
