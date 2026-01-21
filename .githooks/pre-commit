@@ -1,0 +1,20 @@
+#!/bin/sh
+# Repo-local pre-commit hook: run the sensitive-data checker
+# This hook is installed by setting `git config core.hooksPath .githooks`.
+
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "$(pwd)")
+SCRIPT="$REPO_ROOT/scripts/check_sensitive.py"
+
+if [ -x "$SCRIPT" ]; then
+  exec "$SCRIPT" "$@"
+else
+  # fall back to calling with python3
+  if command -v python3 >/dev/null 2>&1; then
+    exec python3 "$SCRIPT" "$@"
+  elif command -v python >/dev/null 2>&1; then
+    exec python "$SCRIPT" "$@"
+  else
+    echo "Warning: Python not found; skipping sensitive-data pre-commit check" >&2
+    exit 0
+  fi
+fi

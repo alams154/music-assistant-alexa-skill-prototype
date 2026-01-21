@@ -6,12 +6,32 @@ import sys
 import shutil
 
 # Simple domain regex (covers typical domains like example.com, sub.example.co.uk)
-DOMAIN_RE = re.compile(r"\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}\b", re.I)
+DOMAIN_RE = re.compile(r"\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}\b")
 
 # Default allowlist (lowercase). You may add entries via the SENSITIVE_ALLOWLIST env var
-DEFAULT_ALLOWLIST = {"localhost", "127.0.0.1"}
+# Common registry hostnames and local hosts are allowlisted by default.
+DEFAULT_ALLOWLIST = {"localhost", "127.0.0.1", "ghcr.io"}
 
-IGNORED_DIRS = {".git", "__pycache__", "node_modules", ".venv", "venv"}
+IGNORED_DIRS = {".git", "__pycache__", "node_modules", ".venv", "venv", ".githooks"}
+# Files to never scan (relative paths)
+IGNORED_FILES = {"scripts/check_sensitive.py"}
+
+# File extensions that are usually code. For these, only flag domains inside string
+# literals to avoid matching code tokens like `os.path.join` or `re.compile`.
+CODE_EXTS = {'.py', '.js', '.ts', '.go', '.java', '.c', '.cpp', '.rs'}
+
+def _is_within_quotes(line, start_idx, end_idx):
+    # Find nearest quote char before start_idx
+    left_single = line.rfind("'", 0, start_idx)
+    left_double = line.rfind('"', 0, start_idx)
+    # choose the nearest (max)
+    left = max(left_single, left_double)
+    if left == -1:
+        return False
+    quote_char = line[left]
+    # find matching closing quote after end_idx
+    right = line.find(quote_char, end_idx)
+    return right != -1
 
 def repo_root():
     # Find repository root by walking up until we find .git or stop at filesystem root
@@ -70,10 +90,33 @@ def get_staged_content(path):
 def scan_files(paths, allowlist):
     findings = []
     for p in paths:
+        # skip repository-local hooks and other ignored paths
+        if p.split(os.sep)[0] in IGNORED_DIRS:
+            continue
+        if os.path.normpath(p) in IGNORED_FILES:
+            continue
         content = get_staged_content(p)
         if not content:
             continue
+        _, ext = os.path.splitext(p)
         for m in DOMAIN_RE.finditer(content):
+            # If this looks like a code file, only accept matches inside string literals
+            if ext in CODE_EXTS:
+                # compute line and local indices
+                line_start = content.rfind('\n', 0, m.start())
+                if line_start == -1:
+                    line_start = 0
+                else:
+                    line_start = line_start + 1
+                line_end = content.find('\n', m.end())
+                if line_end == -1:
+                    line = content[line_start:]
+                else:
+                    line = content[line_start:line_end]
+                start_idx_in_line = m.start() - line_start
+                end_idx_in_line = m.end() - line_start
+                if not _is_within_quotes(line, start_idx_in_line, end_idx_in_line):
+                    continue
             domain = m.group(0)
             if domain.lower() in allowlist:
                 continue
