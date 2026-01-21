@@ -56,6 +56,54 @@ OPENAPI_SPEC: Dict[str, Any] = {
                 },
             }
         },
+        "/": {
+            "post": {
+                "summary": "Invoke the Alexa skill (test)",
+                "description": "Send a sample Alexa request envelope to the skill endpoint.",
+                "requestBody": {
+                    "required": True,
+                    "content": {
+                        "application/json": {
+                            "schema": {"type": "object"},
+                            "example": {
+                                "version": "1.0",
+                                "session": {
+                                    "new": True,
+                                    "sessionId": "amzn1.echo-api.session.123",
+                                    "application": {"applicationId": "amzn1.ask.skill.123"},
+                                    "user": {"userId": "amzn1.ask.account.test"}
+                                },
+                                "context": {},
+                                "request": {
+                                    "type": "LaunchRequest",
+                                    "requestId": "amzn1.echo-api.request.456",
+                                    "locale": "en-US",
+                                    "timestamp": "2020-03-22T18:00:00Z"
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Skill response",
+                        "content": {
+                            "application/json": {
+                                "schema": {"type": "object"},
+                                "example": {
+                                    "version": "1.0",
+                                    "response": {
+                                        "outputSpeech": {"type": "PlainText", "text": "Hello from the skill"},
+                                        "shouldEndSession": True
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {"description": "Invalid request"}
+                }
+            }
+        }
     },
 }
 
