@@ -100,24 +100,28 @@ def scan_files(paths, allowlist):
         if not content:
             continue
         _, ext = os.path.splitext(p)
-        for m in DOMAIN_RE.finditer(content):
-            # If this looks like a code file, only accept matches inside string literals
-            if ext in CODE_EXTS:
-                # compute line and local indices
-                line_start = content.rfind('\n', 0, m.start())
-                if line_start == -1:
-                    line_start = 0
+        scan_text = content
+        # For Python files, extract string literals using the AST to avoid matching code tokens
+        if ext == '.py':
+            try:
+                import ast
+                tree = ast.parse(content)
+                strings = []
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                        strings.append(node.value)
+                    elif hasattr(ast, 'Str') and isinstance(node, ast.Str):
+                        strings.append(node.s)
+                if strings:
+                    scan_text = '\n'.join(strings)
                 else:
-                    line_start = line_start + 1
-                line_end = content.find('\n', m.end())
-                if line_end == -1:
-                    line = content[line_start:]
-                else:
-                    line = content[line_start:line_end]
-                start_idx_in_line = m.start() - line_start
-                end_idx_in_line = m.end() - line_start
-                if not _is_within_quotes(line, start_idx_in_line, end_idx_in_line):
-                    continue
+                    # no string literals, nothing to scan
+                    scan_text = ''
+            except Exception:
+                # fallback to scanning content with quote heuristic
+                scan_text = content
+
+        for m in DOMAIN_RE.finditer(scan_text):
             domain = m.group(0)
             # ignore matches that are image filenames (e.g. background-rose.png)
             parts = domain.rsplit('.', 1)
