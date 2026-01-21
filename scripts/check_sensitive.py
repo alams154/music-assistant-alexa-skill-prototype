@@ -108,10 +108,14 @@ def scan_files(paths, allowlist):
                 tree = ast.parse(content)
                 strings = []
                 for node in ast.walk(tree):
+                    # new-style string nodes
                     if isinstance(node, ast.Constant) and isinstance(node.value, str):
                         strings.append(node.value)
-                    elif hasattr(ast, 'Str') and isinstance(node, ast.Str):
-                        strings.append(node.s)
+                    # f-strings: JoinedStr contains Constant parts
+                    elif isinstance(node, ast.JoinedStr):
+                        for val in getattr(node, 'values', []):
+                            if isinstance(val, ast.Constant) and isinstance(val.value, str):
+                                strings.append(val.value)
                 if strings:
                     scan_text = '\n'.join(strings)
                 else:
