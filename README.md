@@ -37,51 +37,6 @@ The easiest way to run the project is with Docker Compose. This will build and s
 	
 
 ## Basic Troubleshooting
-
-### API Endpoints
-
-Returns 401 Unauthorized when the authentication environment variables are provided and the requests does not provide  correct credentials.
-
-#### POST `/ma/push-url`
-
-**Body:**
-
-```json
-{
-  "album": null,
-  "artist": null,
-  "imageUrl": "https://github.com/music-assistant/server/blob/dev/music_assistant/logo.png",
-  "streamUrl": "https://example.com/stream.mp3",
-  "title": "Music Assistant"
-}
-```
-
-**Response:**
-
-```json
-{ "status": "ok" }
-```
-
-#### GET `/ma/latest-url`
-
-**Response:**
-
-```json
-{
-  "album": null,
-  "artist": null,
-  "imageUrl": "https://github.com/music-assistant/server/blob/dev/music_assistant/logo.png",
-  "streamUrl": "https://example.com/stream.mp3",
-  "title": "Music Assistant"
-}
-```
-Returns `404` if no URL has been received yet:
-```json
-{
-  "error": "No URL available, please check if Music Assistant has pushed a URL to the API"
-}
-```
-
 ### Status Page
 `/status`
 
