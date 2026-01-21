@@ -14,6 +14,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+from typing import List
 
 ROOT = Path(__file__).resolve().parents[1]
 VERSION_FILE = ROOT / 'VERSION'
@@ -56,24 +57,65 @@ def run_sync():
                 print('Warning: failed to run sync_version.py', file=sys.stderr)
 
 
-# Intentionally do not stage files: version bumps should remain local only.
+
+
+def get_staged_files() -> List[str]:
+    try:
+        out = subprocess.check_output(['git', 'diff', '--name-only', '--cached'], stderr=subprocess.DEVNULL)
+        files = out.decode('utf-8').splitlines()
+        return [f for f in files if f]
+    except Exception:
+        # Not a git repo or no staged files
+        return []
+
+
+def git_add(paths):
+    try:
+        subprocess.run(['git', 'add'] + [str(p) for p in paths], check=True)
+    except Exception:
+        print('Warning: git add failed (not a git repo or git missing)', file=sys.stderr)
 
 
 def main():
+    # Only bump if there are staged changes that require a new image.
+    staged = get_staged_files()
+
+    # If VERSION is already staged, assume bump already happened.
+    if 'VERSION' in staged:
+        print('VERSION is already staged; skipping bump')
+        return 0
+
+    # Determine if any staged file should trigger an image bump
+    need_bump = False
+    for f in staged:
+        if f == 'Dockerfile' or f.startswith('app/') or f.startswith('addons/') or f.startswith('.github/workflows/'):
+            need_bump = True
+            break
+
+    if not need_bump:
+        print('No image-related staged changes; skipping version bump')
+        return 0
+
     if not VERSION_FILE.exists():
         raise SystemExit(f"VERSION file not found at {VERSION_FILE}")
+
     cur = read_version()
     new = bump_version_string(cur)
     if new == cur:
         print(f'Version unchanged: {cur}')
         return 0
+
+    # Update VERSION and sync config.json
     write_version(new)
     print(f'Bumped VERSION: {cur} -> {new}')
-
-    # Run sync to update addon config
     run_sync()
 
-    # Do NOT stage files — keep version bump and config changes local only.
+    # Stage the updated files so the user's commit includes them automatically
+    addon_cfg = ROOT / 'addons' / 'music-assistant-skill' / 'config.json'
+    to_stage = [VERSION_FILE]
+    if addon_cfg.exists():
+        to_stage.append(addon_cfg)
+    git_add(to_stage)
     return 0
 
 

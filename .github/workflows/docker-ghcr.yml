@@ -27,44 +27,68 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Compute and (if needed) bump version
+      - name: Compute (local-only) version for image tag
         id: version
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_ACTOR: ${{ github.actor }}
         run: |
-          set -e
-          # read current version
+          set -euo pipefail
+          # Ensure VERSION exists
           if [ ! -f VERSION ]; then
             echo "0.0.1-beta" > VERSION
           fi
           current=$(cat VERSION)
 
-          # if run by the actions bot, don't bump again (prevents loop)
-          if [ "${GITHUB_ACTOR}" = "github-actions[bot]" ]; then
-            new="$current"
+          # Determine changed files between the pushed range
+          BEFORE='${{ github.event.before }}'
+          SHA='${{ github.sha }}'
+          REF='${{ github.ref_name }}'
+
+          # Fetch the ref so git diff works reliably
+          git fetch origin "${REF}" --no-tags --prune -q || true
+
+          if [ -z "${BEFORE}" ] || [ "${BEFORE}" = "0000000000000000000000000000000000000000" ]; then
+            changed=$(git diff --name-only origin/${REF}..${SHA} || true)
           else
-            # separate prerelease part (e.g. -beta) if present
-            core=${current%%-*}
-            prerelease=""
-            if [[ "$current" == *"-"* ]]; then prerelease="-${current#*-}"; fi
+            changed=$(git diff --name-only ${BEFORE}..${SHA} || true)
+          fi
 
-            IFS='.' read -r major minor patch <<< "$core"
-            newpatch=$((patch + 1))
-            new="$major.$minor.$newpatch$prerelease"
+          echo "Changed files:\n${changed}"
 
-            if [ "$new" != "$current" ]; then
-              echo "$new" > VERSION
-              git config user.name "github-actions[bot]"
-              git config user.email "github-actions[bot]@users.noreply.github.com"
-              git add VERSION
-              git commit -m "chore: bump version to $new [ci skip]" || echo "no changes to commit"
-              git push origin HEAD:${{ github.ref_name }} || echo "push failed"
+          # Decide whether changes require a new image. Match Dockerfile, app/, addons/, or files under .github/workflows that affect image builds.
+          need_bump=false
+          for f in ${changed}; do
+            if [ -z "${f}" ]; then
+              continue
+            fi
+            case "${f}" in
+              Dockerfile|app/*|addons/*|.github/workflows/*)
+                need_bump=true
+                break
+                ;;
+            esac
+          done
+
+          # If run by the bot, don't alter behavior
+          if [ "${GITHUB_ACTOR}" = "github-actions[bot]" ]; then
+            new="${current}"
+          else
+            if [ "${need_bump}" = "true" ]; then
+              core=${current%%-*}
+              prerelease=""
+              if [[ "${current}" == *"-"* ]]; then prerelease="-${current#*-}"; fi
+              IFS='.' read -r major minor patch <<< "${core}"
+              newpatch=$((patch + 1))
+              new="${major}.${minor}.${newpatch}${prerelease}"
+              # Write VERSION locally for this workflow (do NOT commit or push)
+              echo "${new}" > VERSION
+            else
+              new="${current}"
             fi
           fi
 
-          echo "current=$current" >> $GITHUB_OUTPUT
-          echo "new=$new" >> $GITHUB_OUTPUT
+          echo "current=${current}" >> $GITHUB_OUTPUT
+          echo "new=${new}" >> $GITHUB_OUTPUT
 
       - name: Build Docker image
         env:
