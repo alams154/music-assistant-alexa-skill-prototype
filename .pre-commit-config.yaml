@@ -1,0 +1,10 @@
+repos:
+- repo: local
+  hooks:
+  - id: check-sensitive
+    name: Check staged files for sensitive domain names
+    # Let pre-commit create an isolated python environment and run the script there
+    entry: scripts/check_sensitive.py
+    language: python
+    additional_dependencies: []
+    stages: [commit]
