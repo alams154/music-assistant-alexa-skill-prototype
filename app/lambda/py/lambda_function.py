@@ -18,9 +18,50 @@ sb = StandardSkillBuilder()
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+
+class _ComponentFilter(logging.Filter):
+    """Inject a `component` attribute based on logger name.
+
+    This makes it easy to tell whether a message came from the
+    API, the Alexa Skill code (Skill), or the UI/Web app.
+    """
+    def filter(self, record):
+        name = (record.name or "")
+        if name.startswith('music_assistant_alexa_api') or name.startswith('ma_routes'):
+            record.component = 'API'
+        elif name.startswith('alexa') or name == 'lambda_function' or name.startswith('ask_sdk'):
+            record.component = 'Skill'
+        else:
+            record.component = 'UI/Web'
+        return True
+
+
+_filter = _ComponentFilter()
+root_logger = logging.getLogger()
+root_logger.addFilter(_filter)
+
+# Ensure every LogRecord has a `component` attribute so formatters
+# that reference %(component)s don't fail for third-party loggers
+# (e.g. werkzeug) which may emit records before filters run.
+_orig_log_record_factory = logging.getLogRecordFactory()
+
+def _log_record_factory(*args, **kwargs):
+    record = _orig_log_record_factory(*args, **kwargs)
+    if not hasattr(record, 'component'):
+        name = (getattr(record, 'name', '') or '')
+        if name.startswith('music_assistant_alexa_api') or name.startswith('ma_routes'):
+            record.component = 'API'
+        elif name.startswith('alexa') or name == 'lambda_function' or name.startswith('ask_sdk'):
+            record.component = 'Skill'
+        else:
+            record.component = 'UI/Web'
+    return record
+
+logging.setLogRecordFactory(_log_record_factory)
+
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s %(message)s"
+    format="%(asctime)s %(levelname)s [%(component)s] %(name)s %(message)s"
 )
 
 supports_apl = False

@@ -3,3 +3,4 @@ babel
 flask
 flask_ask_sdk
 requests
+oscrypto>=1.3.0
