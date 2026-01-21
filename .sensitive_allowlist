@@ -1,0 +1,18 @@
+# Repository-sensitive allowlist (one entry per line)
+# Lines starting with # are comments and ignored.
+# Use leading *. for wildcard subdomain matches, e.g. *.cloudfront.net
+ghcr.io
+streams.80s80s.de
+*.cloudfront.net
+github.com
+example.com
+cdnjs.cloudflare.com
+developer.amazon.com
+aws.github.io
+amazon.com
+help.github.com
+aws.amazon.com
+en.wikipedia.org
+www.w3.org
+li.org
+raw.githubusercontent.com

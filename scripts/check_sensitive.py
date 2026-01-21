@@ -20,6 +20,11 @@ IGNORED_FILES = {"scripts/check_sensitive.py"}
 # literals to avoid matching code tokens like `os.path.join` or `re.compile`.
 CODE_EXTS = {'.py', '.js', '.ts', '.go', '.java', '.c', '.cpp', '.rs'}
 IMAGE_EXTS = {"png", "jpg", "jpeg", "gif", "svg", "webp"}
+# Common non-domain file extensions to ignore when matched (e.g., openapi.json)
+IGNORE_EXTS = {"yml", "yaml", "json", "md", "txt", "py", "sh", "cfg", "ini", "toml", "po", "mo", "ico", "css", "js", "html", "svg", "yml"}
+
+# Small whitelist of common TLDs to avoid matching identifiers like `sys.exit`.
+TLD_WHITELIST = {"com","net","org","io","app","de","uk","co","edu","gov","info","tv","me","xyz","us","ca","biz","online","site","tech","dev","ai"}
 
 def _is_within_quotes(line, start_idx, end_idx):
     # Find nearest quote char before start_idx
@@ -77,8 +82,15 @@ def get_staged_content(path):
     git = get_git_executable()
     if git:
         try:
-            return subprocess.check_output([git, "show", f":{path}"], text=True, stderr=subprocess.DEVNULL)
+            # Get raw bytes from git to avoid UnicodeDecodeError when blobs contain binary
+            out = subprocess.check_output([git, "show", f":{path}"], stderr=subprocess.DEVNULL)
+            if isinstance(out, bytes):
+                return out.decode('utf-8', errors='ignore')
+            return str(out)
         except subprocess.CalledProcessError:
+            pass
+        except UnicodeDecodeError:
+            # fall back to reading from working tree
             pass
 
     # Fallback: read file from working tree
@@ -124,12 +136,68 @@ def scan_files(paths, allowlist):
             except Exception:
                 # fallback to scanning content with quote heuristic
                 scan_text = content
+        # For shell scripts, only scan quoted strings to avoid matching function names
+        elif ext == '.sh':
+            try:
+                strings = []
+                # capture heredoc blocks: <<'DELIM' ... DELIM
+                heredocs = re.findall(r"<<['\"]?([A-Za-z0-9_]+)['\"]?\n(.*?)\n\1", content, re.S)
+                for delim, body in heredocs:
+                    # attempt to parse heredoc body as Python and extract string literals
+                    try:
+                        import ast
+                        tree = ast.parse(body)
+                        for node in ast.walk(tree):
+                            if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                                strings.append(node.value)
+                            elif isinstance(node, ast.JoinedStr):
+                                for val in getattr(node, 'values', []):
+                                    if isinstance(val, ast.Constant) and isinstance(val.value, str):
+                                        strings.append(val.value)
+                        continue
+                    except Exception:
+                        # fallback: extract quoted strings from the heredoc body
+                        found = re.findall(r"'([^']*)'|\"([^\"]*)\"", body)
+                        strings.extend([a or b for a, b in found])
+
+                # also capture top-level quoted strings in the shell script
+                found_top = re.findall(r"'([^']*)'|\"([^\"]*)\"", content)
+                strings.extend([a or b for a, b in found_top])
+
+                scan_text = '\n'.join(strings) if strings else ''
+            except Exception:
+                scan_text = ''
 
         for m in DOMAIN_RE.finditer(scan_text):
             domain = m.group(0)
+            # compute surrounding line for contextual checks
+            line_start = scan_text.rfind('\n', 0, m.start())
+            if line_start == -1:
+                line_start = 0
+            else:
+                line_start = line_start + 1
+            line_end = scan_text.find('\n', m.end())
+            if line_end == -1:
+                line = scan_text[line_start:]
+            else:
+                line = scan_text[line_start:line_end]
             # ignore matches that are image filenames (e.g. background-rose.png)
             parts = domain.rsplit('.', 1)
-            if len(parts) == 2 and parts[1].lower() in IMAGE_EXTS:
+            if len(parts) == 2:
+                ext = parts[1].lower()
+                # ignore image/file extensions and other ignored file-like endings
+                if ext in IMAGE_EXTS or ext in IGNORE_EXTS:
+                    continue
+                # require last label look like a real TLD to avoid matching code identifiers
+                if ext not in TLD_WHITELIST:
+                    continue
+
+            # skip GitHub Actions expression tokens like ${{ github.actor }}
+            if '${{' in line or '}}' in line:
+                continue
+
+            # for workflow files, be conservative: only flag if the line contains a URL
+            if p.startswith('.github/workflows') and ('http' not in line and '://' not in line):
                 continue
             if is_allowed(domain, allowlist):
                 continue
@@ -151,6 +219,21 @@ def is_allowed(domain, allowlist):
 
 def build_allowlist():
     allow = set(DEFAULT_ALLOWLIST)
+    # Repo-level allowlist file (.sensitive_allowlist)
+    try:
+        root = repo_root()
+        allowfile = os.path.join(root, '.sensitive_allowlist')
+        if os.path.exists(allowfile):
+            with open(allowfile, 'r', encoding='utf-8', errors='ignore') as fh:
+                for line in fh:
+                    line = line.strip()
+                    if not line or line.startswith('#'):
+                        continue
+                    allow.add(line.lower())
+    except Exception:
+        pass
+
+    # Environment variable (comma-separated) overrides/additions
     env = os.environ.get("SENSITIVE_ALLOWLIST")
     if env:
         for part in env.split(','):
