@@ -10,7 +10,7 @@ DOMAIN_RE = re.compile(r"\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63
 
 # Default allowlist (lowercase). You may add entries via the SENSITIVE_ALLOWLIST env var
 # Common registry hostnames and local hosts are allowlisted by default.
-DEFAULT_ALLOWLIST = {"localhost", "127.0.0.1", "ghcr.io"}
+DEFAULT_ALLOWLIST = {"localhost", "127.0.0.1", "ghcr.io", "streams.80s80s.de", "*.cloudfront.net"}
 
 IGNORED_DIRS = {".git", "__pycache__", "node_modules", ".venv", "venv", ".githooks"}
 # Files to never scan (relative paths)
@@ -19,6 +19,7 @@ IGNORED_FILES = {"scripts/check_sensitive.py"}
 # File extensions that are usually code. For these, only flag domains inside string
 # literals to avoid matching code tokens like `os.path.join` or `re.compile`.
 CODE_EXTS = {'.py', '.js', '.ts', '.go', '.java', '.c', '.cpp', '.rs'}
+IMAGE_EXTS = {"png", "jpg", "jpeg", "gif", "svg", "webp"}
 
 def _is_within_quotes(line, start_idx, end_idx):
     # Find nearest quote char before start_idx
@@ -118,10 +119,27 @@ def scan_files(paths, allowlist):
                 if not _is_within_quotes(line, start_idx_in_line, end_idx_in_line):
                     continue
             domain = m.group(0)
-            if domain.lower() in allowlist:
+            # ignore matches that are image filenames (e.g. background-rose.png)
+            parts = domain.rsplit('.', 1)
+            if len(parts) == 2 and parts[1].lower() in IMAGE_EXTS:
+                continue
+            if is_allowed(domain, allowlist):
                 continue
             findings.append((p, domain))
     return findings
+
+def is_allowed(domain, allowlist):
+    d = domain.lower()
+    for a in allowlist:
+        a = a.lower()
+        if a.startswith('*.'):
+            # wildcard subdomain match
+            if d == a[2:] or d.endswith(a[1:]):
+                return True
+        else:
+            if d == a:
+                return True
+    return False
 
 def build_allowlist():
     allow = set(DEFAULT_ALLOWLIST)
