@@ -16,6 +16,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -24,10 +27,56 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build Docker image
+      - name: Compute and (if needed) bump version
+        id: version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_ACTOR: ${{ github.actor }}
         run: |
-          docker build -t ghcr.io/${{ github.repository_owner }}/music-assistant-skill:dev .
+          set -e
+          # read current version
+          if [ ! -f VERSION ]; then
+            echo "0.0.1-beta" > VERSION
+          fi
+          current=$(cat VERSION)
+
+          # if run by the actions bot, don't bump again (prevents loop)
+          if [ "${GITHUB_ACTOR}" = "github-actions[bot]" ]; then
+            new="$current"
+          else
+            # separate prerelease part (e.g. -beta) if present
+            core=${current%%-*}
+            prerelease=""
+            if [[ "$current" == *"-"* ]]; then prerelease="-${current#*-}"; fi
+
+            IFS='.' read -r major minor patch <<< "$core"
+            newpatch=$((patch + 1))
+            new="$major.$minor.$newpatch$prerelease"
+
+            if [ "$new" != "$current" ]; then
+              echo "$new" > VERSION
+              git config user.name "github-actions[bot]"
+              git config user.email "github-actions[bot]@users.noreply.github.com"
+              git add VERSION
+              git commit -m "chore: bump version to $new [ci skip]" || echo "no changes to commit"
+              git push origin HEAD:${{ github.ref_name }} || echo "push failed"
+            fi
+          fi
+
+          echo "current=$current" >> $GITHUB_OUTPUT
+          echo "new=$new" >> $GITHUB_OUTPUT
+
+      - name: Build Docker image
+        env:
+          IMAGE_TAG: ${{ steps.version.outputs.new }}
+        run: |
+          TAG=${IMAGE_TAG}
+          docker build -t ghcr.io/${{ github.repository_owner }}/music-assistant-skill:${TAG} -t ghcr.io/${{ github.repository_owner }}/music-assistant-skill:latest .
 
       - name: Push Docker image
+        env:
+          IMAGE_TAG: ${{ steps.version.outputs.new }}
         run: |
-          docker push ghcr.io/${{ github.repository_owner }}/music-assistant-skill:dev
+          TAG=${IMAGE_TAG}
+          docker push ghcr.io/${{ github.repository_owner }}/music-assistant-skill:${TAG}
+          docker push ghcr.io/${{ github.repository_owner }}/music-assistant-skill:latest

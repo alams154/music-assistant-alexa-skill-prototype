@@ -1,0 +1,85 @@
+name: Release and Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Which segment to bump: major, minor, or patch'
+        required: true
+        default: 'minor'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Set Git user
+        run: |
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor }}@users.noreply.github.com"
+
+      - name: Read and bump VERSION
+        id: bump
+        run: |
+          set -e
+          bump="${{ github.event.inputs.bump }}"
+          if [ -z "$bump" ]; then bump="patch"; fi
+          if [ ! -f VERSION ]; then echo "0.0.1-beta" > VERSION; fi
+          current=$(cat VERSION)
+          core=${current%%-*}
+          prerelease=""
+          if [[ "$current" == *"-"* ]]; then prerelease="-${current#*-}"; fi
+          IFS='.' read -r major minor patch <<< "$core"
+          case "$bump" in
+            major)
+              major=$((major + 1))
+              minor=0
+              patch=0
+              ;;
+            minor)
+              minor=$((minor + 1))
+              patch=0
+              ;;
+            *)
+              patch=$((patch + 1))
+              ;;
+          esac
+          new="$major.$minor.$patch$prerelease"
+          echo "$new" > VERSION
+          git add VERSION
+          git commit -m "chore(release): bump version to $new [skip ci]" || echo "no changes to commit"
+          git tag "v$new" || echo "tag exists"
+          # push branch and tags
+          git push origin HEAD:${{ github.ref_name }} --follow-tags || git push --follow-tags origin
+
+          echo "version=$new" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        with:
+          tag_name: v${{ steps.bump.outputs.version }}
+          release_name: Release v${{ steps.bump.outputs.version }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        run: |
+          TAG=${{ steps.bump.outputs.version }}
+          docker build -t ghcr.io/${{ github.repository_owner }}/music-assistant-skill:${TAG} -t ghcr.io/${{ github.repository_owner }}/music-assistant-skill:latest .
+          docker push ghcr.io/${{ github.repository_owner }}/music-assistant-skill:${TAG}
+          docker push ghcr.io/${{ github.repository_owner }}/music-assistant-skill:latest
