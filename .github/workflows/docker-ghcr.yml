@@ -62,7 +62,7 @@ jobs:
               continue
             fi
             case "${f}" in
-              Dockerfile|app/*|addons/*|.github/workflows/*)
+              Dockerfile|app/*|addons/*)
                 need_bump=true
                 break
                 ;;
