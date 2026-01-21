@@ -1,0 +1,43 @@
+{
+  "name": "Music Assistant Alexa Skill",
+  "version": "0.0.3-beta",
+  "slug": "music_assistant_skill",
+  "description": "Expose the Music Assistant Alexa skill as a Home Assistant add-on (development/edge use).",
+  "arch": [
+    "aarch64",
+    "amd64",
+    "armv7",
+    "armhf",
+    "i386"
+  ],
+  "startup": "services",
+  "boot": "auto",
+  "ports": {
+    "5000/tcp": 5000,
+    "5678/tcp": 5678
+  },
+  "ports_description": {
+    "5000/tcp": "Skill API port",
+    "5678/tcp": "Debug port (optional)"
+  },
+  "options": {
+    "MA_HOSTNAME": "",
+    "API_USERNAME": "",
+    "API_PASSWORD": "",
+    "PORT": 5000,
+    "DEBUG_PORT": 5678,
+    "AWS_DEFAULT_REGION": "us-east-1"
+  },
+  "schema": {
+    "MA_HOSTNAME": "str",
+    "API_USERNAME": "str",
+    "API_PASSWORD": "str",
+    "PORT": "int",
+    "DEBUG_PORT": "int",
+    "AWS_DEFAULT_REGION": "str"
+  },
+  "webui": "http://[HOST]:[PORT]",
+  "map": [],
+  "ingress": false,
+  "host_network": false
+}

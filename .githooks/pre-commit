@@ -5,6 +5,29 @@
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "$(pwd)")
 SCRIPT="$REPO_ROOT/scripts/check_sensitive.py"
 
+# Bump local VERSION and sync add-on config before running checks
+SYNC_SCRIPT="$REPO_ROOT/scripts/sync_version.py"
+BUMP_SCRIPT="$REPO_ROOT/scripts/bump_version.py"
+if [ -x "$BUMP_SCRIPT" ]; then
+  "$BUMP_SCRIPT" || true
+else
+  if command -v python3 >/dev/null 2>&1; then
+    python3 "$BUMP_SCRIPT" || true
+  elif command -v python >/dev/null 2>&1; then
+    python "$BUMP_SCRIPT" || true
+  fi
+fi
+
+if [ -x "$SYNC_SCRIPT" ]; then
+  "$SYNC_SCRIPT" || true
+else
+  if command -v python3 >/dev/null 2>&1; then
+    python3 "$SYNC_SCRIPT" || true
+  elif command -v python >/dev/null 2>&1; then
+    python "$SYNC_SCRIPT" || true
+  fi
+fi
+
 if [ -x "$SCRIPT" ]; then
   exec "$SCRIPT" "$@"
 else
