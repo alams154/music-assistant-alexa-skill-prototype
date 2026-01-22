@@ -4,6 +4,8 @@
  
   [This means your Music Assistant stream will be publicly accessible on the internet. Take appropriate security measures to protect your Music Assistant instance.]
 
+- Not currently compatible with Alexa+
+
 ## Known Issues
 
 ### All devices:
