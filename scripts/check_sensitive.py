@@ -108,6 +108,10 @@ def scan_files(paths, allowlist):
             continue
         if os.path.normpath(p) in IGNORED_FILES:
             continue
+        _, ext = os.path.splitext(p)
+        # skip common image files entirely
+        if ext.lower().lstrip('.') in IMAGE_EXTS:
+            continue
         content = get_staged_content(p)
         if not content:
             continue
