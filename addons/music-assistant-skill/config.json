@@ -1,6 +1,6 @@
 {
   "name": "Music Assistant Alexa Skill",
-  "version": "0.0.7-beta",
+  "version": "0.0.8-beta",
   "slug": "music_assistant_skill",
   "description": "Expose the Music Assistant Alexa skill as a Home Assistant add-on (development/edge use).",
   "arch": [

@@ -16,8 +16,8 @@
           ],
           "name": "My Radio",
           "description": "Listen to My Radio, with less bla bla bla, and more la la la.\n\nMy Radio provides a high quality sound 24/7 with the best music.\n\nTo start, just say \"Alexa, launch My Radio\" or \"Alexa, play my radio\" to start the radio\".\n\nAt anytime, you can stop the radio by saying \"Alexa, stop\"",
-          "smallIconUri": "https://raw.githubusercontent.com/music-assistant/server/refs/heads/dev/music_assistant/logo.png",
-          "largeIconUri": "https://raw.githubusercontent.com/music-assistant/server/refs/heads/dev/music_assistant/logo.png"
+          "smallIconUri": "https://raw.githubusercontent.com/alams154/music-assistant-alexa-skill-prototype/refs/heads/master/assets/icons/ma_108x108.png",
+          "largeIconUri": "https://raw.githubusercontent.com/alams154/music-assistant-alexa-skill-prototype/refs/heads/master/assets/icons/ma_512x512.png"
         },
         "en-GB": {
           "summary": "Listen to My Radio, less bla bla bla, more la la la.",
@@ -33,8 +33,8 @@
           ],
           "name": "My Radio",
           "description": "Listen to My Radio, with less bla bla bla, and more la la la.\n\nMy Radio provides a high quality sound 24/7 with the best music.\n\nTo start, just say \"Alexa, launch My Radio\" or \"Alexa, play my radio\" to start the radio\".\n\nAt anytime, you can stop the radio by saying \"Alexa, stop\"",
-          "smallIconUri": "https://raw.githubusercontent.com/music-assistant/server/refs/heads/dev/music_assistant/logo.png",
-          "largeIconUri": "https://raw.githubusercontent.com/music-assistant/server/refs/heads/dev/music_assistant/logo.png"
+          "smallIconUri": "https://raw.githubusercontent.com/alams154/music-assistant-alexa-skill-prototype/refs/heads/master/assets/icons/ma_108x108.png",
+          "largeIconUri": "https://raw.githubusercontent.com/alams154/music-assistant-alexa-skill-prototype/refs/heads/master/assets/icons/ma_512x512.png"
         },
         "en-IN": {
           "summary": "Listen to My Radio, less bla bla bla, more la la la.",
@@ -50,8 +50,8 @@
           ],
           "name": "My Radio",
           "description": "Listen to My Radio, with less bla bla bla, and more la la la.\n\nMy Radio provides a high quality sound 24/7 with the best music.\n\nTo start, just say \"Alexa, launch My Radio\" or \"Alexa, play my radio\" to start the radio\".\n\nAt anytime, you can stop the radio by saying \"Alexa, stop\"",
-          "smallIconUri": "https://raw.githubusercontent.com/music-assistant/server/refs/heads/dev/music_assistant/logo.png",
-          "largeIconUri": "https://raw.githubusercontent.com/music-assistant/server/refs/heads/dev/music_assistant/logo.png"
+          "smallIconUri": "https://raw.githubusercontent.com/alams154/music-assistant-alexa-skill-prototype/refs/heads/master/assets/icons/ma_108x108.png",
+          "largeIconUri": "https://raw.githubusercontent.com/alams154/music-assistant-alexa-skill-prototype/refs/heads/master/assets/icons/ma_512x512.png"
         },
         "en-CA": {
           "summary": "Listen to My Radio, less bla bla bla, more la la la.",
@@ -67,8 +67,8 @@
           ],
           "name": "My Radio",
           "description": "Listen to My Radio, with less bla bla bla, and more la la la.\n\nMy Radio provides a high quality sound 24/7 with the best music.\n\nTo start, just say \"Alexa, launch My Radio\" or \"Alexa, play my radio\" to start the radio\".\n\nAt anytime, you can stop the radio by saying \"Alexa, stop\"",
-          "smallIconUri": "https://raw.githubusercontent.com/music-assistant/server/refs/heads/dev/music_assistant/logo.png",
-          "largeIconUri": "https://raw.githubusercontent.com/music-assistant/server/refs/heads/dev/music_assistant/logo.png"
+          "smallIconUri": "https://raw.githubusercontent.com/alams154/music-assistant-alexa-skill-prototype/refs/heads/master/assets/icons/ma_108x108.png",
+          "largeIconUri": "https://raw.githubusercontent.com/alams154/music-assistant-alexa-skill-prototype/refs/heads/master/assets/icons/ma_512x512.png"
         },
         "en-AU": {
           "summary": "Listen to My Radio, less bla bla bla, more la la la.",
@@ -84,8 +84,8 @@
           ],
           "name": "My Radio",
           "description": "Listen to My Radio, with less bla bla bla, and more la la la.\n\nMy Radio provides a high quality sound 24/7 with the best music.\n\nTo start, just say \"Alexa, launch My Radio\" or \"Alexa, play my radio\" to start the radio\".\n\nAt anytime, you can stop the radio by saying \"Alexa, stop\"",
-          "smallIconUri": "https://raw.githubusercontent.com/music-assistant/server/refs/heads/dev/music_assistant/logo.png",
-          "largeIconUri": "https://raw.githubusercontent.com/music-assistant/server/refs/heads/dev/music_assistant/logo.png"
+          "smallIconUri": "https://raw.githubusercontent.com/alams154/music-assistant-alexa-skill-prototype/refs/heads/master/assets/icons/ma_108x108.png",
+          "largeIconUri": "https://raw.githubusercontent.com/alams154/music-assistant-alexa-skill-prototype/refs/heads/master/assets/icons/ma_512x512.png"
         },
         "fr-FR": {
           "summary": "Ecoutez Ma Radio, moins de bla bla, plus de la la la.",
@@ -101,8 +101,8 @@
           ],
           "name": "Ma Radio",
           "description": "Ecoutez Ma Radio, moins de bla bla, plus de la la la\n\nMa Radio vous donne le meilleur son, 24h sur 24h\n\nPour démarrer, dites juste : \"Alexa, lance Ma Radio\" ou \"Alexa, démarre ma radio\"\".\n\nA n'importe quel moment, vous pouvez dire \"Alexa, stop\" pour arrêter.",
-          "smallIconUri": "https://raw.githubusercontent.com/music-assistant/server/refs/heads/dev/music_assistant/logo.png",
-          "largeIconUri": "https://raw.githubusercontent.com/music-assistant/server/refs/heads/dev/music_assistant/logo.png"
+          "smallIconUri": "https://raw.githubusercontent.com/alams154/music-assistant-alexa-skill-prototype/refs/heads/master/assets/icons/ma_108x108.png",
+          "largeIconUri": "https://raw.githubusercontent.com/alams154/music-assistant-alexa-skill-prototype/refs/heads/master/assets/icons/ma_512x512.png"
         },
         "fr-CA": {
           "summary": "Ecoutez Ma Radio, moins de bla bla, plus de la la la.",
