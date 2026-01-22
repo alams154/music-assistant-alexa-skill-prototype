@@ -78,3 +78,6 @@ Thumbs.db
 ehthumbs.db
 Icon?
 Desktop.ini
+
+# Build files
+tmp
