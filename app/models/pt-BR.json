@@ -1,0 +1,87 @@
+{
+    "interactionModel": {
+        "languageModel": {
+            "invocationName": "minha rádio",
+            "intents": [
+                {
+                    "name": "PlayAudio",
+                    "slots": [],
+                    "samples": [
+                        "tocar",
+                        "iniciar",
+                        "reproduzir",
+                        "tocar minha rádio",
+                        "tocar minha rádio por favor",
+                        "iniciar minha rádio",
+                        "iniciar minha rádio por favor",
+                        "reproduzir minha rádio",
+                        "reproduzir minha rádio por favor",
+                        "tocar a rádio",
+                        "tocar a rádio por favor",
+                        "iniciar a rádio",
+                        "iniciar a rádio por favor",
+                        "reproduzir a rádio",
+                        "reproduzir a rádio por favor",
+                        "tocar o áudio",
+                        "tocar o áudio por favor",
+                        "iniciar o áudio",
+                        "iniciar o áudio por favor",
+                        "reproduzir o áudio",
+                        "reproduzir o áudio por favor",
+                        "tocar a música",
+                        "tocar a música por favor",
+                        "iniciar a música",
+                        "iniciar a música por favor",
+                        "reproduzir a música",
+                        "reproduzir a música por favor",
+                        "coloca minha rádio",
+                        "coloca a rádio",
+                        "coloca a música"
+                    ]
+                },
+                {
+                    "name": "AMAZON.PauseIntent",
+                    "samples": []
+                },
+                {
+                    "name": "AMAZON.ResumeIntent",
+                    "samples": []
+                },
+                {
+                    "name": "AMAZON.HelpIntent",
+                    "samples": [
+                        "me ajuda por favor",
+                        "ajuda por favor",
+                        "o que eu faço",
+                        "o que vem depois",
+                        "como posso ouvir minha rádio",
+                        "como ouvir minha rádio",
+                        "como ouvir a música",
+                        "me diz como tocar",
+                        "me diz como parar",
+                        "me diz como continuar",
+                        "como parar",
+                        "como pausar"
+                    ]
+                },
+                {
+                    "name": "AMAZON.StopIntent",
+                    "samples": []
+                },
+                {
+                    "name": "AMAZON.CancelIntent",
+                    "samples": []
+                },
+                {
+                    "name": "AMAZON.StartOverIntent",
+                    "samples": []
+                },
+                {
+                    "name": "AMAZON.FallbackIntent",
+                    "samples": []
+                }
+            ],
+            "types": []
+        }
+    }
+}
