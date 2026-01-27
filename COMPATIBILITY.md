@@ -8,5 +8,6 @@
 - **Echo (Gen 1)**
 - **Echo Dot (Gen 2)**
 - **Echo Dot (Gen 3)**
+- **Echo Dot (Gen 5)**
 ### APL devices: 
 - **Echo Show 8 (Gen 2)**
