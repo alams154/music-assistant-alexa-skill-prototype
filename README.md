@@ -45,13 +45,21 @@ The easiest way to run the project is with Docker Compose. This will build and s
 
         ![Step 7.5 - Endpoint to HTTPS](assets/screenshots/step7-5.png)
 
-    -   On the left side go to Interaction Model > Intents, add an Intent named PlayAudio with the Sampe Utterances "play audio", "start", and "play", and hit Build skill
+    -   On the left side go to Interaction Model > Intents, add an Intent named PlayAudio with the Sampe Utterances "play audio", "start", and "play", and hit save
 
         ![Step 7.6 - Add PlayAudio Intent](assets/screenshots/step7-6.png)
 
+    -   On the left side go to Interfaces and enable the interfaces for "Audio Player" and "Alexa Presentation Language" (additionally: Select the devices that you use). Then hit save.
+
+        ![Step 7.7 - Add Interfaces](assets/screenshots/step7-7.png)
+
+    -   Navigate to the main page under "CUSTOM" on the left side and hit "Build skill"
+
+        ![Step 7.8 - Build](assets/screenshots/step7-8.png)
+
     -   Navigate to the Test tab, change Off to Development
 
-        ![Step 7.7 - Build and Activate](assets/screenshots/step7-7.png)
+        ![Step 7.9 - Activate](assets/screenshots/step7-9.png)
 	
 
 ## Basic Troubleshooting
