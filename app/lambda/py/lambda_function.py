@@ -553,6 +553,8 @@ class LocalizationInterceptor(AbstractRequestInterceptor):
                 locale_file_name = "it-IT"
             elif locale.startswith("es"):
                 locale_file_name = "es-ES"
+            elif locale.startswith("pt"):
+                locale_file_name = "pt-BR"
             else:
                 locale_file_name = locale
 
