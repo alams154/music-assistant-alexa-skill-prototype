@@ -169,6 +169,23 @@
           "description": "Ascolta La Mia Radio.\n\nPer iniziare, basta dire \"Alexa, apri La Mia Radio\" o \"Alexa, chiedi a la mia radio di avviare la radio\".\n\nIn qualsiasi momento, puoi interrompere la radio dicendo \"Alexa, basta\"",
           "smallIconUri": "https://raw.githubusercontent.com/music-assistant/server/refs/heads/dev/music_assistant/logo.png",
           "largeIconUri": "https://raw.githubusercontent.com/music-assistant/server/refs/heads/dev/music_assistant/logo.png"
+        },
+        "pt-BR": {
+          "summary": "Ouça Minha Rádio.",
+          "examplePhrases": [
+            "Alexa, abra minha rádio",
+            "Alexa, peça para minha rádio tocar",
+            "Alexa, toque minha rádio"
+          ],
+          "keywords": [
+            "música",
+            "streaming",
+            "rádio"
+          ],
+          "name": "Minha Rádio",
+          "description": "Ouça Minha Rádio.\n\nPara começar, basta dizer \"Alexa, abra Minha Rádio\" ou \"Alexa, peça para minha rádio tocar\".\n\nA qualquer momento, você pode parar a rádio dizendo \"Alexa, pare\"",
+          "smallIconUri": "https://raw.githubusercontent.com/music-assistant/server/refs/heads/dev/music_assistant/logo.png",
+          "largeIconUri": "https://raw.githubusercontent.com/music-assistant/server/refs/heads/dev/music_assistant/logo.png"
         }
       },
       "isAvailableWorldwide": true,
