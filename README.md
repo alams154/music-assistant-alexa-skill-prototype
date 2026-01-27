@@ -45,7 +45,7 @@ The easiest way to run the project is with Docker Compose. This will build and s
 
         ![Step 7.5 - Endpoint to HTTPS](assets/screenshots/step7-5.png)
 
-    -   On the left side go to Interaction Model > Intents, add an Intent named PlayAudio with the Sampe Utterances "play audio", "start", and "play", and hit save
+    -   On the left side go to Interaction Model > Intents, add an Intent named PlayAudio with the Sample Utterances "play audio", "start", and "play", and hit save
 
         ![Step 7.6 - Add PlayAudio Intent](assets/screenshots/step7-6.png)
 
