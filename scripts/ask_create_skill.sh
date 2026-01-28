@@ -15,7 +15,7 @@ TMP_DIR="$REPO_ROOT/tmp"
 PROFILE="default"
 STAGE="development"
 ENDPOINT=""
-UPLOAD_MODELS=false
+UPLOAD_MODELS=true
 # Default to en-US to avoid uploading/managing all locales by default
 LOCALE="en-US"
 
