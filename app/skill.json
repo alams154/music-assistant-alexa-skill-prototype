@@ -186,6 +186,23 @@
           "description": "Ouça Minha Rádio.\n\nPara começar, basta dizer \"Alexa, abra Minha Rádio\" ou \"Alexa, peça para minha rádio tocar\".\n\nA qualquer momento, você pode parar a rádio dizendo \"Alexa, pare\"",
           "smallIconUri": "https://raw.githubusercontent.com/music-assistant/server/refs/heads/dev/music_assistant/logo.png",
           "largeIconUri": "https://raw.githubusercontent.com/music-assistant/server/refs/heads/dev/music_assistant/logo.png"
+        },
+        "de-DE": {
+          "summary": "Höre Mein Radio — einfach einschalten und genießen.",
+          "examplePhrases": [
+            "Alexa, öffne Mein Radio",
+            "Alexa, spiele Mein Radio",
+            "Alexa, bitte Mein Radio starten"
+          ],
+          "keywords": [
+            "Musik",
+            "Streaming",
+            "Radio"
+          ],
+          "name": "Mein Radio",
+          "description": "Höre Mein Radio — hochwertiger Sound rund um die Uhr.\n\nZum Starten sag einfach: \"Alexa, öffne Mein Radio\" oder \"Alexa, bitte Mein Radio spielen\".\n\nDu kannst die Wiedergabe jederzeit mit \"Alexa, stop\" beenden.",
+          "smallIconUri": "https://raw.githubusercontent.com/alams154/music-assistant-alexa-skill-prototype/refs/heads/master/assets/icons/ma_108x108.png",
+          "largeIconUri": "https://raw.githubusercontent.com/alams154/music-assistant-alexa-skill-prototype/refs/heads/master/assets/icons/ma_512x512.png"
         }
       },
       "isAvailableWorldwide": true,
