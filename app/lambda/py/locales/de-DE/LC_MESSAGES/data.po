@@ -1,0 +1,70 @@
+# German Translations for PROJECT.
+# Copyright (C) 2018 ORGANIZATION
+# This file is distributed under the same license as the PROJECT project.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2018.
+# David, 2026.
+msgid ""
+msgstr ""
+"Project-Id-Version: PROJECT VERSION\n"
+"Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
+"POT-Creation-Date: 2018-09-15 23:34-0700\n"
+"PO-Revision-Date: 2026-01-29 21:54+0200\n"
+"Last-Translator: David <>\n"
+"Language-Team: de_DE <LL@li.org>\n"
+"Language: de\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"X-Generator: Virtaal 0.7.1\n"
+"Generated-By: Babel 2.6.0\n"
+
+#: alexa/data.py:6
+msgid "Welcome to {}"
+msgstr "Willkommen bei {}"
+
+#: alexa/data.py:7
+msgid ""
+"Welcome to {}. You can play, stop, resume listening.  How can I help you"
+" ?"
+msgstr ""
+"Willkommen bei {}. Du kannst die Wiedergabe starten, stoppen oder "
+"fortsetzen. Wie kann ich dir helfen?"
+
+#: alexa/data.py:8
+msgid "Sorry, I could not understand what you've just said."
+msgstr "Entschuldigung, ich konnte nicht verstehen, was du gesagt hast."
+
+#: alexa/data.py:9
+msgid "This is radio, you have to wait for next track to play."
+msgstr ""
+"Du hörst Radio — du musst auf den nächsten Titel warten, bis er abgespielt "
+"wird."
+
+#: alexa/data.py:10
+msgid "Resuming {}"
+msgstr "Setze {} fort"
+
+#: alexa/data.py:11
+msgid ""
+"This is radio, you can not do that.  You can ask me to stop or pause to "
+"stop listening."
+msgstr ""
+"Du hörst Radio — das ist nicht möglich.  Bitte sage ‚Stopp‘ oder ‚Pause‘, um "
+"die Wiedergabe zu beenden."
+
+#: alexa/data.py:12
+msgid "Goodbye."
+msgstr "Auf Wiedersehen."
+
+#: alexa/data.py:13
+msgid "Sorry, this skill is not supported on this device"
+msgstr "Entschuldigung, dieser Skill wird auf diesem Gerät nicht unterstützt"
+
+#: alexa/data.py:15
+msgid "test english"
+msgstr "Test auf Englisch"
+
+#: alexa/data.py:16
+msgid "test with parameters {} and {}"
+msgstr "Test mit Parametern {} und {}"

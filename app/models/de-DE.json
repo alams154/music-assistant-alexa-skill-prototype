@@ -1,0 +1,73 @@
+{
+  "interactionModel": {
+    "languageModel": {
+      "invocationName": "mein radio",
+      "intents": [
+        {
+          "name": "PlayAudio",
+          "slots": [],
+          "samples": [
+            "spiele",
+            "starte",
+            "spiele mein radio",
+            "spiele mein radio bitte",
+            "starte mein radio",
+            "starte mein radio bitte",
+            "starte das radio",
+            "starte das radio bitte",
+            "starte die wiedergabe",
+            "starte die wiedergabe bitte",
+            "spiele die wiedergabe",
+            "spiele die wiedergabe bitte",
+            "starte die musik",
+            "starte die musik bitte",
+            "spiele die musik",
+            "spiele die musik bitte"
+          ]
+        },
+        {
+          "name": "AMAZON.PauseIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.ResumeIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.HelpIntent",
+          "samples": [
+            "hilf mir bitte",
+            "hilfe bitte",
+            "was soll ich tun",
+            "was kommt als nächstes",
+            "wie kann ich mein radio hören",
+            "erkläre mir wie ich abspielen kann",
+            "erkläre mir wie ich stoppen kann",
+            "wie pausiere ich"
+          ]
+        },
+        {
+          "name": "AMAZON.StopIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.CancelIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.StartOverIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.FallbackIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.NavigateHomeIntent",
+          "samples": []
+        }
+      ],
+      "types": []
+    }
+  }
+}
