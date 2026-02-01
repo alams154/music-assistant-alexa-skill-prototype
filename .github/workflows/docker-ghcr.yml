@@ -1,4 +1,4 @@
-name: Build and Push Docker image to GHCR (multi-arch)
+name: Build and Push Docker image to GHCR
 
 on:
   push:
