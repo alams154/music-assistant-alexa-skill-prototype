@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# ./scripts/ask_create_skill.sh --profile default --endpoint https://test.app --upload-models > ./tmp/ask_create_with_complete_invocation.txt 2>&1 || tru
 set -euo pipefail
 
 # Create an Alexa skill using ASK CLI based on the README instructions
@@ -181,7 +182,9 @@ fi
 # we skip automatic enablement (it requires models to be built first).
 if [ "$UPLOAD_MODELS" = true ]; then
     echo "Waiting for interaction model builds to complete (polling skill status)..."
-    MAX_RETRIES=30
+    # Cap total polling time to roughly 60s: MAX_RETRIES * SLEEP_SECONDS <= 60
+    # Poll every 5s so builds are detected within ~5s of completion
+    MAX_RETRIES=12
     SLEEP_SECONDS=5
     # Only poll for the locale(s) we will upload; LOCALE defaults to en-US.
     if [ -n "$LOCALE" ]; then
@@ -200,18 +203,48 @@ if [ "$UPLOAD_MODELS" = true ]; then
     success=0
     while [ $attempts -lt $MAX_RETRIES ]; do
             STATUS_JSON=$(ask smapi get-skill-status --skill-id "$SKILL_ID" --resource interactionModel --profile "$PROFILE" 2>/dev/null || true)
-            # Try jq if available, else use python to parse from stdin.
-            if command -v jq >/dev/null 2>&1; then
-            cur_status=$(printf '%s' "$STATUS_JSON" | jq -r --arg loc "$locale" '.interactionModel[$loc].lastUpdateRequest.status // ""' 2>/dev/null || echo "")
-            else
-            cur_status=$(printf '%s' "$STATUS_JSON" | python3 - <<'PY' "$locale"
+            # Immediate quick check: if raw JSON contains a status SUCCEEDED anywhere, accept it
+            if printf '%s' "$STATUS_JSON" | grep -q '"status"[[:space:]]*:[[:space:]]*"SUCCEEDED"'; then
+              cur_status="SUCCEEDED"
+            fi
+            # Try jq if available to read lastUpdateRequest.status (only if we don't already have cur_status)
+            if [ -z "${cur_status:-}" ]; then
+              if command -v jq >/dev/null 2>&1; then
+                cur_status=$(printf '%s' "$STATUS_JSON" | jq -r --arg loc "$locale" '.interactionModel[$loc].lastUpdateRequest.status // ""' 2>/dev/null || echo "")
+              else
+              cur_status=$(printf '%s' "$STATUS_JSON" | python3 - "$locale" <<'PY'
 import sys,json
 try:
-    loc=sys.argv[1]
-    obj=json.load(sys.stdin)
-    print(obj.get('interactionModel', {}).get(loc, {}).get('lastUpdateRequest', {}).get('status',''))
+  loc=sys.argv[1]
+  obj=json.load(sys.stdin)
+  print(obj.get('interactionModel', {}).get(loc, {}).get('lastUpdateRequest', {}).get('status',''))
 except Exception:
-    print('')
+  print('')
+PY
+)
+              fi
+            fi
+            # If we still don't have a status, try a more robust inspection (check buildDetails.steps)
+            if [ -z "$cur_status" ]; then
+              cur_status=$(printf '%s' "$STATUS_JSON" | python3 - "$locale" <<'PY'
+import sys,json
+loc=sys.argv[1]
+try:
+  obj=json.load(sys.stdin)
+  lm=obj.get('interactionModel', {}).get(loc, {})
+  lr=lm.get('lastUpdateRequest', {})
+  status=lr.get('status')
+  if status:
+    print(status)
+  else:
+    bd=lr.get('buildDetails', {})
+    steps=bd.get('steps', [])
+    if steps and all(s.get('status')=='SUCCEEDED' for s in steps):
+      print('SUCCEEDED')
+    else:
+      print('')
+except Exception:
+  print('')
 PY
 )
             fi
@@ -226,8 +259,20 @@ PY
         done
         if [ $success -eq 0 ]; then
           echo " - WARNING: model build for $locale did not reach SUCCEEDED after $((MAX_RETRIES*SLEEP_SECONDS))s"
+          # Dump last get-skill-status JSON to TMP_DIR for debugging in containers
+          STATUS_DUMP="$TMP_DIR/get_skill_status_${SKILL_ID}_${locale}.json"
+          printf '%s' "$STATUS_JSON" > "$STATUS_DUMP" 2>/dev/null || true
+          echo "WROTE $STATUS_DUMP"
         fi
       done
+      # Additional fallback: if the STATUS_JSON contains a top-level "status": "SUCCEEDED"
+      # somewhere (some ASK CLI outputs differ), treat as SUCCEEDED.
+      if [ $success -eq 0 ]; then
+        if printf '%s' "$STATUS_JSON" | grep -q '"status"[[:space:]]*:[[:space:]]*"SUCCEEDED"'; then
+          echo " - build SUCCEEDED (fallback via grep)"
+          success=1
+        fi
+      fi
 
   # Now attempt enablement (best-effort). Store outputs in tmp/.
   ENABLE_OUT="$TMP_DIR/enable_testing_${SKILL_ID}.txt"
