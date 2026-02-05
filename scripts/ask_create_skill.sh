@@ -55,20 +55,43 @@ fi
 
 command -v ask >/dev/null 2>&1 || { echo "ask CLI not found in PATH. Install it first: https://developer.amazon.com/en-US/docs/alexa/smapi/ask-cli.html"; exit 2; }
 
+# If the container has a mounted persistent credentials dir at /root/.ask, use it.
+# This avoids requiring a user-configurable env var; the Docker Compose named
+# volume `ask_data` is mounted to /root/.ask by the service configuration.
+if [ -d "/root/.ask" ]; then
+  export HOME="/root"
+  echo "Using persistent ASK credentials at /root/.ask (HOME=${HOME})"
+fi
+
 mkdir -p "$OUT_DIR"
 mkdir -p "$TMP_DIR"
 
-# Delete any existing skill(s) named "Music Assistant" for this vendor/profile
+# Query existing skill(s) named "Music Assistant" for this vendor/profile
 LIST_FILE="$TMP_DIR/list_skills.json"
 ask smapi list-skills-for-vendor --profile "$PROFILE" > "$LIST_FILE" 2>&1 || true
 TO_DELETE=$(python3 "$REPO_ROOT/scripts/find_skills_to_delete.py" "$LIST_FILE" 2>/dev/null || true)
+
+# Default: we will create a new skill unless we find and reuse an existing one
+SKIP_CREATE=0
+SKILL_ID=""
 if [ -n "$TO_DELETE" ]; then
   echo "Found existing Music Assistant skill(s): $TO_DELETE"
-  for sid in $TO_DELETE; do
-    echo "Deleting existing skill $sid"
-    ask smapi delete-skill --skill-id "$sid" --profile "$PROFILE" --debug > "$TMP_DIR/delete_skill_${sid}.txt" 2>&1 || true
-    echo "WROTE $TMP_DIR/delete_skill_${sid}.txt"
-  done
+  # Convert to array
+  read -r -a existing_arr <<< "$TO_DELETE"
+  # If more than one exists, delete extras (keep the first entry)
+  if [ ${#existing_arr[@]} -gt 1 ]; then
+    echo "Multiple existing Music Assistant skills found; deleting extras and keeping first: ${existing_arr[0]}"
+    for ((i=1;i<${#existing_arr[@]};i++)); do
+      sid=${existing_arr[i]}
+      echo "Deleting extra existing skill $sid"
+      ask smapi delete-skill --skill-id "$sid" --profile "$PROFILE" --debug > "$TMP_DIR/delete_skill_${sid}.txt" 2>&1 || true
+      echo "WROTE $TMP_DIR/delete_skill_${sid}.txt"
+    done
+  fi
+  # Reuse the remaining existing skill instead of creating a new one
+  SKILL_ID=${existing_arr[0]}
+  echo "Reusing existing skill: $SKILL_ID"
+  SKIP_CREATE=1
 fi
 
 if ! python3 "$REPO_ROOT/scripts/build_skill_manifest.py" "$MANIFEST_SRC" "$OUT_MANIFEST" "${ENDPOINT}" "${LOCALE}"; then
@@ -77,34 +100,42 @@ if ! python3 "$REPO_ROOT/scripts/build_skill_manifest.py" "$MANIFEST_SRC" "$OUT_
 fi
 echo "WROTE $OUT_MANIFEST"
 
-echo "Creating skill using ASK CLI (profile=$PROFILE)..."
-CREATE_OUT_FILE="$TMP_DIR/create_skill_out.txt"
-ask smapi create-skill-for-vendor --manifest file://$OUT_MANIFEST --profile $PROFILE > "$CREATE_OUT_FILE" 2>&1 || true
-CREATE_OUT="$(cat "$CREATE_OUT_FILE")"
-echo "WROTE $CREATE_OUT_FILE"
-echo "$CREATE_OUT"
+# Create a new skill only if we didn't find an existing one to reuse
+if [ "$SKIP_CREATE" -eq 0 ]; then
+  echo "Creating skill using ASK CLI (profile=$PROFILE)..."
+  CREATE_OUT_FILE="$TMP_DIR/create_skill_out.txt"
+  ask smapi create-skill-for-vendor --manifest file://$OUT_MANIFEST --profile $PROFILE > "$CREATE_OUT_FILE" 2>&1 || true
+  CREATE_OUT="$(cat "$CREATE_OUT_FILE")"
+  echo "WROTE $CREATE_OUT_FILE"
+  echo "$CREATE_OUT"
 
-# Try to extract skillId from JSON output
-SKILL_ID=""
-SKILL_ID=$(python3 - <<PY
-import sys,json
+  # Try to extract skillId from JSON output
+  SKILL_ID=""
+  SKILL_ID=$(python3 - <<PY
+import sys,json,re
 try:
     obj = json.loads('''$CREATE_OUT''')
     print(obj.get('skillId',''))
 except Exception:
-    # fallback: try to find skillId key in text
-    import re
     m = re.search(r'amzn1\.ask\.skill\.[0-9a-fA-F\-]+', '''$CREATE_OUT''')
     print(m.group(0) if m else '')
 PY
 )
 
-if [ -z "$SKILL_ID" ]; then
-  echo "Failed to detect skillId. Check the output above for errors." >&2
-  exit 3
-fi
+  if [ -z "$SKILL_ID" ]; then
+    echo "Failed to detect skillId. Check the output above for errors." >&2
+    exit 3
+  fi
 
-echo "Created skill: $SKILL_ID"
+  echo "Created skill: $SKILL_ID"
+else
+  # We are reusing an existing skill; update its manifest to match the desired manifest
+  echo "Updating manifest for existing skill: $SKILL_ID"
+  UPDATE_OUT_FILE="$TMP_DIR/update_manifest_${SKILL_ID}.txt"
+  ask smapi update-skill-manifest --skill-id "$SKILL_ID" --manifest file://$OUT_MANIFEST --profile $PROFILE > "$UPDATE_OUT_FILE" 2>&1 || true
+  echo "WROTE $UPDATE_OUT_FILE"
+  echo "Rebuilt existing skill: $SKILL_ID"
+fi
 
 # Note: enablement must happen after interaction models are uploaded and built.
 # We'll poll model build status (if we uploaded models) and then attempt enablement.

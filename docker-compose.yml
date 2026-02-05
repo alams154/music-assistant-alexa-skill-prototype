@@ -1,6 +1,6 @@
 services:
   music-assistant-skill:
-    image: ghcr.io/alams154/music-assistant-skill:dev
+    image: ghcr.io/alams154/music-assistant-skill:latest
     environment:
       - SKILL_HOSTNAME=<hostname> #required
       - MA_HOSTNAME=<hostname> #optional, if only using APL devices
@@ -15,6 +15,8 @@ services:
     ports:
       - 5000:5000 # Must match PORT
       - 5678:5678 # Must match DEBUG_PORT #optional
+    volumes:
+      - ./ask_data:/root/.ask
     restart: no
 
 secrets:

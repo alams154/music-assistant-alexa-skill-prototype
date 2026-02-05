@@ -81,3 +81,6 @@ Desktop.ini
 
 # Build files
 tmp
+
+# ASK CLI data
+ask_data/

@@ -19,6 +19,8 @@ from pathlib import Path
 import time
 import pty
 import re
+import shutil
+import urllib.parse
 
 
 def sanitize_log(s: str) -> str:
@@ -45,6 +47,17 @@ def sanitize_log(s: str) -> str:
     return s
 
 app = Flask(__name__)
+# Allow overriding where ASK CLI stores credentials so they persist across containers.
+# If ASK_CREDENTIALS_DIR is set (e.g. /root/.ask) set HOME to its parent so tools
+# that rely on ~/.ask (ASK CLI) use the mounted location.
+try:
+    # If the persistent credentials volume is mounted at /root/.ask inside the
+    # container, set HOME to /root so ASK CLI and related tools use ~/.ask there.
+    if Path('/root/.ask').exists():
+        os.environ['HOME'] = '/root'
+        app.logger.info('Using persistent ASK credentials at /root/.ask')
+except Exception:
+    pass
 skill_adapter = SkillAdapter(
     skill=sb.create(),
     skill_id="",
@@ -149,6 +162,93 @@ def status():
 
     # Skill adapter status (we're running if this handler is invoked)
     skill_html = '<span class="led green"></span> Skill running'
+    # Check ASK CLI for an existing 'Music Assistant' skill and whether its
+    # endpoint matches configured SKILL_HOSTNAME (best-effort; requires ask CLI
+    # and configured credentials in the container).
+    skill_ask_html = '<span class="muted">ASK CLI check unavailable</span>'
+    try:
+        skill_host = os.environ.get('SKILL_HOSTNAME', '').strip()
+        # Only attempt check if ask CLI exists and SKILL_HOSTNAME is configured
+        if shutil.which('ask') and skill_host:
+            # Run list-skills-for-vendor and look for a Music Assistant skill id
+            # Use ASK CLI to look up Music Assistant for this vendor/profile and report
+            # presence, endpoint, and whether testing is enabled. Be resilient to
+            # different ASK CLI outputs by falling back from JSON to regex checks.
+            ls = subprocess.run(['ask', 'smapi', 'list-skills-for-vendor', '--profile', 'default'], capture_output=True, text=True)
+            out = ls.stdout or ls.stderr or ''
+            m = re.search(r'amzn1\.ask\.skill\.[0-9a-fA-F\-]+', out)
+            if not m:
+                skill_ask_html = '<span class="led red"></span> Music Assistant not found via ASK CLI'
+            else:
+                sid = m.group(0)
+                # Get manifest to find configured endpoint
+                mf = subprocess.run(['ask', 'smapi', 'get-skill-manifest', '--skill-id', sid, '--profile', 'default'], capture_output=True, text=True)
+                mf_out = mf.stdout or mf.stderr or ''
+                mm = re.search(r'https?://[^"\s\)\]]+', mf_out)
+                # Determine configured host for comparison
+                try:
+                    if skill_host.startswith('http://') or skill_host.startswith('https://'):
+                        cfg_host = urllib.parse.urlparse(skill_host).netloc
+                    else:
+                        cfg_host = skill_host
+                except Exception:
+                    cfg_host = skill_host
+
+                # Check testing enablement (best-effort). Treat a successful CLI call
+                # (returncode 0 or explicit success text) as enabled; errors (404)
+                # indicate not enabled.
+                testing_enabled = False
+                try:
+                    en = subprocess.run(['ask', 'smapi', 'get-skill-enablement-status', '--skill-id', sid, '--stage', 'development', '--profile', 'default'], capture_output=True, text=True)
+                    en_out = en.stdout or en.stderr or ''
+                    if en.returncode == 0 or 'Command executed successfully' in en_out:
+                        testing_enabled = True
+                    else:
+                        # If output contains an explicit error JSON (e.g. 404), treat as not enabled
+                        if re.search(r'\[Error\]:\s*\{', en_out) or re.search(r'404', en_out):
+                            testing_enabled = False
+                        elif re.search(r'"isEnabled"\s*:\s*true', en_out, re.IGNORECASE) or re.search(r'"enabled"\s*:\s*true', en_out, re.IGNORECASE):
+                            testing_enabled = True
+                except Exception:
+                    testing_enabled = False
+
+                is_green = False
+                if not mm:
+                    testing_msg = 'testing enabled' if testing_enabled else 'testing not enabled'
+                    skill_ask_html = f'<span class="led yellow"></span> Skill {escape(sid)} found; endpoint not set ({testing_msg})'
+                else:
+                    uri = mm.group(0)
+                    try:
+                        parsed = urllib.parse.urlparse(uri)
+                        manifest_host = parsed.netloc
+                        if manifest_host == cfg_host:
+                            if testing_enabled:
+                                skill_ask_html = f'<span class="led green"></span> Skill present, endpoint matches ({escape(manifest_host)}); testing enabled'
+                                is_green = True
+                            else:
+                                skill_ask_html = f'<span class="led yellow"></span> Skill present and endpoint matches ({escape(manifest_host)}); testing NOT enabled'
+                        else:
+                            testing_note = 'testing enabled' if testing_enabled else 'testing not enabled'
+                            skill_ask_html = f'<span class="led red"></span> Skill endpoint mismatch (manifest: {escape(manifest_host)} vs configured: {escape(cfg_host)}); {testing_note}'
+                    except Exception:
+                        testing_msg = 'testing enabled' if testing_enabled else 'testing not enabled'
+                        skill_ask_html = f'<span class="led yellow"></span> Skill present; endpoint parse failed ({testing_msg})'
+
+                # If the overall status is not the desired green (correct endpoint + testing),
+                # offer a quick link to the setup page so the user can fix credentials/enable testing.
+                try:
+                    if not is_green:
+                        skill_ask_html += ' <button onclick="window.location=\'/setup\'" style="margin-left:8px">Open Setup</button>'
+                except Exception:
+                    pass
+        else:
+            # ask missing or SKILL_HOSTNAME not configured
+            if not shutil.which('ask'):
+                skill_ask_html = '<span class="muted">ask CLI not available in container</span>'
+            else:
+                skill_ask_html = '<span class="muted">SKILL_HOSTNAME not configured</span>'
+    except Exception as e:
+        skill_ask_html = f'<span class="muted">ASK check error: {escape(str(e))}</span>'
     # API status: call the locally mounted /ma/latest-url endpoint on this service.
     # Use the current request host (including port) so this works in container
     # and local runs without requiring an external API_HOSTNAME env var.
@@ -198,6 +298,7 @@ def status():
                 body {{ font-family: Arial, Helvetica, sans-serif; padding: 20px; }}
                 .led {{ display:inline-block; width:14px; height:14px; border-radius:50%; margin-right:8px; }}
                 .green {{ background:#2ecc71; }}
+                .yellow {{ background:#f1c40f; }}
                 .red {{ background:#e74c3c; }}
                 .row {{ margin: 8px 0; }}
                 .muted {{ color:#666; font-size:0.9em }}
@@ -206,8 +307,8 @@ def status():
             <body>
                 <h1>Service Status</h1>
                 <div class="row">{skill_html}</div>
+                <div class="row">{skill_ask_html}</div>
                 <div class="row">{api_html}</div>
-                <div class="row"><a href="/setup">Skill Setup</a></div>
             </body>
             </html>"""
 
@@ -257,6 +358,15 @@ def setup_ui():
     except Exception:
         auth_url = None
 
+    # If persistent ASK credentials are present at /root/.ask, suppress the
+    # browser-based authorization UI and do not expose an auth URL to the client.
+    try:
+        if Path('/root/.ask').exists():
+            app.logger.info('Persistent ASK credentials found; suppressing auth UI')
+            auth_url = None
+    except Exception:
+        pass
+
     # If the client requested JSON (polling), return logs + auth_url + active flag
     want_json = request.args.get('format') == 'json' or 'application/json' in (request.headers.get('Accept') or '')
     if want_json:
@@ -270,7 +380,16 @@ def setup_ui():
             safe_logs = [sanitize_log(l) for l in list(_setup_logs)]
         except Exception:
             safe_logs = list(_setup_logs)
-        return jsonify({'logs': safe_logs, 'auth_url': auth_url, 'active': bool(active)})
+        # Detect whether the setup process has completed creation (Done. Skill ID)
+        created = False
+        try:
+            for ln in safe_logs:
+                if re.search(r'Done\.\s*Skill ID', str(ln), re.IGNORECASE):
+                    created = True
+                    break
+        except Exception:
+            created = False
+        return jsonify({'logs': safe_logs, 'auth_url': auth_url, 'active': bool(active), 'created': bool(created)})
 
     page = """<!doctype html>
 <html>
@@ -279,6 +398,7 @@ def setup_ui():
     <h1>Skill Setup</h1>
     <div>
         <div style="margin-bottom:8px;">Endpoint is read from container configuration (SKILL_HOSTNAME)</div>
+        __CREDENTIALS_HTML__
         <div><button id="setup-start">Start Setup</button></div>
         <div id="auth-area" style="display:none;margin-top:8px">
             <div><a id="auth-link" href="#" target="_blank">Open authorization page</a></div>
@@ -294,6 +414,7 @@ def setup_ui():
     <script>
     const initialLogs = __INITIAL_LOGS__;
     const initialAuth = __INITIAL_AUTH__;
+    const initialCreated = __INITIAL_CREATED__;
     (function(){
         const startBtn = document.getElementById('setup-start');
         const logsEl = document.getElementById('setup-logs');
@@ -305,9 +426,23 @@ def setup_ui():
         let authOpened = false;
         const downloadBtn = document.getElementById('download-logs');
 
+        function showStatusButton(){
+            try{
+                if(!document.getElementById('goto-status')){
+                    const btn = document.createElement('button');
+                    btn.id = 'goto-status';
+                    btn.textContent = 'Open Status Page';
+                    btn.style.marginLeft = '8px';
+                    btn.addEventListener('click', function(){ window.location = '/status'; });
+                    startBtn.parentNode.insertBefore(btn, startBtn.nextSibling);
+                }
+            }catch(e){/* ignore */}
+        }
+
         function renderInitial(){
             // Render any initial logs/auth embedded in the page
             try{ logsEl.textContent = JSON.stringify(initialLogs || [], null, 2); logsEl.scrollTop = logsEl.scrollHeight; }catch(e){ logsEl.textContent = ''; }
+            if(initialCreated){ showStatusButton(); return; }
             if(initialAuth){
                 authArea.style.display='block';
                 authLink.href = initialAuth;
@@ -338,6 +473,10 @@ def setup_ui():
         function pollLogs(){
             fetch('/setup?format=json').then(r=>r.json()).then(j=>{
                 try{ logsEl.textContent = JSON.stringify(j.logs || [], null, 2); logsEl.scrollTop = logsEl.scrollHeight; }catch(e){ logsEl.textContent = ''; }
+                if(j.created){
+                    // Show a button the user can click to go to the status page
+                    try{ showStatusButton(); return; }catch(e){}
+                }
                 if(j.auth_url){
                     authArea.style.display='block';
                     authLink.href = j.auth_url;
@@ -396,8 +535,32 @@ def setup_ui():
     </script>
 </body>
 </html>"""
+    # If valid ASK CLI credentials are present, show a notice on the setup page.
+    try:
+        creds_html = ''
+        # The ASK CLI stores a cli_config under ~/.ask/cli_config when configured.
+        if Path('/root/.ask/cli_config').exists():
+            creds_html = '<div style="margin-top:8px;color:green;font-weight:600">Persistent ASK credentials detected — setup will use existing credentials.</div>'
+    except Exception:
+        creds_html = ''
+
+    # Compute initial created flag for first render (Done. Skill ID)
+    try:
+        initial_created = False
+        for ln in initial_logs:
+            try:
+                if re.search(r'Done\.\s*Skill ID', str(ln), re.IGNORECASE):
+                    initial_created = True
+                    break
+            except Exception:
+                continue
+    except Exception:
+        initial_created = False
+
     page = page.replace('__INITIAL_LOGS__', json.dumps(initial_logs))
     page = page.replace('__INITIAL_AUTH__', json.dumps(auth_url))
+    page = page.replace('__INITIAL_CREATED__', json.dumps(bool(initial_created)))
+    page = page.replace('__CREDENTIALS_HTML__', creds_html)
     return Response(page, mimetype='text/html')
 
 
