@@ -220,18 +220,32 @@ class NextOrPreviousIntentHandler(AbstractRequestHandler):
 
 
 class CancelOrStopIntentHandler(AbstractRequestHandler):
-    """Handler for cancel, stop or pause intents."""
+    """Handler for cancel and stop intents."""
     def can_handle(self, handler_input):
         # type: (HandlerInput) -> bool
         return (is_intent_name("AMAZON.CancelIntent")(handler_input) or
-                is_intent_name("AMAZON.StopIntent")(handler_input) or
-                is_intent_name("AMAZON.PauseIntent")(handler_input))
+                is_intent_name("AMAZON.StopIntent")(handler_input))
 
     def handle(self, handler_input):
         # type: (HandlerInput) -> Response
         logger.info("In CancelOrStopIntentHandler")
         _ = handler_input.attributes_manager.request_attributes["_"]
         return util.stop(_(data.STOP_MSG), handler_input.response_builder, supports_apl=supports_apl)
+
+
+class PauseIntentHandler(AbstractRequestHandler):
+    """Handler for AMAZON.PauseIntent."""
+    def can_handle(self, handler_input):
+        # type: (HandlerInput) -> bool
+        return is_intent_name("AMAZON.PauseIntent")(handler_input)
+
+    def handle(self, handler_input):
+        # type: (HandlerInput) -> Response
+        logger.info("In PauseIntentHandler")
+        _ = handler_input.attributes_manager.request_attributes["_"]
+        return util.stop(text=None,
+                         response_builder=handler_input.response_builder,
+                         supports_apl=supports_apl)
 
 
 class ResumeIntentHandler(AbstractRequestHandler):
@@ -599,6 +613,7 @@ sb.add_request_handler(ExceptionEncounteredHandler())
 sb.add_request_handler(UnhandledIntentHandler())
 sb.add_request_handler(NextOrPreviousIntentHandler())
 sb.add_request_handler(NextOrPreviousCommandHandler())
+sb.add_request_handler(PauseIntentHandler())
 sb.add_request_handler(CancelOrStopIntentHandler())
 sb.add_request_handler(PauseCommandHandler())
 sb.add_request_handler(ResumeIntentHandler())
