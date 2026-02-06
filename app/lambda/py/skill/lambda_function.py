@@ -10,7 +10,7 @@ from ask_sdk_core.utils import is_request_type, is_intent_name
 from ask_sdk_core.handler_input import HandlerInput
 from ask_sdk_model import Response
 
-from alexa import data, util
+from . import data, util
 
 sb = StandardSkillBuilder()
 # sb = StandardSkillBuilder(
@@ -27,7 +27,7 @@ class _ComponentFilter(logging.Filter):
     """
     def filter(self, record):
         name = (record.name or "")
-        if name.startswith('music_assistant_alexa_api') or name.startswith('ma_routes'):
+        if name.startswith('music_assistant_api') or name.startswith('ma_routes'):
             record.component = 'API'
         elif name.startswith('alexa') or name == 'lambda_function' or name.startswith('ask_sdk'):
             record.component = 'Skill'
@@ -49,7 +49,7 @@ def _log_record_factory(*args, **kwargs):
     record = _orig_log_record_factory(*args, **kwargs)
     if not hasattr(record, 'component'):
         name = (getattr(record, 'name', '') or '')
-        if name.startswith('music_assistant_alexa_api') or name.startswith('ma_routes'):
+        if name.startswith('music_assistant_api') or name.startswith('ma_routes'):
             record.component = 'API'
         elif name.startswith('alexa') or name == 'lambda_function' or name.startswith('ask_sdk'):
             record.component = 'Skill'
@@ -245,8 +245,6 @@ class ResumeIntentHandler(AbstractRequestHandler):
         logger.info("In ResumeIntentHandler")
         request = handler_input.request_envelope.request
         _ = handler_input.attributes_manager.request_attributes["_"]
-        speech = _(data.RESUME_MSG).format(
-            util.audio_data(request))
         url, _audio = _get_stream_url(request)
         if not url:
             logger.warning("No stream url available for Resume request")

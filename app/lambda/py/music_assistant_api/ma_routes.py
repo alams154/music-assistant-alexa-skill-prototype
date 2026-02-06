@@ -1,26 +1,17 @@
-"""Route definitions for music_assistant_alexa_api (ma_routes).
+"""Route definitions for music_assistant_api (ma_routes).
 
 This module registers the HTTP endpoints on a provided Flask
 `Blueprint`. It stores the last pushed stream metadata in a
 module-level `_store` variable.
 """
 
-import os
-from flask import jsonify, request, send_file
+from flask import jsonify, request
 
 
 _store = None
 
 
 def register_routes(bp):
-    @bp.route('/favicon.ico', methods=['GET'])
-    def favicon():
-        pkg_root = os.path.dirname(__file__)
-        fav_path = os.path.join(pkg_root, 'favicon.ico')
-        if os.path.exists(fav_path):
-            return send_file(fav_path)
-        return ('', 204)
-
     @bp.route('/push-url', methods=['POST'])
     def push_url():
         """Accept JSON with streamUrl and optional metadata and store it.
@@ -45,7 +36,7 @@ def register_routes(bp):
 
     @bp.route('/latest-url', methods=['GET'])
     def latest_url_ma():
-        """Return the last pushed stream metadata for the Alexa skill.
+        """Return the last pushed stream metadata for the Music Assistant.
         """
         if not _store:
             return jsonify({'error': 'No URL available, please check if Music Assistant has pushed a URL to the API'}), 404

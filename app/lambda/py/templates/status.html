@@ -20,12 +20,12 @@
                 <div class="row" id="skill-ask-row">__SKILL_ASK_HTML__</div>
                 <div class="row" id="api-row">__API_HTML__</div>
                 <script>
-                // Poll API and ASK endpoints independently so results appear as they become available
-                (function pollApi(){
+                // Poll the Music Assistant API and ASK endpoints independently so results appear as they become available
+                (function pollMusicAssistantApi(){
                     fetch('/status/api').then(r=>r.json()).then(j=>{
                         try{ const apiEl = document.getElementById('api-row'); if(apiEl && j.api_html){ apiEl.innerHTML = j.api_html; } }catch(e){}
-                        setTimeout(pollApi, 3000);
-                    }).catch(()=>{ setTimeout(pollApi, 5000); });
+                        setTimeout(pollMusicAssistantApi, 3000);
+                    }).catch(()=>{ setTimeout(pollMusicAssistantApi, 5000); });
                 })();
 
                 (function pollAsk(){

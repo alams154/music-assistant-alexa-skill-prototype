@@ -4,7 +4,7 @@ from typing import Dict, Any
 
 OPENAPI_SPEC: Dict[str, Any] = {
     "openapi": "3.0.0",
-    "info": {"title": "Music Assistant Alexa API", "version": "1.0.0"},
+    "info": {"title": "Music Assistant API", "version": "1.0.0"},
     "paths": {
         "/ma/push-url": {
             "post": {
@@ -122,7 +122,7 @@ _HTML_TEMPLATE = """<!doctype html>
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Music Assistant Alexa API Docs</title>
+    <title>Music Assistant API Docs</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.15.5/swagger-ui.min.css" />
 </head>
 <body>

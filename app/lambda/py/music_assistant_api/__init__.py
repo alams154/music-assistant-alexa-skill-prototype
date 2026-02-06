@@ -1,18 +1,12 @@
-"""Vendored Python implementation of music-assistant-alexa-api.
+"""Vendored Python implementation of music_assistant_api.
 
-This implements the small HTTP API used by the Alexa skill and the
-Music Assistant push mechanism. It mirrors the behavior of the
-original `server.js`: optional basic auth, a POST endpoint to push
-stream metadata and a GET endpoint to return the latest pushed URL.
-
-Routes provided:
-- POST /ma/push-url        : accept JSON payload with stream metadata
-- GET  /ma/latest-url      : return last pushed stream metadata
-- GET  /ma/favicon.ico        : serve package favicon if present
+This implements the small HTTP API used by Music Assistant for pushing
+stream metadata. It mirrors the behavior of the original `server.js`:
+optional basic auth, a POST endpoint to push stream metadata and a GET
+endpoint to return the latest pushed URL.
 """
 
-from env_secrets import get_env_secret
-from flask import Flask, Blueprint, request, Response
+from flask import Flask, Blueprint, Response
 
 from .ma_routes import register_routes
 import logging
@@ -34,9 +28,9 @@ def _ensure_logging_configured():
     class _ComponentFilter(logging.Filter):
         def filter(self, record):
             name = (record.name or "")
-            if name.startswith('music_assistant_alexa_api') or name.startswith('ma_routes'):
+            if name.startswith('music_assistant_api') or name.startswith('ma_routes'):
                 record.component = 'API'
-            elif name.startswith('alexa') or name == 'lambda_function' or name.startswith('ask_sdk'):
+            elif name.startswith('skill') or name == 'lambda_function' or name.startswith('ask_sdk'):
                 record.component = 'Skill'
             else:
                 record.component = 'UI/Web'
@@ -51,13 +45,13 @@ def _ensure_logging_configured():
 
 def _unauthorized():
     resp = Response('Access denied', 401)
-    resp.headers['WWW-Authenticate'] = 'Basic realm="music-assistant-alexa-api"'
+    resp.headers['WWW-Authenticate'] = 'Basic realm="music-assistant-api"'
     return resp
 
 
 def create_blueprint():
     # Base blueprint for non-/ma endpoints. Keep empty for now.
-    bp = Blueprint('music_assistant_alexa_api', __name__)
+    bp = Blueprint('music_assistant_api', __name__)
     return bp
 
 
@@ -66,7 +60,7 @@ def create_ma_blueprint():
 
     This blueprint is intended to be mounted at the `/ma` path only.
     """
-    bp = Blueprint('music_assistant_alexa_api_ma', __name__)
+    bp = Blueprint('music_assistant_api_ma', __name__)
 
     # No basic auth enforced at the MA blueprint level; app-level auth is applied
     # by the main application so the MA API runs without its own auth here.
@@ -79,7 +73,7 @@ def create_ma_blueprint():
 def create_app():
     # Create and return a base app (no /ma routes mounted here).
     _ensure_logging_configured()
-    app = Flask('music_assistant_alexa_api')
+    app = Flask('music_assistant_api')
     app.register_blueprint(create_blueprint(), url_prefix='')
     return app
 
@@ -90,6 +84,6 @@ def create_ma_app():
     This app is intended to be mounted under `/ma` by the main application.
     """
     _ensure_logging_configured()
-    app = Flask('music_assistant_alexa_api_ma')
+    app = Flask('music_assistant_api_ma')
     app.register_blueprint(create_ma_blueprint(), url_prefix='')
     return app

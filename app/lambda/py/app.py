@@ -2,11 +2,12 @@ import os
 from flask import Flask, request, jsonify, Response
 from markupsafe import escape
 from flask_ask_sdk.skill_adapter import SkillAdapter
-from lambda_function import sb  # sb is the SkillBuilder from lambda_function.py
+from skill.lambda_function import sb  # sb is the SkillBuilder from skill/lambda_function.py
 import requests
 import json
 from requests.exceptions import RequestException
-import music_assistant_alexa_api as maa_api
+import music_assistant_api as ma_api
+import alexa_api as alexa_api
 from werkzeug.middleware.dispatcher import DispatcherMiddleware
 from werkzeug.middleware.proxy_fix import ProxyFix
 from env_secrets import get_env_secret
@@ -43,8 +44,10 @@ skill_adapter = SkillAdapter(
     skill_id="",
     app=app)
 
-# Mount the Music Assistant Alexa API (only ma routes will be mounted at /ma)
-ma_app = maa_api.create_ma_app()
+# Mount the Music Assistant API (only ma routes will be mounted at /ma)
+ma_app = ma_api.create_ma_app()
+# Alexa-specific API (mounted at /alexa)
+alexa_app = alexa_api.create_alexa_app()
 
 
 class BasicAuthMiddleware:
@@ -82,10 +85,11 @@ class BasicAuthMiddleware:
 # Apply ProxyFix to both apps before wiring the dispatcher.
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 ma_app.wsgi_app = ProxyFix(ma_app.wsgi_app, x_for=1, x_proto=1, x_host=1)
-# Wrap the MA app with BasicAuthMiddleware so /ma endpoints are protected
+alexa_app.wsgi_app = ProxyFix(alexa_app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 ma_app.wsgi_app = BasicAuthMiddleware(ma_app.wsgi_app)
-app.wsgi_app = DispatcherMiddleware(app.wsgi_app, {'/ma': ma_app.wsgi_app})
-app.logger.info('Mounted music-assistant-alexa-api app at /ma')
+alexa_app.wsgi_app = BasicAuthMiddleware(alexa_app.wsgi_app)
+app.wsgi_app = DispatcherMiddleware(app.wsgi_app, {'/ma': ma_app.wsgi_app, '/alexa': alexa_app.wsgi_app})
+app.logger.info('Mounted music-assistant-api app at /ma and alexa API at /alexa')
 
 
 # Global basic auth for the app (protect everything except the root Alexa skill endpoint)
@@ -169,7 +173,7 @@ def status():
                 out = ls.stdout or ls.stderr or ''
                 m = re.search(r'amzn1\.ask\.skill\.[0-9a-fA-F\-]+', out)
                 if not m:
-                    skill_ask_html = '<span class="led red"></span> Music Assistant Skill not found via ASK CLI'
+                    skill_ask_html = '<span class="led red"></span> Music Assistant Skill interaction model not found via ASK CLI'
                 else:
                     sid = m.group(0)
                     mf = subprocess.run(['ask', 'smapi', 'get-skill-manifest', '--skill-id', sid, '--profile', 'default'], capture_output=True, text=True)
@@ -200,7 +204,7 @@ def status():
                     is_green = False
                     if not mm:
                         testing_msg = 'testing enabled' if testing_enabled else 'testing not enabled'
-                        skill_ask_html = f'<span class="led yellow"></span> Music Assistant Skill {escape(sid)} found; endpoint not set ({testing_msg})'
+                        skill_ask_html = f'<span class="led yellow"></span> Music Assistant Skill interaction model {escape(sid)} found; endpoint not set ({testing_msg})'
                     else:
                         uri = mm.group(0)
                         try:
@@ -208,16 +212,16 @@ def status():
                             manifest_host = parsed.netloc
                             if manifest_host == cfg_host:
                                 if testing_enabled:
-                                    skill_ask_html = f'<span class="led green"></span> Music Assistant Skill found, endpoint matches ({escape(manifest_host)}); testing enabled'
+                                    skill_ask_html = f'<span class="led green"></span> Music Assistant Skill interaction model found; endpoint matches ({escape(manifest_host)}); testing enabled'
                                     is_green = True
                                 else:
-                                    skill_ask_html = f'<span class="led yellow"></span> Music Assistant Skill found and endpoint matches ({escape(manifest_host)}); testing NOT enabled'
+                                    skill_ask_html = f'<span class="led yellow"></span> Music Assistant Skill interaction model found and endpoint matches ({escape(manifest_host)}); testing NOT enabled'
                             else:
                                 testing_note = 'testing enabled' if testing_enabled else 'testing not enabled'
-                                skill_ask_html = f'<span class="led red"></span> Music Assistant Skill endpoint mismatch (manifest: {escape(manifest_host)} vs configured: {escape(cfg_host)}); {testing_note}'
+                                skill_ask_html = f'<span class="led red"></span> Music Assistant Skill interaction model endpoint mismatch (manifest: {escape(manifest_host)} vs configured: {escape(cfg_host)}); {testing_note}'
                         except Exception:
                             testing_msg = 'testing enabled' if testing_enabled else 'testing not enabled'
-                            skill_ask_html = f'<span class="led yellow"></span> Music Assistant Skill found; endpoint parse failed ({testing_msg})'
+                            skill_ask_html = f'<span class="led yellow"></span> Music Assistant Skill interaction model found; endpoint parse failed ({testing_msg})'
 
                     try:
                         if not is_green:
@@ -232,7 +236,7 @@ def status():
         except Exception as e:
             skill_ask_html = f'<span class="muted">ASK check error: {escape(str(e))}</span>'
 
-        # API status: call the locally mounted /ma/latest-url endpoint on this service.
+        # Music Assistant API status: call the locally mounted /ma/latest-url endpoint on this service.
         endpoint_url = request.host_url.rstrip('/') + '/ma/latest-url'
         try:
             auth = (api_user, api_pass) if api_user and api_pass else None
@@ -251,13 +255,13 @@ def status():
                 content_preview = content_preview[:500] + '...'
             if resp.ok:
                 api_html = (
-                    f'<span class="led green"></span> API reachable ({resp.status_code}) — /ma/latest-url'
+                    f'<span class="led green"></span> Music Assistant API reachable ({resp.status_code}) — /ma/latest-url'
                     f"<pre style='white-space:pre-wrap;background:#f6f6f6;padding:8px;border-radius:4px;max-height:200px;overflow:auto'>"
                     f"{content_preview}</pre>"
                 )
             else:
                 api_html = (
-                    f'<span class="led red"></span> API responded {resp.status_code} for /ma/latest-url'
+                    f'<span class="led red"></span> Music Assistant API responded {resp.status_code} for /ma/latest-url'
                     f"<pre style='white-space:pre-wrap;background:#fdf2f2;padding:8px;border-radius:4px;max-height:200px;overflow:auto'>"
                     f"{content_preview}</pre>"
                 )
@@ -273,7 +277,7 @@ def status():
         # initial placeholders; detailed checks will be fetched by client-side polling
         tpl = tpl.replace('__SKILL_HTML__', skill_html)
         tpl = tpl.replace('__SKILL_ASK_HTML__', '<span class="muted">Checking ASK CLI status...</span>')
-        tpl = tpl.replace('__API_HTML__', '<span class="muted">Checking API...</span>')
+        tpl = tpl.replace('__API_HTML__', '<span class="muted">Checking Music Assistant API...</span>')
         return Response(tpl, status=200, mimetype='text/html')
     except Exception:
         html = f"""<!doctype html>
@@ -283,7 +287,7 @@ def status():
                 <h1>Service Status</h1>
                 <div>{skill_html}</div>
                 <div><span class=\"muted\">Checking ASK CLI status...</span></div>
-                <div><span class=\"muted\">Checking API...</span></div>
+                <div><span class=\"muted\">Checking Music Assistant API...</span></div>
             </body>
             </html>"""
         return Response(html, status=200, mimetype='text/html')
@@ -291,7 +295,7 @@ def status():
 
 @app.route('/status/api', methods=['GET'])
 def status_api():
-    """Return API status fragment as JSON (fast, local API check)."""
+    """Return Music Assistant API status fragment as JSON (fast, local API check)."""
     api_user = get_env_secret('APP_USERNAME')
     api_pass = get_env_secret('APP_PASSWORD')
     endpoint_url = request.host_url.rstrip('/') + '/ma/latest-url'
@@ -312,13 +316,13 @@ def status_api():
             content_preview = content_preview[:500] + '...'
         if resp.ok:
             api_html = (
-                f'<span class="led green"></span> API reachable ({resp.status_code}) — /ma/latest-url'
+                f'<span class="led green"></span> Music Assistant API reachable ({resp.status_code}) — /ma/latest-url'
                 f"<pre style='white-space:pre-wrap;background:#f6f6f6;padding:8px;border-radius:4px;max-height:200px;overflow:auto'>"
                 f"{content_preview}</pre>"
             )
         else:
             api_html = (
-                f'<span class="led red"></span> API responded {resp.status_code} for /ma/latest-url'
+                f'<span class="led red"></span> Music Assistant API responded {resp.status_code} for /ma/latest-url'
                 f"<pre style='white-space:pre-wrap;background:#fdf2f2;padding:8px;border-radius:4px;max-height:200px;overflow:auto'>"
                 f"{content_preview}</pre>"
             )
@@ -338,7 +342,7 @@ def status_ask():
             out = ls.stdout or ls.stderr or ''
             m = re.search(r'amzn1\.ask\.skill\.[0-9a-fA-F\-]+', out)
             if not m:
-                skill_ask_html = '<span class="led red"></span> Music Assistant Skill not found via ASK CLI'
+                skill_ask_html = '<span class="led red"></span> Music Assistant Skill interaction model not found via ASK CLI'
             else:
                 sid = m.group(0)
                 mf = subprocess.run(['ask', 'smapi', 'get-skill-manifest', '--skill-id', sid, '--profile', 'default'], capture_output=True, text=True)
@@ -369,7 +373,7 @@ def status_ask():
                 is_green = False
                 if not mm:
                     testing_msg = 'testing enabled' if testing_enabled else 'testing not enabled'
-                    skill_ask_html = f'<span class="led yellow"></span> Music Assistant Skill {escape(sid)} found; endpoint not set ({testing_msg})'
+                    skill_ask_html = f'<span class="led yellow"></span> Music Assistant Skill interaction model {escape(sid)} found; endpoint not set ({testing_msg})'
                 else:
                     uri = mm.group(0)
                     try:
@@ -377,16 +381,16 @@ def status_ask():
                         manifest_host = parsed.netloc
                         if manifest_host == cfg_host:
                             if testing_enabled:
-                                skill_ask_html = f'<span class="led green"></span> Music Assistant Skill found, endpoint matches ({escape(manifest_host)}); testing enabled'
+                                skill_ask_html = f'<span class="led green"></span> Music Assistant Skill interaction model found; endpoint matches ({escape(manifest_host)}); testing enabled'
                                 is_green = True
                             else:
-                                skill_ask_html = f'<span class="led yellow"></span> Music Assistant Skill found and endpoint matches ({escape(manifest_host)}); testing NOT enabled'
+                                skill_ask_html = f'<span class="led yellow"></span> Music Assistant Skill interaction model found and endpoint matches ({escape(manifest_host)}); testing NOT enabled'
                         else:
                             testing_note = 'testing enabled' if testing_enabled else 'testing not enabled'
-                            skill_ask_html = f'<span class="led red"></span> Music Assistant Skill endpoint mismatch (manifest: {escape(manifest_host)} vs configured: {escape(cfg_host)}); {testing_note}'
+                            skill_ask_html = f'<span class="led red"></span> Music Assistant Skill interaction model endpoint mismatch (manifest: {escape(manifest_host)} vs configured: {escape(cfg_host)}); {testing_note}'
                     except Exception:
                         testing_msg = 'testing enabled' if testing_enabled else 'testing not enabled'
-                        skill_ask_html = f'<span class="led yellow"></span> Music Assistant Skill found; endpoint parse failed ({testing_msg})'
+                        skill_ask_html = f'<span class="led yellow"></span> Music Assistant Skill interaction model found; endpoint parse failed ({testing_msg})'
 
                 try:
                     if not is_green:
