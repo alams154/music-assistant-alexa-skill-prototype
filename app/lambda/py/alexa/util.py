@@ -93,7 +93,7 @@ def play(url, offset, text, response_builder, supports_apl=False):
         except requests.RequestException:
             logging.exception('Play Function URL: %s', url)
             response_builder.speak(
-                "Sorry, I can't reach the audio file. Please check the URL in the play function.")
+                "Sorry, I can't reach the audio file. Please check that your stream URL is internet accessible via HTTPS at the MA_HOSTNAME variable you provided.")
             response_builder.set_should_end_session(True)
             return response_builder.response
 
