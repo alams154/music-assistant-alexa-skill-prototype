@@ -17,7 +17,24 @@
             <body>
                 <h1>Service Status</h1>
                 <div class="row">__SKILL_HTML__</div>
-                <div class="row">__SKILL_ASK_HTML__</div>
-                <div class="row">__API_HTML__</div>
+                <div class="row" id="skill-ask-row">__SKILL_ASK_HTML__</div>
+                <div class="row" id="api-row">__API_HTML__</div>
+                <script>
+                // Poll API and ASK endpoints independently so results appear as they become available
+                (function pollApi(){
+                    fetch('/status/api').then(r=>r.json()).then(j=>{
+                        try{ const apiEl = document.getElementById('api-row'); if(apiEl && j.api_html){ apiEl.innerHTML = j.api_html; } }catch(e){}
+                        setTimeout(pollApi, 3000);
+                    }).catch(()=>{ setTimeout(pollApi, 5000); });
+                })();
+
+                (function pollAsk(){
+                    fetch('/status/ask').then(r=>r.json()).then(j=>{
+                        try{ const askEl = document.getElementById('skill-ask-row'); if(askEl && j.skill_ask_html){ askEl.innerHTML = j.skill_ask_html; } }catch(e){}
+                        // Ask checks are slower; poll less frequently
+                        setTimeout(pollAsk, 5000);
+                    }).catch(()=>{ setTimeout(pollAsk, 10000); });
+                })();
+                </script>
             </body>
             </html>

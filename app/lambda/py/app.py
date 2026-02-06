@@ -103,115 +103,158 @@ def status():
 
     # Skill adapter status (we're running if this handler is invoked)
     skill_html = '<span class="led green"></span> Skill running'
-    # Check ASK CLI for an existing 'Music Assistant' skill and whether its
-    # endpoint matches configured SKILL_HOSTNAME (best-effort; requires ask CLI
-    # and configured credentials in the container).
-    skill_ask_html = '<span class="muted">ASK CLI check unavailable</span>'
-    try:
-        skill_host = os.environ.get('SKILL_HOSTNAME', '').strip()
-        # Only attempt check if ask CLI exists and SKILL_HOSTNAME is configured
-        if shutil.which('ask') and skill_host:
-            # Run list-skills-for-vendor and look for a Music Assistant skill id
-            # Use ASK CLI to look up Music Assistant for this vendor/profile and report
-            # presence, endpoint, and whether testing is enabled. Be resilient to
-            # different ASK CLI outputs by falling back from JSON to regex checks.
-            ls = subprocess.run(['ask', 'smapi', 'list-skills-for-vendor', '--profile', 'default'], capture_output=True, text=True)
-            out = ls.stdout or ls.stderr or ''
-            m = re.search(r'amzn1\.ask\.skill\.[0-9a-fA-F\-]+', out)
-            if not m:
-                skill_ask_html = '<span class="led red"></span> Music Assistant not found via ASK CLI'
-            else:
-                sid = m.group(0)
-                # Get manifest to find configured endpoint
-                mf = subprocess.run(['ask', 'smapi', 'get-skill-manifest', '--skill-id', sid, '--profile', 'default'], capture_output=True, text=True)
-                mf_out = mf.stdout or mf.stderr or ''
-                mm = re.search(r'https?://[^"\s\)\]]+', mf_out)
-                # Determine configured host for comparison
-                try:
-                    if skill_host.startswith('http://') or skill_host.startswith('https://'):
-                        cfg_host = urllib.parse.urlparse(skill_host).netloc
-                    else:
-                        cfg_host = skill_host
-                except Exception:
-                    cfg_host = skill_host
 
-                # Check testing enablement (best-effort). Treat a successful CLI call
-                # (returncode 0 or explicit success text) as enabled; errors (404)
-                # indicate not enabled.
-                testing_enabled = False
-                try:
-                    en = subprocess.run(['ask', 'smapi', 'get-skill-enablement-status', '--skill-id', sid, '--stage', 'development', '--profile', 'default'], capture_output=True, text=True)
-                    en_out = en.stdout or en.stderr or ''
-                    if en.returncode == 0 or 'Command executed successfully' in en_out:
-                        testing_enabled = True
-                    else:
-                        # If output contains an explicit error JSON (e.g. 404), treat as not enabled
-                        if re.search(r'\[Error\]:\s*\{', en_out) or re.search(r'404', en_out):
-                            testing_enabled = False
-                        elif re.search(r'"isEnabled"\s*:\s*true', en_out, re.IGNORECASE) or re.search(r'"enabled"\s*:\s*true', en_out, re.IGNORECASE):
-                            testing_enabled = True
-                except Exception:
-                    testing_enabled = False
-
-                is_green = False
-                if not mm:
-                    testing_msg = 'testing enabled' if testing_enabled else 'testing not enabled'
-                    skill_ask_html = f'<span class="led yellow"></span> Skill {escape(sid)} found; endpoint not set ({testing_msg})'
+    # If client requested JSON, perform full checks (may take time) and return structured data
+    want_json = request.args.get('format') == 'json' or 'application/json' in (request.headers.get('Accept') or '')
+    if want_json:
+        # Check ASK CLI and skill status
+        skill_ask_html = '<span class="muted">ASK CLI check unavailable</span>'
+        try:
+            skill_host = os.environ.get('SKILL_HOSTNAME', '').strip()
+            if shutil.which('ask') and skill_host:
+                ls = subprocess.run(['ask', 'smapi', 'list-skills-for-vendor', '--profile', 'default'], capture_output=True, text=True)
+                out = ls.stdout or ls.stderr or ''
+                m = re.search(r'amzn1\.ask\.skill\.[0-9a-fA-F\-]+', out)
+                if not m:
+                    skill_ask_html = '<span class="led red"></span> Music Assistant Skill not found via ASK CLI'
                 else:
-                    uri = mm.group(0)
+                    sid = m.group(0)
+                    mf = subprocess.run(['ask', 'smapi', 'get-skill-manifest', '--skill-id', sid, '--profile', 'default'], capture_output=True, text=True)
+                    mf_out = mf.stdout or mf.stderr or ''
+                    mm = re.search(r'https?://[^"\s\)\]]+', mf_out)
                     try:
-                        parsed = urllib.parse.urlparse(uri)
-                        manifest_host = parsed.netloc
-                        if manifest_host == cfg_host:
-                            if testing_enabled:
-                                skill_ask_html = f'<span class="led green"></span> Skill present, endpoint matches ({escape(manifest_host)}); testing enabled'
-                                is_green = True
-                            else:
-                                skill_ask_html = f'<span class="led yellow"></span> Skill present and endpoint matches ({escape(manifest_host)}); testing NOT enabled'
+                        if skill_host.startswith('http://') or skill_host.startswith('https://'):
+                            cfg_host = urllib.parse.urlparse(skill_host).netloc
                         else:
-                            testing_note = 'testing enabled' if testing_enabled else 'testing not enabled'
-                            skill_ask_html = f'<span class="led red"></span> Skill endpoint mismatch (manifest: {escape(manifest_host)} vs configured: {escape(cfg_host)}); {testing_note}'
+                            cfg_host = skill_host
                     except Exception:
+                        cfg_host = skill_host
+
+                    testing_enabled = False
+                    try:
+                        en = subprocess.run(['ask', 'smapi', 'get-skill-enablement-status', '--skill-id', sid, '--stage', 'development', '--profile', 'default'], capture_output=True, text=True)
+                        en_out = en.stdout or en.stderr or ''
+                        if en.returncode == 0 or 'Command executed successfully' in en_out:
+                            testing_enabled = True
+                        else:
+                            if re.search(r'\[Error\]:\s*\{', en_out) or re.search(r'404', en_out):
+                                testing_enabled = False
+                            elif re.search(r'"isEnabled"\s*:\s*true', en_out, re.IGNORECASE) or re.search(r'"enabled"\s*:\s*true', en_out, re.IGNORECASE):
+                                testing_enabled = True
+                    except Exception:
+                        testing_enabled = False
+
+                    is_green = False
+                    if not mm:
                         testing_msg = 'testing enabled' if testing_enabled else 'testing not enabled'
-                        skill_ask_html = f'<span class="led yellow"></span> Skill present; endpoint parse failed ({testing_msg})'
+                        skill_ask_html = f'<span class="led yellow"></span> Music Assistant Skill {escape(sid)} found; endpoint not set ({testing_msg})'
+                    else:
+                        uri = mm.group(0)
+                        try:
+                            parsed = urllib.parse.urlparse(uri)
+                            manifest_host = parsed.netloc
+                            if manifest_host == cfg_host:
+                                if testing_enabled:
+                                    skill_ask_html = f'<span class="led green"></span> Music Assistant Skill found, endpoint matches ({escape(manifest_host)}); testing enabled'
+                                    is_green = True
+                                else:
+                                    skill_ask_html = f'<span class="led yellow"></span> Music Assistant Skill found and endpoint matches ({escape(manifest_host)}); testing NOT enabled'
+                            else:
+                                testing_note = 'testing enabled' if testing_enabled else 'testing not enabled'
+                                skill_ask_html = f'<span class="led red"></span> Music Assistant Skill endpoint mismatch (manifest: {escape(manifest_host)} vs configured: {escape(cfg_host)}); {testing_note}'
+                        except Exception:
+                            testing_msg = 'testing enabled' if testing_enabled else 'testing not enabled'
+                            skill_ask_html = f'<span class="led yellow"></span> Music Assistant Skill found; endpoint parse failed ({testing_msg})'
 
-                # If the overall status is not the desired green (correct endpoint + testing),
-                # offer a quick link to the setup page so the user can fix credentials/enable testing.
-                try:
-                    if not is_green:
-                        skill_ask_html += ' <button onclick="window.location=\'/setup\'" style="margin-left:8px">Open Setup</button>'
-                except Exception:
-                    pass
-        else:
-            # ask missing or SKILL_HOSTNAME not configured
-            if not shutil.which('ask'):
-                skill_ask_html = '<span class="muted">ask CLI not available in container</span>'
+                    try:
+                        if not is_green:
+                            skill_ask_html += ' <button onclick="window.location=\'/setup\'" style="margin-left:8px">Open Setup</button>'
+                    except Exception:
+                        pass
             else:
-                skill_ask_html = '<span class="muted">SKILL_HOSTNAME not configured</span>'
-    except Exception as e:
-        skill_ask_html = f'<span class="muted">ASK check error: {escape(str(e))}</span>'
-    # API status: call the locally mounted /ma/latest-url endpoint on this service.
-    # Use the current request host (including port) so this works in container
-    # and local runs without requiring an external API_HOSTNAME env var.
-    endpoint = request.host_url.rstrip('/') + '/ma/latest-url'
+                if not shutil.which('ask'):
+                    skill_ask_html = '<span class="muted">ask CLI not available in container</span>'
+                else:
+                    skill_ask_html = '<span class="muted">SKILL_HOSTNAME not configured</span>'
+        except Exception as e:
+            skill_ask_html = f'<span class="muted">ASK check error: {escape(str(e))}</span>'
 
+        # API status: call the locally mounted /ma/latest-url endpoint on this service.
+        endpoint_url = request.host_url.rstrip('/') + '/ma/latest-url'
+        try:
+            auth = (api_user, api_pass) if api_user and api_pass else None
+            resp = requests.get(endpoint_url, timeout=2, auth=auth)
+            try:
+                content_text = resp.content.decode('utf-8', errors='replace')
+            except Exception:
+                content_text = str(resp.content)
+            try:
+                parsed = json.loads(content_text)
+                pretty = json.dumps(parsed, indent=2, ensure_ascii=False)
+                content_preview = escape(pretty)
+            except Exception:
+                content_preview = escape(content_text)
+            if len(content_preview) > 500:
+                content_preview = content_preview[:500] + '...'
+            if resp.ok:
+                api_html = (
+                    f'<span class="led green"></span> API reachable ({resp.status_code}) — /ma/latest-url'
+                    f"<pre style='white-space:pre-wrap;background:#f6f6f6;padding:8px;border-radius:4px;max-height:200px;overflow:auto'>"
+                    f"{content_preview}</pre>"
+                )
+            else:
+                api_html = (
+                    f'<span class="led red"></span> API responded {resp.status_code} for /ma/latest-url'
+                    f"<pre style='white-space:pre-wrap;background:#fdf2f2;padding:8px;border-radius:4px;max-height:200px;overflow:auto'>"
+                    f"{content_preview}</pre>"
+                )
+        except RequestException as e:
+            api_html = f'<span class="led red"></span> Error: {str(e)}'
+
+        return jsonify({'skill_html': skill_html, 'skill_ask_html': skill_ask_html, 'api_html': api_html, 'created': False})
+
+    # Non-JSON request: render page immediately and let client poll for updates
+    try:
+        tpl_path = Path(__file__).parent / 'templates' / 'status.html'
+        tpl = tpl_path.read_text()
+        # initial placeholders; detailed checks will be fetched by client-side polling
+        tpl = tpl.replace('__SKILL_HTML__', skill_html)
+        tpl = tpl.replace('__SKILL_ASK_HTML__', '<span class="muted">Checking ASK CLI status...</span>')
+        tpl = tpl.replace('__API_HTML__', '<span class="muted">Checking API...</span>')
+        return Response(tpl, status=200, mimetype='text/html')
+    except Exception:
+        html = f"""<!doctype html>
+            <html>
+            <head><meta charset="utf-8"><title>Service Status</title></head>
+            <body>
+                <h1>Service Status</h1>
+                <div>{skill_html}</div>
+                <div><span class=\"muted\">Checking ASK CLI status...</span></div>
+                <div><span class=\"muted\">Checking API...</span></div>
+            </body>
+            </html>"""
+        return Response(html, status=200, mimetype='text/html')
+
+
+@app.route('/status/api', methods=['GET'])
+def status_api():
+    """Return API status fragment as JSON (fast, local API check)."""
+    api_user = get_env_secret('API_USERNAME')
+    api_pass = get_env_secret('API_PASSWORD')
+    endpoint_url = request.host_url.rstrip('/') + '/ma/latest-url'
     try:
         auth = (api_user, api_pass) if api_user and api_pass else None
-        resp = requests.get(endpoint, timeout=2, auth=auth)
-        # Include a short, escaped preview of the response content when the API responded
+        resp = requests.get(endpoint_url, timeout=2, auth=auth)
         try:
             content_text = resp.content.decode('utf-8', errors='replace')
         except Exception:
             content_text = str(resp.content)
-
-        # If the response is JSON, pretty-print it for readability; otherwise escape raw text.
         try:
             parsed = json.loads(content_text)
             pretty = json.dumps(parsed, indent=2, ensure_ascii=False)
             content_preview = escape(pretty)
         except Exception:
             content_preview = escape(content_text)
-
         if len(content_preview) > 500:
             content_preview = content_preview[:500] + '...'
         if resp.ok:
@@ -228,28 +271,83 @@ def status():
             )
     except RequestException as e:
         api_html = f'<span class="led red"></span> Error: {str(e)}'
+    return jsonify({'api_html': api_html})
 
-    # Load status HTML template from disk to keep this file readable
+
+@app.route('/status/ask', methods=['GET'])
+def status_ask():
+    """Return ASK CLI status fragment as JSON (may be slower)."""
+    skill_ask_html = '<span class="muted">ASK CLI check unavailable</span>'
     try:
-        tpl_path = Path(__file__).parent / 'templates' / 'status.html'
-        tpl = tpl_path.read_text()
-        tpl = tpl.replace('__SKILL_HTML__', skill_html)
-        tpl = tpl.replace('__SKILL_ASK_HTML__', skill_ask_html)
-        tpl = tpl.replace('__API_HTML__', api_html)
-        return Response(tpl, status=200, mimetype='text/html')
-    except Exception:
-        # Fallback to inline minimal response in case template is missing
-        html = f"""<!doctype html>
-            <html>
-            <head><meta charset="utf-8"><title>Service Status</title></head>
-            <body>
-                <h1>Service Status</h1>
-                <div>{skill_html}</div>
-                <div>{skill_ask_html}</div>
-                <div>{api_html}</div>
-            </body>
-            </html>"""
-        return Response(html, status=200, mimetype='text/html')
+        skill_host = os.environ.get('SKILL_HOSTNAME', '').strip()
+        if shutil.which('ask') and skill_host:
+            ls = subprocess.run(['ask', 'smapi', 'list-skills-for-vendor', '--profile', 'default'], capture_output=True, text=True)
+            out = ls.stdout or ls.stderr or ''
+            m = re.search(r'amzn1\.ask\.skill\.[0-9a-fA-F\-]+', out)
+            if not m:
+                skill_ask_html = '<span class="led red"></span> Music Assistant Skill not found via ASK CLI'
+            else:
+                sid = m.group(0)
+                mf = subprocess.run(['ask', 'smapi', 'get-skill-manifest', '--skill-id', sid, '--profile', 'default'], capture_output=True, text=True)
+                mf_out = mf.stdout or mf.stderr or ''
+                mm = re.search(r'https?://[^"\s\)\]]+', mf_out)
+                try:
+                    if skill_host.startswith('http://') or skill_host.startswith('https://'):
+                        cfg_host = urllib.parse.urlparse(skill_host).netloc
+                    else:
+                        cfg_host = skill_host
+                except Exception:
+                    cfg_host = skill_host
+
+                testing_enabled = False
+                try:
+                    en = subprocess.run(['ask', 'smapi', 'get-skill-enablement-status', '--skill-id', sid, '--stage', 'development', '--profile', 'default'], capture_output=True, text=True)
+                    en_out = en.stdout or en.stderr or ''
+                    if en.returncode == 0 or 'Command executed successfully' in en_out:
+                        testing_enabled = True
+                    else:
+                        if re.search(r'\[Error\]:\s*\{', en_out) or re.search(r'404', en_out):
+                            testing_enabled = False
+                        elif re.search(r'"isEnabled"\s*:\s*true', en_out, re.IGNORECASE) or re.search(r'"enabled"\s*:\s*true', en_out, re.IGNORECASE):
+                            testing_enabled = True
+                except Exception:
+                    testing_enabled = False
+
+                is_green = False
+                if not mm:
+                    testing_msg = 'testing enabled' if testing_enabled else 'testing not enabled'
+                    skill_ask_html = f'<span class="led yellow"></span> Music Assistant Skill {escape(sid)} found; endpoint not set ({testing_msg})'
+                else:
+                    uri = mm.group(0)
+                    try:
+                        parsed = urllib.parse.urlparse(uri)
+                        manifest_host = parsed.netloc
+                        if manifest_host == cfg_host:
+                            if testing_enabled:
+                                skill_ask_html = f'<span class="led green"></span> Music Assistant Skill found, endpoint matches ({escape(manifest_host)}); testing enabled'
+                                is_green = True
+                            else:
+                                skill_ask_html = f'<span class="led yellow"></span> Music Assistant Skill found and endpoint matches ({escape(manifest_host)}); testing NOT enabled'
+                        else:
+                            testing_note = 'testing enabled' if testing_enabled else 'testing not enabled'
+                            skill_ask_html = f'<span class="led red"></span> Music Assistant Skill endpoint mismatch (manifest: {escape(manifest_host)} vs configured: {escape(cfg_host)}); {testing_note}'
+                    except Exception:
+                        testing_msg = 'testing enabled' if testing_enabled else 'testing not enabled'
+                        skill_ask_html = f'<span class="led yellow"></span> Music Assistant Skill found; endpoint parse failed ({testing_msg})'
+
+                try:
+                    if not is_green:
+                        skill_ask_html += ' <button onclick="window.location=\'/setup\'" style="margin-left:8px">Open Setup</button>'
+                except Exception:
+                    pass
+        else:
+            if not shutil.which('ask'):
+                skill_ask_html = '<span class="muted">ask CLI not available in container</span>'
+            else:
+                skill_ask_html = '<span class="muted">SKILL_HOSTNAME not configured</span>'
+    except Exception as e:
+        skill_ask_html = f'<span class="muted">ASK check error: {escape(str(e))}</span>'
+    return jsonify({'skill_ask_html': skill_ask_html})
 
 
 # Expose OpenAPI spec and Swagger UI from the main app so docs are available
