@@ -288,31 +288,27 @@ def status():
     except RequestException as e:
         api_html = f'<span class="led red"></span> Error: {str(e)}'
 
-    html = f"""<!doctype html>
+    # Load status HTML template from disk to keep this file readable
+    try:
+        tpl_path = Path(__file__).parent / 'templates' / 'status.html'
+        tpl = tpl_path.read_text()
+        tpl = tpl.replace('__SKILL_HTML__', skill_html)
+        tpl = tpl.replace('__SKILL_ASK_HTML__', skill_ask_html)
+        tpl = tpl.replace('__API_HTML__', api_html)
+        return Response(tpl, status=200, mimetype='text/html')
+    except Exception:
+        # Fallback to inline minimal response in case template is missing
+        html = f"""<!doctype html>
             <html>
-            <head>
-                <meta charset="utf-8">
-                <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0%200%20100%20100'><circle cx='50' cy='50' r='50' fill='%2300A4E3'/><circle cx='50' cy='50' r='34' fill='none' stroke='%23FFFFFF' stroke-width='8' opacity='0.8'/></svg>">
-                <title>Service Status</title>
-                <style>
-                body {{ font-family: Arial, Helvetica, sans-serif; padding: 20px; }}
-                .led {{ display:inline-block; width:14px; height:14px; border-radius:50%; margin-right:8px; }}
-                .green {{ background:#2ecc71; }}
-                .yellow {{ background:#f1c40f; }}
-                .red {{ background:#e74c3c; }}
-                .row {{ margin: 8px 0; }}
-                .muted {{ color:#666; font-size:0.9em }}
-                </style>
-            </head>
+            <head><meta charset="utf-8"><title>Service Status</title></head>
             <body>
                 <h1>Service Status</h1>
-                <div class="row">{skill_html}</div>
-                <div class="row">{skill_ask_html}</div>
-                <div class="row">{api_html}</div>
+                <div>{skill_html}</div>
+                <div>{skill_ask_html}</div>
+                <div>{api_html}</div>
             </body>
             </html>"""
-
-    return Response(html, status=200, mimetype="text/html")
+        return Response(html, status=200, mimetype='text/html')
 
 
 # Expose OpenAPI spec and Swagger UI from the main app so docs are available
@@ -391,150 +387,13 @@ def setup_ui():
             created = False
         return jsonify({'logs': safe_logs, 'auth_url': auth_url, 'active': bool(active), 'created': bool(created)})
 
-    page = """<!doctype html>
-<html>
-<head><meta charset="utf-8"><title>Skill Setup</title></head>
-<body>
-    <h1>Skill Setup</h1>
-    <div>
-        <div style="margin-bottom:8px;">Endpoint is read from container configuration (SKILL_HOSTNAME)</div>
-        __CREDENTIALS_HTML__
-        <div><button id="setup-start">Start Setup</button></div>
-        <div id="auth-area" style="display:none;margin-top:8px">
-            <div><a id="auth-link" href="#" target="_blank">Open authorization page</a></div>
-            <div id="code-entry" style="display:none">
-                <form id="code-form"><input id="auth-code" name="code" type="password" autocomplete="one-time-code"/><button>Submit Code</button></form>
-                <div id="code-result"></div>
-            </div>
-        </div>
-        <div style="margin-top:8px;font-weight:600">Setup Logs</div>
-        <pre id="setup-logs" tabindex="0" style="max-height:300px;overflow:auto;background:#f6f6f6;padding:8px"></pre>
-        <div style="margin-top:8px"><button id="download-logs">Download logs</button></div>
-    </div>
-    <script>
-    const initialLogs = __INITIAL_LOGS__;
-    const initialAuth = __INITIAL_AUTH__;
-    const initialCreated = __INITIAL_CREATED__;
-    (function(){
-        const startBtn = document.getElementById('setup-start');
-        const logsEl = document.getElementById('setup-logs');
-        const authArea = document.getElementById('auth-area');
-        const authLink = document.getElementById('auth-link');
-        const codeEntry = document.getElementById('code-entry');
-        const codeForm = document.getElementById('code-form');
-        // Track whether we've already opened the auth URL in a tab/window
-        let authOpened = false;
-        const downloadBtn = document.getElementById('download-logs');
+    # Load setup HTML template from disk to keep this file readable
+    try:
+        tpl_path = Path(__file__).parent / 'templates' / 'setup.html'
+        page = tpl_path.read_text()
+    except Exception:
+        page = None
 
-        function showStatusButton(){
-            try{
-                if(!document.getElementById('goto-status')){
-                    const btn = document.createElement('button');
-                    btn.id = 'goto-status';
-                    btn.textContent = 'Open Status Page';
-                    btn.style.marginLeft = '8px';
-                    btn.addEventListener('click', function(){ window.location = '/status'; });
-                    startBtn.parentNode.insertBefore(btn, startBtn.nextSibling);
-                }
-            }catch(e){/* ignore */}
-        }
-
-        function renderInitial(){
-            // Render any initial logs/auth embedded in the page
-            try{ logsEl.textContent = JSON.stringify(initialLogs || [], null, 2); logsEl.scrollTop = logsEl.scrollHeight; }catch(e){ logsEl.textContent = ''; }
-            if(initialCreated){ showStatusButton(); return; }
-            if(initialAuth){
-                authArea.style.display='block';
-                authLink.href = initialAuth;
-                authLink.textContent = 'Open authorization page';
-                codeEntry.style.display='block';
-                if(!authOpened){ try{ window.open(initialAuth, '_blank'); authOpened = true; }catch(e){} }
-            }
-            // Start adaptive polling loop
-            pollLogs();
-        }
-
-        // Make the logs box focusable and intercept Cmd/Ctrl+A to select only the logs
-        logsEl.addEventListener('click', function(){ logsEl.focus(); });
-        logsEl.addEventListener('keydown', function(e){
-            const key = (e.key || '').toLowerCase();
-            if ((e.ctrlKey || e.metaKey) && key === 'a'){
-                e.preventDefault();
-                try{
-                    const range = document.createRange();
-                    range.selectNodeContents(logsEl);
-                    const sel = window.getSelection();
-                    sel.removeAllRanges();
-                    sel.addRange(range);
-                }catch(err){ /* ignore */ }
-            }
-        });
-
-        function pollLogs(){
-            fetch('/setup?format=json').then(r=>r.json()).then(j=>{
-                try{ logsEl.textContent = JSON.stringify(j.logs || [], null, 2); logsEl.scrollTop = logsEl.scrollHeight; }catch(e){ logsEl.textContent = ''; }
-                if(j.created){
-                    // Show a button the user can click to go to the status page
-                    try{ showStatusButton(); return; }catch(e){}
-                }
-                if(j.auth_url){
-                    authArea.style.display='block';
-                    authLink.href = j.auth_url;
-                    authLink.textContent = 'Open authorization page';
-                    codeEntry.style.display='block';
-                    if(!authOpened){ try{ window.open(j.auth_url, '_blank'); authOpened = true; }catch(e){} }
-                }
-                // Schedule next poll: more frequent when active, otherwise back off
-                const next = j.active ? 3000 : 15000;
-                setTimeout(pollLogs, next);
-            }).catch(()=>{ setTimeout(pollLogs, 15000); });
-        }
-
-        startBtn.addEventListener('click', function(){
-            fetch('/setup/start', {method:'POST'}).then(async (r)=>{
-                let j = {};
-                try{ j = await r.json(); }catch(e){}
-                if(!r.ok){ logsEl.textContent = (j.error || JSON.stringify(j) || 'Error starting setup'); }
-                else { if(j.status === 'auth_started'){ authArea.style.display='block'; pollLogs(); } else { pollLogs(); } }
-            }).catch(()=>{ logsEl.textContent = 'Start request failed'; });
-        });
-
-        downloadBtn.addEventListener('click', function(){
-            // Navigate to download endpoint to trigger browser download
-            window.location = '/setup/logs/download';
-        });
-        codeForm.addEventListener('submit', function(ev){
-            ev.preventDefault();
-            const codeInput = document.getElementById('auth-code');
-            const code = codeInput.value.trim();
-            if(!code) return;
-            // Clear the input after submission so the code isn't left visible
-            try{ codeInput.value = ''; }catch(e){}
-            // Remove the code result div from the DOM (it's no longer needed)
-            try{
-                const resultEl = document.getElementById('code-result');
-                if(resultEl && resultEl.parentNode){ resultEl.parentNode.removeChild(resultEl); }
-            }catch(e){}
-            fetch('/setup/code', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({code})}).then(r=>r.json()).then(j=>{
-                // Do not persist the server response in the UI; hide inputs if creation started
-                if(j.status === 'started'){ codeEntry.style.display='none'; }
-                // kick the poll loop once immediately to refresh logs
-                pollLogs();
-            }).catch(()=>{
-                // On error, recreate a small result element to show failure
-                try{
-                    let resultEl = document.getElementById('code-result');
-                    if(!resultEl){ resultEl = document.createElement('div'); resultEl.id = 'code-result'; codeEntry.appendChild(resultEl); }
-                    resultEl.textContent = 'Submit failed';
-                }catch(e){}
-            });
-        });
-
-        renderInitial();
-    })();
-    </script>
-</body>
-</html>"""
     # If valid ASK CLI credentials are present, show a notice on the setup page.
     try:
         creds_html = ''
@@ -557,10 +416,15 @@ def setup_ui():
     except Exception:
         initial_created = False
 
-    page = page.replace('__INITIAL_LOGS__', json.dumps(initial_logs))
-    page = page.replace('__INITIAL_AUTH__', json.dumps(auth_url))
-    page = page.replace('__INITIAL_CREATED__', json.dumps(bool(initial_created)))
-    page = page.replace('__CREDENTIALS_HTML__', creds_html)
+    if page:
+        page = page.replace('__INITIAL_LOGS__', json.dumps(initial_logs))
+        page = page.replace('__INITIAL_AUTH__', json.dumps(auth_url))
+        page = page.replace('__INITIAL_CREATED__', json.dumps(bool(initial_created)))
+        page = page.replace('__CREDENTIALS_HTML__', creds_html)
+        return Response(page, mimetype='text/html')
+
+    # Fallback: simple inline page if template is missing
+    page = """<!doctype html><html><head><meta charset='utf-8'><title>Skill Setup</title></head><body><h1>Skill Setup</h1><pre>%s</pre></body></html>""" % json.dumps(initial_logs)
     return Response(page, mimetype='text/html')
 
 
