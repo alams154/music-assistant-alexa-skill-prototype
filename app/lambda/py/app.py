@@ -14,7 +14,6 @@ import swagger_ui as maa_swagger
 from collections import deque
 import threading
 import subprocess
-import sys
 from pathlib import Path
 import time
 import pty
@@ -373,7 +372,7 @@ def setup_ui():
             active = False
         # Return sanitized logs for the UI polling loop
         try:
-            safe_logs = [sanitize_log(l) for l in list(_setup_logs)]
+            safe_logs = [sanitize_log(ln) for ln in list(_setup_logs)]
         except Exception:
             safe_logs = list(_setup_logs)
         # Detect whether the setup process has completed creation (Done. Skill ID)
@@ -431,9 +430,9 @@ def setup_ui():
 @app.route('/setup/logs/download', methods=['GET'])
 def setup_logs_download():
     try:
-        content = '\n'.join(sanitize_log(l) for l in list(_setup_logs))
+        content = '\n'.join(sanitize_log(line) for line in list(_setup_logs))
     except Exception:
-        content = '\n'.join(str(l) for l in list(_setup_logs))
+        content = '\n'.join(str(line) for line in list(_setup_logs))
     resp = Response(content, mimetype='text/plain')
     resp.headers['Content-Disposition'] = 'attachment; filename="setup_logs.txt"'
     return resp
