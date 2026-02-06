@@ -18,7 +18,8 @@ STAGE="development"
 ENDPOINT=""
 UPLOAD_MODELS=true
 # Default to en-US to avoid uploading/managing all locales by default
-LOCALE="en-US"
+# Allow overriding via environment variable `LOCALE` when running in container
+LOCALE="${LOCALE:-en-US}"
 
 usage(){
   cat <<EOF

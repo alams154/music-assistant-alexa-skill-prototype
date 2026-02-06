@@ -389,9 +389,9 @@ def setup_start():
     # Allow override for local testing if provided in request body (kept for compatibility)
     if not endpoint:
         endpoint = data.get('endpoint')
-    # Fixed options (user-not-editable)
+    # Fixed options (user-not-editable). `LOCALE` may be set in the environment.
     profile = 'default'
-    locale = 'en-US'
+    locale = os.environ.get('LOCALE', 'en-US')
     stage = 'development'
     upload_models = True
 
@@ -588,7 +588,7 @@ def setup_code():
     # Start the create script now
     try:
         profile = 'default'
-        locale = 'en-US'
+        locale = os.environ.get('LOCALE', 'en-US')
         stage = 'development'
         # script is installed into the container at /app/scripts by the Dockerfile
         script_path = '/app/scripts/ask_create_skill.sh'
