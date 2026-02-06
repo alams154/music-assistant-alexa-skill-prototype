@@ -22,28 +22,7 @@ import shutil
 import urllib.parse
 
 
-def sanitize_log(s: str) -> str:
-    """Sanitize a log line for UI display: strip carriage returns, remove ANSI/escape
-    sequences and redact authorization codes so they do not appear in the status UI.
-    """
-    try:
-        if not isinstance(s, str):
-            s = str(s)
-    except Exception:
-        s = ''
-    # Remove literal JSON-escaped ESC sequences that may appear (e.g. "\\u001b")
-    s = s.replace('\\u001b', '')
-    # Remove carriage returns introduced by some CLI outputs
-    s = s.replace('\r', '')
-    # Strip ANSI escape sequences (CSI and common ESC patterns)
-    try:
-        s = re.sub(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])', '', s)
-    except Exception:
-        pass
-    # If the line references the authorization code prompt, redact any following text
-    if 'authorization code' in s.lower():
-        s = re.sub(r'(?i)(authorization code[:]?\s*).*', r"\1<REDACTED-AUTH-CODE>", s)
-    return s
+from setup_helpers import sanitize_log, enqueue_setup_log, setup_reader_thread as _helpers_setup_reader_thread, read_master_loop as _helpers_read_master_loop
 
 app = Flask(__name__)
 # Allow overriding where ASK CLI stores credentials so they persist across containers.
@@ -87,65 +66,18 @@ _PENDING_FILE = Path(os.environ.get('TMPDIR', '/tmp')) / 'ask_pending_endpoint.t
 
 
 def _enqueue_setup_log(line: str):
-    try:
-        _setup_logs.append(sanitize_log(line))
-    except Exception:
-        try:
-            _setup_logs.append(str(line))
-        except Exception:
-            pass
+    # Thin wrapper to keep module-level _setup_logs while delegating logic
+    enqueue_setup_log(_setup_logs, line)
 
 
 def _setup_reader_thread(proc, prefix=None):
-    try:
-        for line in proc.stdout:
-            if not line:
-                continue
-            text = line.rstrip('\n')
-            if prefix:
-                text = f'[{prefix}] {text}'
-            _enqueue_setup_log(text)
-    except Exception as e:
-        _enqueue_setup_log(f"[reader error] {e}")
+    # Delegate implementation to helpers while binding enqueue function
+    return _helpers_setup_reader_thread(proc, _enqueue_setup_log, prefix=prefix)
 
 
 def _read_master_loop(master_fd, prefix=None):
-    try:
-        buf = b''
-        while True:
-            try:
-                chunk = os.read(master_fd, 1024)
-            except OSError:
-                break
-            if not chunk:
-                break
-            buf += chunk
-            # Emit full lines when present
-            while b'\n' in buf:
-                line, buf = buf.split(b'\n', 1)
-                text = line.decode('utf-8', errors='replace')
-                if prefix:
-                    text = f'[{prefix}] {text}'
-                _enqueue_setup_log(text)
-            # Also search for URLs in the received chunk and emit them immediately
-            try:
-                s = chunk.decode('utf-8', errors='replace')
-                for m in re.findall(r"https?://[^\s'\"]+", s):
-                    txt = m
-                    if prefix:
-                        txt = f'[{prefix}] {txt}'
-                    _enqueue_setup_log(txt)
-            except Exception:
-                pass
-        if buf:
-            # Emit any remaining buffered text (partial line)
-            text = buf.decode('utf-8', errors='replace')
-            if text.strip():
-                if prefix:
-                    text = f'[{prefix}] {text}'
-                _enqueue_setup_log(text)
-    except Exception as e:
-        _enqueue_setup_log(f"[pty reader error] {e}")
+    # Delegate implementation to helpers while binding enqueue function
+    return _helpers_read_master_loop(master_fd, _enqueue_setup_log, prefix=prefix)
 
 
 @app.route("/", methods=["POST"])
