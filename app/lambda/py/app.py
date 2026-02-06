@@ -23,6 +23,7 @@ import urllib.parse
 
 
 from setup_helpers import sanitize_log, enqueue_setup_log, setup_reader_thread as _helpers_setup_reader_thread, read_master_loop as _helpers_read_master_loop
+from signal_helpers import register_signal_handlers
 
 app = Flask(__name__)
 # Allow overriding where ASK CLI stores credentials so they persist across containers.
@@ -68,6 +69,15 @@ _PENDING_FILE = Path(os.environ.get('TMPDIR', '/tmp')) / 'ask_pending_endpoint.t
 def _enqueue_setup_log(line: str):
     # Thin wrapper to keep module-level _setup_logs while delegating logic
     enqueue_setup_log(_setup_logs, line)
+
+
+# Register signal handlers via the helper module so Ctrl+C/SIGTERM are
+# forwarded to spawned ask/create processes. The getter returns current
+# live process references so the handler can operate on up-to-date values.
+try:
+    register_signal_handlers(lambda: {'_setup_auth_proc': _setup_auth_proc, '_setup_proc': _setup_proc, 'master_fd': _setup_auth_master_fd})
+except Exception:
+    pass
 
 
 def _setup_reader_thread(proc, prefix=None):
