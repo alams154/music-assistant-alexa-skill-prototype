@@ -20,6 +20,7 @@ import pty
 import re
 import shutil
 import urllib.parse
+import base64
 
 
 from setup_helpers import sanitize_log, enqueue_setup_log, setup_reader_thread as _helpers_setup_reader_thread, read_master_loop as _helpers_read_master_loop
@@ -45,13 +46,65 @@ skill_adapter = SkillAdapter(
 # Mount the Music Assistant Alexa API (only ma routes will be mounted at /ma)
 ma_app = maa_api.create_ma_app()
 
+
+class BasicAuthMiddleware:
+    """WSGI middleware that enforces HTTP Basic auth using APP_USERNAME/APP_PASSWORD.
+
+    Applied to the `ma_app` WSGI app so requests to `/ma` require the same
+    APP_USERNAME/APP_PASSWORD credentials as the rest of the app. If no
+    APP_USERNAME/APP_PASSWORD are configured, auth is not enforced.
+    """
+    def __init__(self, app):
+        self.app = app
+
+    def __call__(self, environ, start_response):
+        user = get_env_secret('APP_USERNAME')
+        pwd = get_env_secret('APP_PASSWORD')
+        if not user and not pwd:
+            return self.app(environ, start_response)
+
+        auth = environ.get('HTTP_AUTHORIZATION')
+        if auth and auth.startswith('Basic '):
+            try:
+                token = auth.split(' ', 1)[1].strip()
+                decoded = base64.b64decode(token).decode('utf-8')
+                u, sep, p = decoded.partition(':')
+                if sep and u == user and p == pwd:
+                    return self.app(environ, start_response)
+            except Exception:
+                pass
+
+        start_response('401 Unauthorized', [('Content-Type', 'text/plain'), ('WWW-Authenticate', 'Basic realm="music-assistant-skill"')])
+        return [b'Access denied']
+
 # Respect X-Forwarded-* headers when running behind a reverse proxy so
 # `request.host_url` and `request.scheme` reflect the external client URL.
 # Apply ProxyFix to both apps before wiring the dispatcher.
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 ma_app.wsgi_app = ProxyFix(ma_app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+# Wrap the MA app with BasicAuthMiddleware so /ma endpoints are protected
+ma_app.wsgi_app = BasicAuthMiddleware(ma_app.wsgi_app)
 app.wsgi_app = DispatcherMiddleware(app.wsgi_app, {'/ma': ma_app.wsgi_app})
 app.logger.info('Mounted music-assistant-alexa-api app at /ma')
+
+
+# Global basic auth for the app (protect everything except the root Alexa skill endpoint)
+@app.before_request
+def _check_app_basic_auth():
+    # Allow the Alexa skill POST endpoint to be called without app-level auth
+    if request.path == '/' and request.method == 'POST':
+        return None
+    # Read credentials from secrets (APP_USERNAME/APP_PASSWORD)
+    app_user = get_env_secret('APP_USERNAME')
+    app_pass = get_env_secret('APP_PASSWORD')
+    # If no app credentials configured, do not enforce auth
+    if not app_user and not app_pass:
+        return None
+    auth = request.authorization
+    if not auth or auth.username != app_user or auth.password != app_pass:
+        resp = Response('Access denied', 401)
+        resp.headers['WWW-Authenticate'] = 'Basic realm="music-assistant-skill"'
+        return resp
 
 # Setup process state (separate from status page)
 _setup_proc = None
@@ -98,8 +151,8 @@ def invoke_skill():
 @app.route("/status", methods=["GET"])
 def status():
     """Simple GET status page for health checks and browsing."""
-    api_user = get_env_secret('API_USERNAME')
-    api_pass = get_env_secret('API_PASSWORD')
+    api_user = get_env_secret('APP_USERNAME')
+    api_pass = get_env_secret('APP_PASSWORD')
 
     # Skill adapter status (we're running if this handler is invoked)
     skill_html = '<span class="led green"></span> Skill running'
@@ -239,8 +292,8 @@ def status():
 @app.route('/status/api', methods=['GET'])
 def status_api():
     """Return API status fragment as JSON (fast, local API check)."""
-    api_user = get_env_secret('API_USERNAME')
-    api_pass = get_env_secret('API_PASSWORD')
+    api_user = get_env_secret('APP_USERNAME')
+    api_pass = get_env_secret('APP_PASSWORD')
     endpoint_url = request.host_url.rstrip('/') + '/ma/latest-url'
     try:
         auth = (api_user, api_pass) if api_user and api_pass else None

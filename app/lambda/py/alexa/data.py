@@ -71,8 +71,8 @@ def get_latest(api_hostname: Optional[str] = None,
     # Prepare Authorization header if credentials provided (params or env)
     headers = {}
 
-    env_user = get_env_secret('API_USERNAME')
-    env_pass = get_env_secret('API_PASSWORD')
+    env_user = get_env_secret('APP_USERNAME')
+    env_pass = get_env_secret('APP_PASSWORD')
     if not username and env_user:
         username = env_user
     if not password and env_pass:

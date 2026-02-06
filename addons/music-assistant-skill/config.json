@@ -1,6 +1,6 @@
 {
   "name": "Music Assistant Alexa Skill",
-  "version": "0.0.17-beta",
+  "version": "0.0.18-beta",
   "slug": "music_assistant_skill",
   "description": "Expose the Music Assistant Alexa skill as a Home Assistant add-on (development/edge use).",
   "arch": [
@@ -22,16 +22,16 @@
   },
   "options": {
     "MA_HOSTNAME": "",
-    "API_USERNAME": "",
-    "API_PASSWORD": "",
+    "APP_USERNAME": "",
+    "APP_PASSWORD": "",
     "PORT": 5000,
     "DEBUG_PORT": 5678,
     "AWS_DEFAULT_REGION": "us-east-1"
   },
   "schema": {
     "MA_HOSTNAME": "str",
-    "API_USERNAME": "str",
-    "API_PASSWORD": "str",
+    "APP_USERNAME": "str",
+    "APP_PASSWORD": "str",
     "PORT": "int",
     "DEBUG_PORT": "int",
     "AWS_DEFAULT_REGION": "str"

@@ -68,16 +68,8 @@ def create_ma_blueprint():
     """
     bp = Blueprint('music_assistant_alexa_api_ma', __name__)
 
-    # Optional basic auth if USERNAME and PASSWORD are provided.
-    USERNAME = get_env_secret('API_USERNAME')
-    PASSWORD = get_env_secret('API_PASSWORD')
-
-    if USERNAME is not None and PASSWORD is not None:
-        @bp.before_request
-        def _check_basic_auth():
-            auth = request.authorization
-            if not auth or auth.username != USERNAME or auth.password != PASSWORD:
-                return _unauthorized()
+    # No basic auth enforced at the MA blueprint level; app-level auth is applied
+    # by the main application so the MA API runs without its own auth here.
 
     # Register endpoints implemented in the separate ma_routes module
     register_routes(bp)

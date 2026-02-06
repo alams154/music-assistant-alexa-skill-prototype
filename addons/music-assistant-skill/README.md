@@ -11,7 +11,7 @@ Installation (development):
 Configuration options (in Supervisor add-on configuration):
 
 - `MA_HOSTNAME`: optional hostname for your Music Assistant instance.
-- `API_USERNAME` / `API_PASSWORD`: credentials to authenticate to the Music Assistant API (optional).
+- `APP_USERNAME` / `APP_PASSWORD`: credentials to authenticate to the Music Assistant web UI and API (optional).
 - `PORT`: port the service listens on inside the container (default 5000).
 - `DEBUG_PORT`: optional debug port (default 5678).
 - `AWS_DEFAULT_REGION`: AWS region used by the skill when needed (default `us-east-1`).
