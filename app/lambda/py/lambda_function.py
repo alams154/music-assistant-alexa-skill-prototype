@@ -154,11 +154,13 @@ class LaunchRequestOrPlayAudioHandler(AbstractRequestHandler):
                 "Sorry, I could not retrieve the latest music stream from the API. Please check your setup.").set_should_end_session(True)
             return handler_input.response_builder.response
 
-        return util.play(url=url,
-                         offset=0,
-                         text=data.WELCOME_MSG,
-                         response_builder=handler_input.response_builder,
-                         supports_apl=supports_apl)
+        return util.play(
+            url=url,
+            offset=0,
+            text=data.WELCOME_MSG,
+            response_builder=handler_input.response_builder,
+            supports_apl=supports_apl
+        )
 
 
 class HelpIntentHandler(AbstractRequestHandler):
@@ -253,10 +255,12 @@ class ResumeIntentHandler(AbstractRequestHandler):
             return handler_input.response_builder.response
 
         return util.play(
-            url=url, offset=0,
-            text=speech,
+            url=url, 
+            offset=0,
+            text=data.WELCOME_MSG,
             response_builder=handler_input.response_builder,
-            supports_apl=supports_apl)
+            supports_apl=supports_apl
+        )
 
 
 class StartOverIntentHandler(AbstractRequestHandler):
@@ -353,7 +357,8 @@ class PlaybackNearlyFinishedHandler(AbstractRequestHandler):
 
         return util.play_later(
             url=url,
-            response_builder=handler_input.response_builder)
+            response_builder=handler_input.response_builder
+        )
 
 
 class PlaybackFailedHandler(AbstractRequestHandler):
@@ -376,9 +381,12 @@ class PlaybackFailedHandler(AbstractRequestHandler):
             return handler_input.response_builder.response
 
         return util.play(
-            url=url, offset=0, text=None,
+            url=url, 
+            offset=0, 
+            text=None,
             response_builder=handler_input.response_builder,
-            supports_apl=supports_apl)
+            supports_apl=supports_apl
+        )
 
 
 class ExceptionEncounteredHandler(AbstractRequestHandler):
@@ -424,11 +432,13 @@ class PlayCommandHandler(AbstractRequestHandler):
                 "Sorry, I couldn't reach the stream right now.").set_should_end_session(True)
             return handler_input.response_builder.response
 
-        return util.play(url=url,
-                         offset=0,
-                         text=None,
-                         response_builder=handler_input.response_builder,
-                         supports_apl=supports_apl)
+        return util.play(
+            url=url,
+            offset=0,
+            text=None,
+            response_builder=handler_input.response_builder,
+            supports_apl=supports_apl
+        )
 
 
 class NextOrPreviousCommandHandler(AbstractRequestHandler):
