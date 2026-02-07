@@ -7,6 +7,7 @@ is mounted at `/ma`.
 
 from flask import Flask, Blueprint
 import logging
+from .alexa_routes import register_routes
 
 
 def _ensure_logging_configured():
@@ -32,7 +33,8 @@ def _ensure_logging_configured():
 
 def create_blueprint():
     bp = Blueprint('alexa_api', __name__)
-    # Alexa-specific endpoints can be registered here in future.
+    # Register Alexa-specific endpoints implemented in alexa_routes
+    register_routes(bp)
     return bp
 
 

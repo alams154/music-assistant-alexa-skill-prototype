@@ -254,21 +254,53 @@ def status():
             if len(content_preview) > 500:
                 content_preview = content_preview[:500] + '...'
             if resp.ok:
-                api_html = (
+                ma_api_html = (
                     f'<span class="led green"></span> Music Assistant API reachable ({resp.status_code}) — /ma/latest-url'
                     f"<pre style='white-space:pre-wrap;background:#f6f6f6;padding:8px;border-radius:4px;max-height:200px;overflow:auto'>"
                     f"{content_preview}</pre>"
                 )
             else:
-                api_html = (
+                ma_api_html = (
                     f'<span class="led red"></span> Music Assistant API responded {resp.status_code} for /ma/latest-url'
                     f"<pre style='white-space:pre-wrap;background:#fdf2f2;padding:8px;border-radius:4px;max-height:200px;overflow:auto'>"
                     f"{content_preview}</pre>"
                 )
         except RequestException as e:
-            api_html = f'<span class="led red"></span> Error: {str(e)}'
+            ma_api_html = f'<span class="led red"></span> Error: {str(e)}'
 
-        return jsonify({'skill_html': skill_html, 'skill_ask_html': skill_ask_html, 'api_html': api_html, 'created': False})
+        # Alexa API status: call the locally mounted /alexa/latest-url endpoint on this service.
+        alexa_endpoint = request.host_url.rstrip('/') + '/alexa/latest-url'
+        try:
+            auth = (api_user, api_pass) if api_user and api_pass else None
+            resp = requests.get(alexa_endpoint, timeout=2, auth=auth)
+            try:
+                content_text = resp.content.decode('utf-8', errors='replace')
+            except Exception:
+                content_text = str(resp.content)
+            try:
+                parsed = json.loads(content_text)
+                pretty = json.dumps(parsed, indent=2, ensure_ascii=False)
+                content_preview = escape(pretty)
+            except Exception:
+                content_preview = escape(content_text)
+            if len(content_preview) > 500:
+                content_preview = content_preview[:500] + '...'
+            if resp.ok:
+                alexa_api_html = (
+                    f'<span class="led green"></span> Alexa API reachable ({resp.status_code}) — /alexa/latest-url'
+                    f"<pre style='white-space:pre-wrap;background:#f6f6f6;padding:8px;border-radius:4px;max-height:200px;overflow:auto'>"
+                    f"{content_preview}</pre>"
+                )
+            else:
+                alexa_api_html = (
+                    f'<span class="led red"></span> Alexa API responded {resp.status_code} for /alexa/latest-url'
+                    f"<pre style='white-space:pre-wrap;background:#fdf2f2;padding:8px;border-radius:4px;max-height:200px;overflow:auto'>"
+                    f"{content_preview}</pre>"
+                )
+        except RequestException as e:
+            alexa_api_html = f'<span class="led red"></span> Error: {str(e)}'
+
+        return jsonify({'skill_html': skill_html, 'skill_ask_html': skill_ask_html, 'ma_api_html': ma_api_html, 'alexa_api_html': alexa_api_html, 'created': False})
 
     # Non-JSON request: render page immediately and let client poll for updates
     try:
@@ -277,7 +309,8 @@ def status():
         # initial placeholders; detailed checks will be fetched by client-side polling
         tpl = tpl.replace('__SKILL_HTML__', skill_html)
         tpl = tpl.replace('__SKILL_ASK_HTML__', '<span class="muted">Checking ASK CLI status...</span>')
-        tpl = tpl.replace('__API_HTML__', '<span class="muted">Checking Music Assistant API...</span>')
+        tpl = tpl.replace('__MA_API_HTML__', '<span class="muted">Checking Music Assistant API...</span>')
+        tpl = tpl.replace('__ALEXA_API_HTML__', '<span class="muted">Checking Alexa API...</span>')
         return Response(tpl, status=200, mimetype='text/html')
     except Exception:
         html = f"""<!doctype html>
@@ -298,10 +331,16 @@ def status_api():
     """Return Music Assistant API status fragment as JSON (fast, local API check)."""
     api_user = get_env_secret('APP_USERNAME')
     api_pass = get_env_secret('APP_PASSWORD')
-    endpoint_url = request.host_url.rstrip('/') + '/ma/latest-url'
+    # Return both MA and Alexa status fragments so the status page poller
+    # can update both rows in one request.
+    ma_api_html = '<span class="muted">Checking Music Assistant API...</span>'
+    alexa_api_html = '<span class="muted">Checking Alexa API...</span>'
+
+    # Check MA API
+    ma_endpoint = request.host_url.rstrip('/') + '/ma/latest-url'
     try:
         auth = (api_user, api_pass) if api_user and api_pass else None
-        resp = requests.get(endpoint_url, timeout=2, auth=auth)
+        resp = requests.get(ma_endpoint, timeout=2, auth=auth)
         try:
             content_text = resp.content.decode('utf-8', errors='replace')
         except Exception:
@@ -315,20 +354,53 @@ def status_api():
         if len(content_preview) > 500:
             content_preview = content_preview[:500] + '...'
         if resp.ok:
-            api_html = (
+            ma_api_html = (
                 f'<span class="led green"></span> Music Assistant API reachable ({resp.status_code}) — /ma/latest-url'
                 f"<pre style='white-space:pre-wrap;background:#f6f6f6;padding:8px;border-radius:4px;max-height:200px;overflow:auto'>"
                 f"{content_preview}</pre>"
             )
         else:
-            api_html = (
+            ma_api_html = (
                 f'<span class="led red"></span> Music Assistant API responded {resp.status_code} for /ma/latest-url'
                 f"<pre style='white-space:pre-wrap;background:#fdf2f2;padding:8px;border-radius:4px;max-height:200px;overflow:auto'>"
                 f"{content_preview}</pre>"
             )
     except RequestException as e:
-        api_html = f'<span class="led red"></span> Error: {str(e)}'
-    return jsonify({'api_html': api_html})
+        ma_api_html = f'<span class="led red"></span> Error: {str(e)}'
+
+    # Check Alexa API
+    alexa_endpoint = request.host_url.rstrip('/') + '/alexa/latest-url'
+    try:
+        auth = (api_user, api_pass) if api_user and api_pass else None
+        resp = requests.get(alexa_endpoint, timeout=2, auth=auth)
+        try:
+            content_text = resp.content.decode('utf-8', errors='replace')
+        except Exception:
+            content_text = str(resp.content)
+        try:
+            parsed = json.loads(content_text)
+            pretty = json.dumps(parsed, indent=2, ensure_ascii=False)
+            content_preview = escape(pretty)
+        except Exception:
+            content_preview = escape(content_text)
+        if len(content_preview) > 500:
+            content_preview = content_preview[:500] + '...'
+        if resp.ok:
+            alexa_api_html = (
+                f'<span class="led green"></span> Alexa API reachable ({resp.status_code}) — /alexa/latest-url'
+                f"<pre style='white-space:pre-wrap;background:#f6f6f6;padding:8px;border-radius:4px;max-height:200px;overflow:auto'>"
+                f"{content_preview}</pre>"
+            )
+        else:
+            alexa_api_html = (
+                f'<span class="led red"></span> Alexa API responded {resp.status_code} for /alexa/latest-url'
+                f"<pre style='white-space:pre-wrap;background:#fdf2f2;padding:8px;border-radius:4px;max-height:200px;overflow:auto'>"
+                f"{content_preview}</pre>"
+            )
+    except RequestException as e:
+        alexa_api_html = f'<span class="led red"></span> Error: {str(e)}'
+
+    return jsonify({'ma_api_html': ma_api_html, 'alexa_api_html': alexa_api_html})
 
 
 @app.route('/status/ask', methods=['GET'])

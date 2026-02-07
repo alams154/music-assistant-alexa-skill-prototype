@@ -6,7 +6,7 @@ optional basic auth, a POST endpoint to push stream metadata and a GET
 endpoint to return the latest pushed URL.
 """
 
-from flask import Flask, Blueprint, Response
+from flask import Flask, Blueprint
 
 from .ma_routes import register_routes
 import logging
@@ -43,47 +43,15 @@ def _ensure_logging_configured():
     )
 
 
-def _unauthorized():
-    resp = Response('Access denied', 401)
-    resp.headers['WWW-Authenticate'] = 'Basic realm="music-assistant-api"'
-    return resp
-
-
 def create_blueprint():
     # Base blueprint for non-/ma endpoints. Keep empty for now.
     bp = Blueprint('music_assistant_api', __name__)
-    return bp
-
-
-def create_ma_blueprint():
-    """Create a blueprint with the ma routes and optional basic auth.
-
-    This blueprint is intended to be mounted at the `/ma` path only.
-    """
-    bp = Blueprint('music_assistant_api_ma', __name__)
-
-    # No basic auth enforced at the MA blueprint level; app-level auth is applied
-    # by the main application so the MA API runs without its own auth here.
-
-    # Register endpoints implemented in the separate ma_routes module
     register_routes(bp)
     return bp
 
 
-def create_app():
-    # Create and return a base app (no /ma routes mounted here).
+def create_ma_app():
     _ensure_logging_configured()
     app = Flask('music_assistant_api')
     app.register_blueprint(create_blueprint(), url_prefix='')
-    return app
-
-
-def create_ma_app():
-    """Create a Flask app that exposes only the `/` endpoints from `ma_routes`.
-
-    This app is intended to be mounted under `/ma` by the main application.
-    """
-    _ensure_logging_configured()
-    app = Flask('music_assistant_api_ma')
-    app.register_blueprint(create_ma_blueprint(), url_prefix='')
     return app

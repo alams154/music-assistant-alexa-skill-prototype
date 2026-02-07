@@ -5,6 +5,7 @@ import os
 import re
 import logging
 import requests
+from env_secrets import get_env_secret
 from typing import Dict, Optional
 from ask_sdk_model import Request, Response
 from ask_sdk_model.ui import StandardCard, Image
@@ -66,6 +67,36 @@ def audio_data(request):
         return data.info
     except Exception:
         return
+
+
+def push_alexa_metadata(url):
+    """Push the currently playing stream metadata to the Alexa API"""
+    payload = {
+        'streamUrl': url,
+        'title': data.info.get("primaryText"),
+        'secondary': data.info.get("secondaryText"),
+        'imageUrl': data.info.get("coverImageSource")
+    }
+
+    try:
+        # Alexa API is part of the same app/container; update its module-level
+        # store directly to avoid HTTP and latency.
+        from app.alexa_api import alexa_routes
+        alexa_routes._store = payload
+    except Exception:
+        # Fallback to localhost HTTP POST if direct import fails for any reason.
+        try:
+            push_endpoint = 'http://localhost:5000/alexa/push-url'
+            user = get_env_secret('APP_USERNAME')
+            pwd = get_env_secret('APP_PASSWORD')
+            if user and pwd:
+                requests.post(push_endpoint, json=payload, timeout=2, auth=(user, pwd))
+            else:
+                requests.post(push_endpoint, json=payload, timeout=2)
+        except requests.RequestException:
+            logging.exception('Failed to POST to Alexa API %s', push_endpoint)
+        except Exception:
+            logging.exception('Unexpected error while pushing Alexa metadata')
 
 
 def play(url, offset, text, response_builder, supports_apl=False):
@@ -136,6 +167,11 @@ def play(url, offset, text, response_builder, supports_apl=False):
 
     if text:
         response_builder.speak(text)
+
+    try:
+        push_alexa_metadata(url)
+    except Exception:
+        logging.exception('Error while preparing Alexa API push payload')
 
     return response_builder.response
 

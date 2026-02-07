@@ -18,14 +18,16 @@
                 <h1>Service Status</h1>
                 <div class="row">__SKILL_HTML__</div>
                 <div class="row" id="skill-ask-row">__SKILL_ASK_HTML__</div>
-                <div class="row" id="api-row">__API_HTML__</div>
+                <div class="row" id="api-row">__MA_API_HTML__</div>
+                <div class="row" id="alexa-row">__ALEXA_API_HTML__</div>
                 <script>
-                // Poll the Music Assistant API and ASK endpoints independently so results appear as they become available
-                (function pollMusicAssistantApi(){
+                // Poll the APIs and ASK endpoints independently so results appear as they become available
+                (function pollApis(){
                     fetch('/status/api').then(r=>r.json()).then(j=>{
-                        try{ const apiEl = document.getElementById('api-row'); if(apiEl && j.api_html){ apiEl.innerHTML = j.api_html; } }catch(e){}
-                        setTimeout(pollMusicAssistantApi, 3000);
-                    }).catch(()=>{ setTimeout(pollMusicAssistantApi, 5000); });
+                        try{ const maEl = document.getElementById('api-row'); if(maEl && j.ma_api_html){ maEl.innerHTML = j.ma_api_html; } }catch(e){}
+                        try{ const alexaEl = document.getElementById('alexa-row'); if(alexaEl && j.alexa_api_html){ alexaEl.innerHTML = j.alexa_api_html; } }catch(e){}
+                        setTimeout(pollApis, 3000);
+                    }).catch(()=>{ setTimeout(pollApis, 5000); });
                 })();
 
                 (function pollAsk(){
