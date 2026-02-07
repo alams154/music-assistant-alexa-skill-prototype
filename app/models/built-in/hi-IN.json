@@ -1,0 +1,37 @@
+{
+  "interactionModel": {
+    "languageModel": {
+      "invocationName": "",
+      "intents": [
+        { "name": "AMAZON.CancelIntent", "samples": ["रद्द करो", "कोई बात नहीं", "इसे भुला दो"] },
+        { "name": "AMAZON.FallbackIntent", "samples": ["मुझे नहीं पता", "यह काम नहीं करता"] },
+        { "name": "AMAZON.HelpIntent", "samples": ["मदद", "मदद कीजिए", "क्या आप मेरी मदद कर सकते हैं"] },
+        { "name": "AMAZON.LoopOffIntent", "samples": ["लूप बंद", "दौर बंद करो"] },
+        { "name": "AMAZON.LoopOnIntent", "samples": ["दौर चलाओ", "लूप चालू करो"] },
+        { "name": "AMAZON.NextIntent", "samples": ["अगला", "स्किप करो", "आगे बढ़ो"] },
+        { "name": "AMAZON.NoIntent", "samples": ["नहीं", "नहीं धन्यवाद"] },
+        { "name": "AMAZON.PauseIntent", "samples": ["रोकें", "बिराम"] },
+        { "name": "AMAZON.PreviousIntent", "samples": ["पिछला", "वापस जाओ"] },
+        { "name": "AMAZON.RepeatIntent", "samples": ["दोहराओ", "फिर से कहो"] },
+        { "name": "AMAZON.ResumeIntent", "samples": ["जारी रखें", "फिर से शुरू करें"] },
+        { "name": "AMAZON.SelectIntent", "samples": ["उस आइटम का चयन करें", "यह विकल्प चुनें"] },
+        { "name": "AMAZON.SendToPhoneIntent", "samples": ["मेरे फोन पर भेजें", "लिंक मेरे फोन पर भेजो"] },
+        { "name": "AMAZON.ShuffleOffIntent", "samples": ["शफल बंद", "बेतरतीब बंद करो"] },
+        { "name": "AMAZON.ShuffleOnIntent", "samples": ["शफल चालू", "बेतरतीब चलाओ"] },
+        { "name": "AMAZON.StartOverIntent", "samples": ["फिर से शुरू करें", "शुरू से शुरू करो"] },
+        { "name": "AMAZON.StopIntent", "samples": ["रुको", "बन्द करो", "निकालो"] },
+        { "name": "AMAZON.YesIntent", "samples": ["हां", "ज़रूर"] },
+        { "name": "AMAZON.ScrollUpIntent", "samples": ["ऊपर स्क्रॉल करो"] },
+        { "name": "AMAZON.ScrollLeftIntent", "samples": ["बाएं स्क्रॉल करो"] },
+        { "name": "AMAZON.ScrollDownIntent", "samples": ["नीचे स्क्रॉल करो"] },
+        { "name": "AMAZON.ScrollRightIntent", "samples": ["दाएं स्क्रॉल करो"] },
+        { "name": "AMAZON.PageUpIntent", "samples": ["पृष्ठ ऊपर"] },
+        { "name": "AMAZON.PageDownIntent", "samples": ["पृष्ठ नीचे"] },
+        { "name": "AMAZON.MoreIntent", "samples": ["और", "और दिखाओ"] },
+        { "name": "AMAZON.NavigateHomeIntent", "samples": ["होम पर जाएं", "होम स्क्रीन पर जाएं"] },
+        { "name": "AMAZON.NavigateSettingsIntent", "samples": ["सेटिंग्स खोलो", "सेटिंग्स पर जाओ"] }
+      ],
+      "types": []
+    }
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "interactionModel": {
+    "languageModel": {
+      "invocationName": "",
+      "intents": [
+        { "name": "AMAZON.CancelIntent", "samples": ["キャンセル", "やめて", "忘れて"] },
+        { "name": "AMAZON.FallbackIntent", "samples": ["わかりません", "それは違います"] },
+        { "name": "AMAZON.HelpIntent", "samples": ["ヘルプ", "助けて", "手伝って"] },
+        { "name": "AMAZON.LoopOffIntent", "samples": ["ループオフ", "ループを止めて"] },
+        { "name": "AMAZON.LoopOnIntent", "samples": ["ループ", "繰り返し再生して"] },
+        { "name": "AMAZON.NextIntent", "samples": ["次へ", "スキップ", "次の曲"] },
+        { "name": "AMAZON.NoIntent", "samples": ["いいえ", "結構です"] },
+        { "name": "AMAZON.PauseIntent", "samples": ["一時停止", "止めて"] },
+        { "name": "AMAZON.PreviousIntent", "samples": ["前へ", "戻る"] },
+        { "name": "AMAZON.RepeatIntent", "samples": ["もう一度言って", "繰り返して"] },
+        { "name": "AMAZON.ResumeIntent", "samples": ["再開して", "続けて"] },
+        { "name": "AMAZON.SelectIntent", "samples": ["その項目を選択して", "このオプションを選んで"] },
+        { "name": "AMAZON.SendToPhoneIntent", "samples": ["電話に送って", "携帯に送って"] },
+        { "name": "AMAZON.ShuffleOffIntent", "samples": ["シャッフルオフ", "シャッフルを止めて"] },
+        { "name": "AMAZON.ShuffleOnIntent", "samples": ["シャッフル", "ランダム再生して"] },
+        { "name": "AMAZON.StartOverIntent", "samples": ["最初から始めて", "やり直して"] },
+        { "name": "AMAZON.StopIntent", "samples": ["停止", "やめて", "終了して"] },
+        { "name": "AMAZON.YesIntent", "samples": ["はい", "どうぞ"] },
+        { "name": "AMAZON.ScrollUpIntent", "samples": ["上にスクロールして"] },
+        { "name": "AMAZON.ScrollLeftIntent", "samples": ["左にスクロールして"] },
+        { "name": "AMAZON.ScrollDownIntent", "samples": ["下にスクロールして"] },
+        { "name": "AMAZON.ScrollRightIntent", "samples": ["右にスクロールして"] },
+        { "name": "AMAZON.PageUpIntent", "samples": ["ページを上に"] },
+        { "name": "AMAZON.PageDownIntent", "samples": ["ページを下に"] },
+        { "name": "AMAZON.MoreIntent", "samples": ["もっと", "さらに表示して"] },
+        { "name": "AMAZON.NavigateHomeIntent", "samples": ["ホームに行って", "ホーム画面に行って"] },
+        { "name": "AMAZON.NavigateSettingsIntent", "samples": ["設定を開いて", "設定に移動して"] }
+      ],
+      "types": []
+    }
+  }
+}

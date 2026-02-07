@@ -1,0 +1,37 @@
+{
+  "interactionModel": {
+    "languageModel": {
+      "invocationName": "",
+      "intents": [
+        { "name": "AMAZON.CancelIntent", "samples": ["cancelar", "olvídalo", "no importa"] },
+        { "name": "AMAZON.FallbackIntent", "samples": ["no sé", "esto no funciona"] },
+        { "name": "AMAZON.HelpIntent", "samples": ["ayuda", "ayúdame", "puedes ayudarme"] },
+        { "name": "AMAZON.LoopOffIntent", "samples": ["bucle fuera", "desactivar repetición"] },
+        { "name": "AMAZON.LoopOnIntent", "samples": ["repetir", "activar bucle", "reproducir en bucle"] },
+        { "name": "AMAZON.NextIntent", "samples": ["siguiente", "saltar", "siguiente pista"] },
+        { "name": "AMAZON.NoIntent", "samples": ["no", "no gracias"] },
+        { "name": "AMAZON.PauseIntent", "samples": ["pausa", "pausar"] },
+        { "name": "AMAZON.PreviousIntent", "samples": ["anterior", "volver atrás"] },
+        { "name": "AMAZON.RepeatIntent", "samples": ["repetir eso", "otra vez", "repite"] },
+        { "name": "AMAZON.ResumeIntent", "samples": ["reanudar", "continuar"] },
+        { "name": "AMAZON.SelectIntent", "samples": ["selecciona ese elemento", "elige esta opción"] },
+        { "name": "AMAZON.SendToPhoneIntent", "samples": ["enviar a mi teléfono", "mándame el enlace al móvil"] },
+        { "name": "AMAZON.ShuffleOffIntent", "samples": ["desactivar aleatorio", "parar shuffle"] },
+        { "name": "AMAZON.ShuffleOnIntent", "samples": ["mezclar", "activar aleatorio"] },
+        { "name": "AMAZON.StartOverIntent", "samples": ["empezar de nuevo", "reiniciar"] },
+        { "name": "AMAZON.StopIntent", "samples": ["detener", "para", "salir"] },
+        { "name": "AMAZON.YesIntent", "samples": ["sí", "claro"] },
+        { "name": "AMAZON.ScrollUpIntent", "samples": ["desplazar hacia arriba"] },
+        { "name": "AMAZON.ScrollLeftIntent", "samples": ["desplazar a la izquierda"] },
+        { "name": "AMAZON.ScrollDownIntent", "samples": ["desplazar hacia abajo"] },
+        { "name": "AMAZON.ScrollRightIntent", "samples": ["desplazar a la derecha"] },
+        { "name": "AMAZON.PageUpIntent", "samples": ["página arriba"] },
+        { "name": "AMAZON.PageDownIntent", "samples": ["página abajo"] },
+        { "name": "AMAZON.MoreIntent", "samples": ["más", "muéstrame más"] },
+        { "name": "AMAZON.NavigateHomeIntent", "samples": ["ir a inicio", "ir a la pantalla de inicio"] },
+        { "name": "AMAZON.NavigateSettingsIntent", "samples": ["abrir ajustes", "ir a ajustes"] }
+      ],
+      "types": []
+    }
+  }
+}

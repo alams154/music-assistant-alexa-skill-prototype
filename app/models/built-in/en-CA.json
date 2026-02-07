@@ -1,0 +1,37 @@
+{
+  "interactionModel": {
+    "languageModel": {
+      "invocationName": "",
+      "intents": [
+        { "name": "AMAZON.CancelIntent", "samples": ["cancel", "never mind", "forget it"] },
+        { "name": "AMAZON.FallbackIntent", "samples": [] },
+        { "name": "AMAZON.HelpIntent", "samples": ["help", "help me", "can you help me"] },
+        { "name": "AMAZON.LoopOffIntent", "samples": ["loop off"] },
+        { "name": "AMAZON.LoopOnIntent", "samples": ["loop", "loop on", "keep playing this"] },
+        { "name": "AMAZON.NextIntent", "samples": ["next", "skip", "skip forward"] },
+        { "name": "AMAZON.NoIntent", "samples": ["no", "no thanks"] },
+        { "name": "AMAZON.PauseIntent", "samples": ["pause", "pause that"] },
+        { "name": "AMAZON.PreviousIntent", "samples": ["go back", "skip back", "back up"] },
+        { "name": "AMAZON.RepeatIntent", "samples": ["repeat", "say that again", "repeat that"] },
+        { "name": "AMAZON.ResumeIntent", "samples": ["resume", "continue", "keep going"] },
+        { "name": "AMAZON.SelectIntent", "samples": ["select that item", "pick this option", "get fourth option", "select third entry", "select fifth item", "get top result", "get last result", "show the first option", "show that item"] },
+        { "name": "AMAZON.SendToPhoneIntent", "samples": ["send a link to my phone", "send it please", "can you send it to me"] },
+        { "name": "AMAZON.ShuffleOffIntent", "samples": ["stop shuffling", "shuffle off", "turn off shuffle"] },
+        { "name": "AMAZON.ShuffleOnIntent", "samples": ["shuffle", "shuffle on", "shuffle the music", "shuffle mode"] },
+        { "name": "AMAZON.StartOverIntent", "samples": ["start over", "restart", "start again"] },
+        { "name": "AMAZON.StopIntent", "samples": ["stop", "off", "shut up"] },
+        { "name": "AMAZON.YesIntent", "samples": ["yes", "yes please", "sure"] },
+        { "name": "AMAZON.ScrollUpIntent", "samples": ["scroll up"] },
+        { "name": "AMAZON.ScrollLeftIntent", "samples": ["scroll left"] },
+        { "name": "AMAZON.ScrollDownIntent", "samples": ["scroll down"] },
+        { "name": "AMAZON.ScrollRightIntent", "samples": ["scroll right"] },
+        { "name": "AMAZON.PageUpIntent", "samples": ["page up"] },
+        { "name": "AMAZON.PageDownIntent", "samples": ["page down"] },
+        { "name": "AMAZON.MoreIntent", "samples": ["more", "show more", "show more please"] },
+        { "name": "AMAZON.NavigateHomeIntent", "samples": ["go home", "go to the home screen", "go to my home page"] },
+        { "name": "AMAZON.NavigateSettingsIntent", "samples": ["open settings", "go to settings"] }
+      ],
+      "types": []
+    }
+  }
+}

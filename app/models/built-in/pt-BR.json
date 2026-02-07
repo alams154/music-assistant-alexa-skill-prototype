@@ -1,0 +1,37 @@
+{
+  "interactionModel": {
+    "languageModel": {
+      "invocationName": "",
+      "intents": [
+        { "name": "AMAZON.CancelIntent", "samples": ["cancelar", "esquece", "não importa"] },
+        { "name": "AMAZON.FallbackIntent", "samples": ["não sei", "isso não funciona"] },
+        { "name": "AMAZON.HelpIntent", "samples": ["ajuda", "me ajude", "você pode me ajudar"] },
+        { "name": "AMAZON.LoopOffIntent", "samples": ["repetir desligado", "desligar loop"] },
+        { "name": "AMAZON.LoopOnIntent", "samples": ["repetir", "ligar loop", "reproduzir em loop"] },
+        { "name": "AMAZON.NextIntent", "samples": ["próximo", "pular", "avançar"] },
+        { "name": "AMAZON.NoIntent", "samples": ["não", "não obrigado"] },
+        { "name": "AMAZON.PauseIntent", "samples": ["pausar", "pausa"] },
+        { "name": "AMAZON.PreviousIntent", "samples": ["anterior", "voltar"] },
+        { "name": "AMAZON.RepeatIntent", "samples": ["repetir isso", "de novo", "repete"] },
+        { "name": "AMAZON.ResumeIntent", "samples": ["retomar", "continuar"] },
+        { "name": "AMAZON.SelectIntent", "samples": ["seleciona esse item", "escolhe essa opção"] },
+        { "name": "AMAZON.SendToPhoneIntent", "samples": ["enviar para meu telefone", "manda para meu celular"] },
+        { "name": "AMAZON.ShuffleOffIntent", "samples": ["desligar aleatório", "parar shuffle"] },
+        { "name": "AMAZON.ShuffleOnIntent", "samples": ["embaralhar", "ativar shuffle"] },
+        { "name": "AMAZON.StartOverIntent", "samples": ["recomeçar", "começar de novo"] },
+        { "name": "AMAZON.StopIntent", "samples": ["parar", "pare", "sair"] },
+        { "name": "AMAZON.YesIntent", "samples": ["sim", "claro"] },
+        { "name": "AMAZON.ScrollUpIntent", "samples": ["rolar para cima"] },
+        { "name": "AMAZON.ScrollLeftIntent", "samples": ["rolar para a esquerda"] },
+        { "name": "AMAZON.ScrollDownIntent", "samples": ["rolar para baixo"] },
+        { "name": "AMAZON.ScrollRightIntent", "samples": ["rolar para a direita"] },
+        { "name": "AMAZON.PageUpIntent", "samples": ["página para cima"] },
+        { "name": "AMAZON.PageDownIntent", "samples": ["página para baixo"] },
+        { "name": "AMAZON.MoreIntent", "samples": ["mais", "mostrar mais"] },
+        { "name": "AMAZON.NavigateHomeIntent", "samples": ["ir para a tela inicial", "ir para a home"] },
+        { "name": "AMAZON.NavigateSettingsIntent", "samples": ["abrir configurações", "ir para configurações"] }
+      ],
+      "types": []
+    }
+  }
+}

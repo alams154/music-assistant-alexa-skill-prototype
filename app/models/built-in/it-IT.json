@@ -1,0 +1,37 @@
+{
+  "interactionModel": {
+    "languageModel": {
+      "invocationName": "",
+      "intents": [
+        { "name": "AMAZON.CancelIntent", "samples": ["annulla", "dimenticalo", "non importa"] },
+        { "name": "AMAZON.FallbackIntent", "samples": ["non so", "non è questo"] },
+        { "name": "AMAZON.HelpIntent", "samples": ["aiuto", "aiutami", "puoi aiutarmi"] },
+        { "name": "AMAZON.LoopOffIntent", "samples": ["ripetizione disattivata", "togli loop"] },
+        { "name": "AMAZON.LoopOnIntent", "samples": ["ripeti", "attiva loop", "riproduci in loop"] },
+        { "name": "AMAZON.NextIntent", "samples": ["successivo", "salta", "vai al prossimo"] },
+        { "name": "AMAZON.NoIntent", "samples": ["no", "no grazie"] },
+        { "name": "AMAZON.PauseIntent", "samples": ["pausa", "metti in pausa"] },
+        { "name": "AMAZON.PreviousIntent", "samples": ["precedente", "torna indietro"] },
+        { "name": "AMAZON.RepeatIntent", "samples": ["ripeti quello", "di nuovo", "ripetilo"] },
+        { "name": "AMAZON.ResumeIntent", "samples": ["riprendi", "continua"] },
+        { "name": "AMAZON.SelectIntent", "samples": ["seleziona quell'elemento", "scegli questa opzione"] },
+        { "name": "AMAZON.SendToPhoneIntent", "samples": ["invia al mio telefono", "mandami il link sul cellulare"] },
+        { "name": "AMAZON.ShuffleOffIntent", "samples": ["disattiva riproduzione casuale", "togli shuffle"] },
+        { "name": "AMAZON.ShuffleOnIntent", "samples": ["riproduzione casuale", "attiva shuffle"] },
+        { "name": "AMAZON.StartOverIntent", "samples": ["ricomincia", "riparti dall'inizio"] },
+        { "name": "AMAZON.StopIntent", "samples": ["ferma", "smettila", "esci"] },
+        { "name": "AMAZON.YesIntent", "samples": ["sì", "certo"] },
+        { "name": "AMAZON.ScrollUpIntent", "samples": ["scorri verso l'alto"] },
+        { "name": "AMAZON.ScrollLeftIntent", "samples": ["scorri a sinistra"] },
+        { "name": "AMAZON.ScrollDownIntent", "samples": ["scorri verso il basso"] },
+        { "name": "AMAZON.ScrollRightIntent", "samples": ["scorri a destra"] },
+        { "name": "AMAZON.PageUpIntent", "samples": ["pagina su"] },
+        { "name": "AMAZON.PageDownIntent", "samples": ["pagina giù"] },
+        { "name": "AMAZON.MoreIntent", "samples": ["altro", "mostra altro"] },
+        { "name": "AMAZON.NavigateHomeIntent", "samples": ["vai alla home", "vai alla schermata iniziale"] },
+        { "name": "AMAZON.NavigateSettingsIntent", "samples": ["apri impostazioni", "vai alle impostazioni"] }
+      ],
+      "types": []
+    }
+  }
+}

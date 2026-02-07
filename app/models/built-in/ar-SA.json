@@ -1,0 +1,37 @@
+{
+  "interactionModel": {
+    "languageModel": {
+      "invocationName": "",
+      "intents": [
+        { "name": "AMAZON.CancelIntent", "samples": ["إلغاء", "انسَ ذلك", "لا يهم"] },
+        { "name": "AMAZON.FallbackIntent", "samples": ["لا أعرف", "هذا غير صحيح"] },
+        { "name": "AMAZON.HelpIntent", "samples": ["مساعدة", "أحتاج مساعدة", "هل يمكنك مساعدتي"] },
+        { "name": "AMAZON.LoopOffIntent", "samples": ["إيقاف التكرار", "إيقاف الحلقة"] },
+        { "name": "AMAZON.LoopOnIntent", "samples": ["تكرار", "تشغيل الحلقة"] },
+        { "name": "AMAZON.NextIntent", "samples": ["التالي", "تخطي", "التالي من فضلك"] },
+        { "name": "AMAZON.NoIntent", "samples": ["لا", "لا شكرًا"] },
+        { "name": "AMAZON.PauseIntent", "samples": ["إيقاف مؤقت", "أوقف تشغيله"] },
+        { "name": "AMAZON.PreviousIntent", "samples": ["السابق", "ارجع"] },
+        { "name": "AMAZON.RepeatIntent", "samples": ["أعد ذلك", "كرر ذلك"] },
+        { "name": "AMAZON.ResumeIntent", "samples": ["استمر", "استأنف"] },
+        { "name": "AMAZON.SelectIntent", "samples": ["اختر هذا العنصر", "اختر هذا الخيار"] },
+        { "name": "AMAZON.SendToPhoneIntent", "samples": ["أرسل إلى هاتفي", "أرسل الرابط إلى هاتفي"] },
+        { "name": "AMAZON.ShuffleOffIntent", "samples": ["إيقاف التشغيل العشوائي", "إيقاف المزج"] },
+        { "name": "AMAZON.ShuffleOnIntent", "samples": ["تشغيل عشوائي", "مزيج"] },
+        { "name": "AMAZON.StartOverIntent", "samples": ["ابدأ من جديد", "أعد التشغيل"] },
+        { "name": "AMAZON.StopIntent", "samples": ["أوقف", "توقف", "اخرج"] },
+        { "name": "AMAZON.YesIntent", "samples": ["نعم", "بالتأكيد"] },
+        { "name": "AMAZON.ScrollUpIntent", "samples": ["التمرير لأعلى"] },
+        { "name": "AMAZON.ScrollLeftIntent", "samples": ["التمرير لليسار"] },
+        { "name": "AMAZON.ScrollDownIntent", "samples": ["التمرير لأسفل"] },
+        { "name": "AMAZON.ScrollRightIntent", "samples": ["التمرير لليمين"] },
+        { "name": "AMAZON.PageUpIntent", "samples": ["الصفحة للأعلى"] },
+        { "name": "AMAZON.PageDownIntent", "samples": ["الصفحة لأسفل"] },
+        { "name": "AMAZON.MoreIntent", "samples": ["المزيد", "أظهر المزيد"] },
+        { "name": "AMAZON.NavigateHomeIntent", "samples": ["الذهاب إلى الصفحة الرئيسية", "اذهب إلى الشاشة الرئيسية"] },
+        { "name": "AMAZON.NavigateSettingsIntent", "samples": ["افتح الإعدادات", "اذهب إلى الإعدادات"] }
+      ],
+      "types": []
+    }
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "interactionModel": {
+    "languageModel": {
+      "invocationName": "",
+      "intents": [
+        { "name": "AMAZON.CancelIntent", "samples": ["annuleren", "laat maar", "vergeet het"] },
+        { "name": "AMAZON.FallbackIntent", "samples": ["ik weet het niet", "dat helpt niet"] },
+        { "name": "AMAZON.HelpIntent", "samples": ["help", "help me", "kun je me helpen"] },
+        { "name": "AMAZON.LoopOffIntent", "samples": ["lus uit", "herhalen uitschakelen"] },
+        { "name": "AMAZON.LoopOnIntent", "samples": ["herhalen", "lus aan", "blijf afspelen"] },
+        { "name": "AMAZON.NextIntent", "samples": ["volgende", "sla over", "ga naar de volgende"] },
+        { "name": "AMAZON.NoIntent", "samples": ["nee", "nee bedankt"] },
+        { "name": "AMAZON.PauseIntent", "samples": ["pauze", "pauzeer"] },
+        { "name": "AMAZON.PreviousIntent", "samples": ["vorige", "ga terug"] },
+        { "name": "AMAZON.RepeatIntent", "samples": ["herhaal dat", "nog een keer", "zeg het nog eens"] },
+        { "name": "AMAZON.ResumeIntent", "samples": ["doorgaan", "hervatten"] },
+        { "name": "AMAZON.SelectIntent", "samples": ["selecteer dat item", "kies deze optie"] },
+        { "name": "AMAZON.SendToPhoneIntent", "samples": ["naar mijn telefoon sturen", "stuur het naar mijn mobiel"] },
+        { "name": "AMAZON.ShuffleOffIntent", "samples": ["shuffle uit", "willekeurig uit"] },
+        { "name": "AMAZON.ShuffleOnIntent", "samples": ["shuffle aan", "willekeurig afspelen"] },
+        { "name": "AMAZON.StartOverIntent", "samples": ["opnieuw beginnen", "herstart"] },
+        { "name": "AMAZON.StopIntent", "samples": ["stop", "hou op", "sluit af"] },
+        { "name": "AMAZON.YesIntent", "samples": ["ja", "graag"] },
+        { "name": "AMAZON.ScrollUpIntent", "samples": ["scroll omhoog"] },
+        { "name": "AMAZON.ScrollLeftIntent", "samples": ["scroll naar links"] },
+        { "name": "AMAZON.ScrollDownIntent", "samples": ["scroll omlaag"] },
+        { "name": "AMAZON.ScrollRightIntent", "samples": ["scroll naar rechts"] },
+        { "name": "AMAZON.PageUpIntent", "samples": ["pagina omhoog"] },
+        { "name": "AMAZON.PageDownIntent", "samples": ["pagina omlaag"] },
+        { "name": "AMAZON.MoreIntent", "samples": ["meer", "toon meer"] },
+        { "name": "AMAZON.NavigateHomeIntent", "samples": ["ga naar start", "naar de startpagina gaan"] },
+        { "name": "AMAZON.NavigateSettingsIntent", "samples": ["open instellingen", "ga naar instellingen"] }
+      ],
+      "types": []
+    }
+  }
+}
