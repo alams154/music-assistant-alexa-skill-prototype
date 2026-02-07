@@ -17,6 +17,48 @@ from ask_sdk_core.handler_input import HandlerInput
 from ask_sdk_model.interfaces.alexa.presentation.apl import RenderDocumentDirective
 from . import data
 
+
+def get_ma_hostname(raise_on_http_scheme=True):
+    """Read and sanitize MA_HOSTNAME environment variable and return a https:// hostname or empty string.
+
+    If `raise_on_http_scheme` is True and the provided value starts with http://, a
+    ValueError is raised so callers can surface an appropriate error to the user.
+    """
+    hostname_raw = os.environ.get('MA_HOSTNAME', '')
+    hostname_raw = hostname_raw.strip()
+    # strip surrounding single/double quotes
+    if len(hostname_raw) >= 2 and ((hostname_raw[0] == hostname_raw[-1] == '"') or (hostname_raw[0] == hostname_raw[-1] == "'")):
+        hostname_raw = hostname_raw[1:-1].strip()
+    # final cleanup of stray quotes/whitespace
+    hostname_raw = hostname_raw.strip('"\' ')
+
+    if hostname_raw == '':
+        return ''
+
+    hostname_clean = hostname_raw.rstrip('/')
+    if hostname_clean.startswith('https://'):
+        return hostname_clean
+    if hostname_clean.startswith('http://'):
+        if raise_on_http_scheme:
+            raise ValueError('http_scheme')
+        return ''
+
+    return f'https://{hostname_clean}'
+
+
+def replace_ip_in_url(url, hostname):
+    """Replace an IP address host at the start of `url` with `hostname` and
+    percent-encode spaces. Returns the modified url.
+    """
+    if not url:
+        return url
+    try:
+        new_url = re.sub(r'^https?://\d+\.\d+\.\d+\.\d+(?::\d+)?', hostname, url)
+    except re.error:
+        # In case the regex fails for some odd reason, just return original
+        return url.replace(' ', '%20')
+    return new_url.replace(' ', '%20')
+
 def audio_data(request):
     # type: (Request) -> Dict
     try:
@@ -43,39 +85,20 @@ def play(url, offset, text, response_builder, supports_apl=False):
     if supports_apl:
         add_apl(response_builder)
     else:
-        # Read and sanitize MA_HOSTNAME environment variable.
-        # Accept values like example.com, https://example.com:8443, 'example.com', or "example.com"
-        hostname_raw = os.environ.get('MA_HOSTNAME', '')
-        hostname_raw = hostname_raw.strip()
-        # strip surrounding single/double quotes
-        if len(hostname_raw) >= 2 and ((hostname_raw[0] == hostname_raw[-1] == '"') or (hostname_raw[0] == hostname_raw[-1] == "'")):
-            hostname_raw = hostname_raw[1:-1].strip()
-        # final cleanup of stray quotes/whitespace
-        hostname_raw = hostname_raw.strip('"\' ')
-
-        if hostname_raw == '':
-            hostname = ''
-        else:
-            # remove trailing slash(es)
-            hostname_clean = hostname_raw.rstrip('/')
-            # keep provided scheme if present, otherwise default to https
-            if hostname_clean.startswith('https://'):
-                hostname = hostname_clean
-            elif hostname_clean.startswith('http://'):
-                response_builder.speak(
+        # Sanitize MA_HOSTNAME and replace IP-host in the provided stream URL.
+        try:
+            hostname = get_ma_hostname(raise_on_http_scheme=True)
+        except ValueError:
+            response_builder.speak(
                 "The domain uses an unsupported scheme (http). Please check your environment variable MA_HOSTNAME.").set_should_end_session(True)
-                return response_builder.response
-            else:
-                hostname = f'https://{hostname_clean}'
+            return response_builder.response
 
-        # Only replace IP-host in URL when we have a valid hostname to insert
-        if hostname:
-            url = re.sub(r'^https?://\d+\.\d+\.\d+\.\d+(?::\d+)?', hostname, url)
-        else:
+        if not hostname:
             response_builder.speak(
                 "You did not specify a valid hostname. Please check your environment variable MA_HOSTNAME.").set_should_end_session(True)
-            return response_builder.response  
-        url = url.replace(' ', '%20')
+            return response_builder.response
+
+        url = replace_ip_in_url(url, hostname)
 
         # Ensure the resource exists and appears playable. Try HEAD first, fall back to GET.
         try:
@@ -152,6 +175,15 @@ def clear(response_builder):
 
 def add_apl(response_builder):
     """Add the RenderDocumentDirective"""
+    # Replace MA-hosted image sources if MA_HOSTNAME is set.
+    try:
+        hostname = get_ma_hostname(raise_on_http_scheme=False)
+    except ValueError:
+        hostname = ''
+
+    if hostname:
+        data.info["coverImageSource"] = replace_ip_in_url(data.info.get("coverImageSource", ""), hostname)
+
     apl_document = {
         "type": "APL",
         "version": "2024.3",
