@@ -11,7 +11,7 @@
             },
             "pathMappings": [
                 {
-                    "localRoot": "${workspaceFolder}/app/lambda/py",
+                    "localRoot": "${workspaceFolder}/app",
                     "remoteRoot": "/app/src"
                 }
             ]
@@ -23,7 +23,7 @@
             "request": "launch",
             "module": "app",
             "python": "${workspaceFolder}/venv/bin/python",
-            "cwd": "${workspaceFolder}/app/lambda/py",
+            "cwd": "${workspaceFolder}/app",
             "justMyCode": false,
             "args": [],
             "env": {

@@ -18,6 +18,6 @@ Configuration options (in Supervisor add-on configuration):
 
 Notes:
 
-- The add-on Dockerfile copies the whole repository into the image and runs the Flask-based service at `app/lambda/py/app.py`.
+- The add-on Dockerfile copies the whole repository into the image and runs the Flask-based service at `app/app.py`.
 - Additional system packages are installed to be able to build Python packages from `requirements.txt`.
 - This add-on is provided as a development convenience. For production or publishing to the official add-on store further hardening and configuration is recommended.

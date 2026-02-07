@@ -6,7 +6,7 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VENV_DIR="$REPO_ROOT/venv"
-REQ_FILE="$REPO_ROOT/app/lambda/py/requirements.txt"
+REQ_FILE="$REPO_ROOT/app/requirements.txt"
 
 # Allow overriding python with env var PYTHON (e.g. PYTHON=python3.11)
 PYTHON_CMD="${PYTHON:-}"

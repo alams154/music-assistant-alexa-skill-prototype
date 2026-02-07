@@ -15,8 +15,8 @@ RUN apt-get update \
 COPY . /opt/music-assistant
 
 # Install Python dependencies used by the skill web service
-RUN pip install --no-cache-dir -r app/lambda/py/requirements.txt
+RUN pip install --no-cache-dir -r app/requirements.txt
 
 EXPOSE 5000 5678
 
-CMD ["python", "app/lambda/py/app.py"]
+CMD ["python", "app/app.py"]

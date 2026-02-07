@@ -13,7 +13,7 @@ RUN apt-get update && \
 WORKDIR /app
 
 # Copy only requirements first, then install dependencies
-COPY app/lambda/py/requirements.txt /app/requirements.txt
+COPY app/requirements.txt /app/requirements.txt
 RUN python3.10 -m venv venv && \
     . venv/bin/activate && \
     pip install --upgrade pip && \
@@ -24,7 +24,7 @@ RUN python3.10 -m venv venv && \
 RUN npm install -g ask-cli || true
 
 # Now copy the rest of your source code (commented out for dynamic development)
-COPY app/lambda/py /app/src
+COPY app /app/src
 # Copy the skill manifest and related app files so runtime can find app/skill.json
 # This ensures /app/app/skill.json exists inside the container for the create script.
 COPY app /app/app
