@@ -2,6 +2,10 @@
 
 import logging
 import gettext
+
+import time
+import base64
+import json
 from ask_sdk.standard import StandardSkillBuilder
 from ask_sdk_core.dispatch_components import (
     AbstractRequestHandler, AbstractExceptionHandler,
@@ -12,6 +16,8 @@ from ask_sdk_model import Response
 
 from . import data, util
 
+
+from .ma_library import fetch_tracks_by_artist
 sb = StandardSkillBuilder()
 # sb = StandardSkillBuilder(
 #     table_name=data.jingle["db_table"], auto_create_table=True)
@@ -66,6 +72,22 @@ logging.basicConfig(
 
 supports_apl = False
 
+
+
+
+PLAYLISTS = {}  # key -> {"tracks": [...], "idx": int, "expires": float}
+PLAYLIST_TTL_SEC = 60 * 30  # 30 min
+
+def _pl_key(handler_input: HandlerInput) -> str:
+    user_id = handler_input.request_envelope.context.system.user.user_id
+    device_id = handler_input.request_envelope.context.system.device.device_id
+    return f"{user_id}:{device_id}"
+
+def _cleanup_playlists() -> None:
+    now = time.time()
+    for k in list(PLAYLISTS.keys()):
+        if PLAYLISTS[k].get("expires", 0) < now:
+            del PLAYLISTS[k]
 
 def _get_stream_url(request):
     """Return (url, audio_data) where url is resolved from util.audio_data.
@@ -162,6 +184,122 @@ class LaunchRequestOrPlayAudioHandler(AbstractRequestHandler):
             supports_apl=supports_apl
         )
 
+
+class PlayArtistIntentHandler(AbstractRequestHandler):
+    """Play tracks of an artist from local Music Assistant library."""
+    def can_handle(self, handler_input):
+        return is_intent_name("PlayArtistIntent")(handler_input)
+
+    def handle(self, handler_input):
+        logger.info("In PlayArtistIntentHandler")
+        _cleanup_playlists()
+
+        intent = getattr(handler_input.request_envelope.request, "intent", None)
+        slots = getattr(intent, "slots", {}) if intent else {}
+        artist_slot = slots.get("artist")
+        artist_name = (getattr(artist_slot, "value", "") or "").strip() if artist_slot else ""
+
+        if not artist_name:
+            return (
+                handler_input.response_builder
+                .speak("Quel artiste veux-tu écouter ?")
+                .ask("Dis par exemple : joue David Guetta.")
+                .set_should_end_session(False)
+                .response
+            )
+
+        try:
+            tracks = fetch_tracks_by_artist(artist_name, limit=50)
+        except Exception as e:
+            logger.exception("Failed to fetch tracks from Music Assistant: %s", e)
+            return (
+                handler_input.response_builder
+                .speak("Désolé, je n'arrive pas à accéder à Music Assistant pour le moment.")
+                .set_should_end_session(True)
+                .response
+            )
+
+        if not tracks:
+            return (
+                handler_input.response_builder
+                .speak(f"Je n'ai trouvé aucun titre de {artist_name} dans ta bibliothèque Music Assistant.")
+                .set_should_end_session(True)
+                .response
+            )
+
+        k = _pl_key(handler_input)
+        PLAYLISTS[k] = {"tracks": tracks, "idx": 0, "expires": time.time() + PLAYLIST_TTL_SEC}
+        first = tracks[0]
+
+        return util.play(
+            url=first["url"],
+            offset=0,
+            text=f"D'accord. Je lance {artist_name}.",
+            response_builder=handler_input.response_builder,
+            supports_apl=supports_apl
+        )
+
+
+class NextIntentHandler(AbstractRequestHandler):
+    """Override NEXT to move inside the MA artist queue."""
+    def can_handle(self, handler_input):
+        return is_intent_name("AMAZON.NextIntent")(handler_input)
+
+    def handle(self, handler_input):
+        _cleanup_playlists()
+        k = _pl_key(handler_input)
+        pl = PLAYLISTS.get(k)
+
+        if not pl or not pl.get("tracks"):
+            return (
+                handler_input.response_builder
+                .speak("Je n'ai rien en file d'attente. Dis par exemple : joue David Guetta.")
+                .set_should_end_session(True)
+                .response
+            )
+
+        pl["idx"] = min(pl["idx"] + 1, len(pl["tracks"]) - 1)
+        pl["expires"] = time.time() + PLAYLIST_TTL_SEC
+        tr = pl["tracks"][pl["idx"]]
+
+        return util.play(
+            url=tr["url"],
+            offset=0,
+            text=None,
+            response_builder=handler_input.response_builder,
+            supports_apl=supports_apl
+        )
+
+
+class PreviousIntentHandler(AbstractRequestHandler):
+    """Override PREVIOUS to move inside the MA artist queue."""
+    def can_handle(self, handler_input):
+        return is_intent_name("AMAZON.PreviousIntent")(handler_input)
+
+    def handle(self, handler_input):
+        _cleanup_playlists()
+        k = _pl_key(handler_input)
+        pl = PLAYLISTS.get(k)
+
+        if not pl or not pl.get("tracks"):
+            return (
+                handler_input.response_builder
+                .speak("Je n'ai rien en file d'attente. Dis par exemple : joue David Guetta.")
+                .set_should_end_session(True)
+                .response
+            )
+
+        pl["idx"] = max(pl["idx"] - 1, 0)
+        pl["expires"] = time.time() + PLAYLIST_TTL_SEC
+        tr = pl["tracks"][pl["idx"]]
+
+        return util.play(
+            url=tr["url"],
+            offset=0,
+            text=None,
+            response_builder=handler_input.response_builder,
+            supports_apl=supports_apl
+        )
 
 class HelpIntentHandler(AbstractRequestHandler):
     """Handler for providing help information to user."""
@@ -611,6 +749,9 @@ sb.add_request_handler(PlayCommandHandler())
 sb.add_request_handler(HelpIntentHandler())
 sb.add_request_handler(ExceptionEncounteredHandler())
 sb.add_request_handler(UnhandledIntentHandler())
+sb.add_request_handler(PlayArtistIntentHandler())
+sb.add_request_handler(NextIntentHandler())
+sb.add_request_handler(PreviousIntentHandler())
 sb.add_request_handler(NextOrPreviousIntentHandler())
 sb.add_request_handler(NextOrPreviousCommandHandler())
 sb.add_request_handler(PauseIntentHandler())

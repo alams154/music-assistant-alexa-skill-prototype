@@ -1,0 +1,264 @@
+'PATCH'
+diff --git a/app/skill/lambda_function.py b/app/skill/lambda_function.py
+index 4d3e3a0..b7b1b1d 100644
+--- a/app/skill/lambda_function.py
++++ b/app/skill/lambda_function.py
+@@ -1,8 +1,11 @@
+ ## -*- coding: utf-8 -*-
+ 
+ import logging
+ import gettext
++import time
++import base64
++import json
+ from ask_sdk.standard import StandardSkillBuilder
+ from ask_sdk_core.dispatch_components import (
+     AbstractRequestHandler, AbstractExceptionHandler,
+     AbstractRequestInterceptor, AbstractResponseInterceptor)
+@@ -12,6 +15,7 @@ from ask_sdk_core.handler_input import HandlerInput
+ from ask_sdk_model import Response
+ 
+ from . import data, util
++from .ma_library import fetch_tracks_by_artist
+ 
+ sb = StandardSkillBuilder()
+ # sb = StandardSkillBuilder(
+@@ -61,6 +65,38 @@ logging.basicConfig(
+ 
+ supports_apl = False
+ 
++PLAYLISTS = {}  # key -> {"tracks": [...], "idx": int, "expires": float}
++PLAYLIST_TTL_SEC = 60 * 30  # 30 min
++
++
++def _pl_key(handler_input: HandlerInput) -> str:
++    user_id = handler_input.request_envelope.context.system.user.user_id
++    device_id = handler_input.request_envelope.context.system.device.device_id
++    return f"{user_id}:{device_id}"
++
++
++def _cleanup_playlists() -> None:
++    now = time.time()
++    for k in list(PLAYLISTS.keys()):
++        if PLAYLISTS[k].get("expires", 0) < now:
++            del PLAYLISTS[k]
++
++
++def _make_token(k: str, idx: int) -> str:
++    payload = {"k": k, "i": idx, "t": int(time.time())}
++    return base64.urlsafe_b64encode(json.dumps(payload).encode("utf-8")).decode("utf-8")
++
++
++def _parse_token(token: str):
++    try:
++        raw = base64.urlsafe_b64decode(token.encode("utf-8")).decode("utf-8")
++        return json.loads(raw)
++    except Exception:
++        return None
++
+ 
+ def _get_stream_url(request):
+     """Return (url, audio_data) where url is resolved from util.audio_data.
+@@ -170,6 +206,66 @@ class LaunchRequestOrPlayAudioHandler(AbstractRequestHandler):
+         return util.play(
+             url=url,
+             offset=0,
+             text=data.WELCOME_MSG,
+             response_builder=handler_input.response_builder,
+             supports_apl=supports_apl
+         )
+ 
++
++class PlayArtistIntentHandler(AbstractRequestHandler):
++    """Play tracks of an artist from local Music Assistant library."""
++    def can_handle(self, handler_input):
++        return is_intent_name("PlayArtistIntent")(handler_input)
++
++    def handle(self, handler_input):
++        logger.info("In PlayArtistIntentHandler")
++        _cleanup_playlists()
++
++        slots = getattr(handler_input.request_envelope.request, "intent", None)
++        slots = getattr(slots, "slots", {}) if slots else {}
++
++        artist_slot = slots.get("artist")
++        artist_name = (getattr(artist_slot, "value", "") or "").strip() if artist_slot else ""
++
++        if not artist_name:
++            return (
++                handler_input.response_builder
++                .speak("Quel artiste veux-tu écouter ?")
++                .ask("Dis par exemple : joue David Guetta.")
++                .set_should_end_session(False)
++                .response
++            )
++
++        try:
++            tracks = fetch_tracks_by_artist(artist_name, limit=50)
++        except Exception as e:
++            logger.exception("Failed to fetch tracks from Music Assistant: %s", e)
++            return (
++                handler_input.response_builder
++                .speak("Désolé, je n'arrive pas à accéder à Music Assistant pour le moment.")
++                .set_should_end_session(True)
++                .response
++            )
++
++        if not tracks:
++            return (
++                handler_input.response_builder
++                .speak(f"Je n'ai trouvé aucun titre de {artist_name} dans ta bibliothèque Music Assistant.")
++                .set_should_end_session(True)
++                .response
++            )
++
++        k = _pl_key(handler_input)
++        PLAYLISTS[k] = {"tracks": tracks, "idx": 0, "expires": time.time() + PLAYLIST_TTL_SEC}
++
++        first = tracks[0]
++        _token = _make_token(k, 0)  # kept for future use/debug
++
++        return util.play(
++            url=first["url"],
++            offset=0,
++            text=f"D'accord. Je lance {artist_name}.",
++            response_builder=handler_input.response_builder,
++            supports_apl=supports_apl
++        )
++
+ 
+ class HelpIntentHandler(AbstractRequestHandler):
+     """Handler for providing help information to user."""
+@@ -232,14 +328,50 @@ class NextOrPreviousIntentHandler(AbstractRequestHandler):
+     def handle(self, handler_input):
+         # type: (HandlerInput) -> Response
+         logger.info("In NextOrPreviousIntentHandler")
+-        _ = handler_input.attributes_manager.request_attributes["_"]
+-        handler_input.response_builder.speak(
+-            _(data.CANNOT_SKIP_MSG)).set_should_end_session(True)
+-        return handler_input.response_builder.response
++        _cleanup_playlists()
++
++        k = _pl_key(handler_input)
++        pl = PLAYLISTS.get(k)
++
++        if not pl or not pl.get("tracks"):
++            return (
++                handler_input.response_builder
++                .speak("Je n'ai rien en file d'attente. Dis par exemple : joue David Guetta.")
++                .set_should_end_session(True)
++                .response
++            )
++
++        is_next = is_intent_name("AMAZON.NextIntent")(handler_input)
++        if is_next:
++            pl["idx"] = min(pl["idx"] + 1, len(pl["tracks"]) - 1)
++        else:
++            pl["idx"] = max(pl["idx"] - 1, 0)
++
++        pl["expires"] = time.time() + PLAYLIST_TTL_SEC
++        tr = pl["tracks"][pl["idx"]]
++
++        return util.play(
++            url=tr["url"],
++            offset=0,
++            text=None,
++            response_builder=handler_input.response_builder,
++            supports_apl=supports_apl
++        )
+ 
+diff --git a/app/skill/ma_library.py b/app/skill/ma_library.py
+new file mode 100644
+index 0000000..c3c3c3c
+--- /dev/null
++++ b/app/skill/ma_library.py
+@@ -0,0 +1,124 @@
++import asyncio
++import os
++from typing import Any, Dict, List
++
++from music_assistant_client import MusicAssistantClient
++from music_assistant_models.enums import MediaType
++
++
++MA_BASE_URL = os.environ.get("MA_BASE_URL", "").rstrip("/")
++MA_TOKEN = os.environ.get("MA_TOKEN", "")
++
++if not MA_BASE_URL:
++    raise RuntimeError("MA_BASE_URL is not set")
++if not MA_TOKEN:
++    raise RuntimeError("MA_TOKEN is not set")
++
++
++async def _fetch_tracks_by_artist_async(artist_name: str, limit: int = 50) -> List[Dict[str, Any]]:
++    """
++    Return a list of tracks for an artist from MA *local library*:
++    [{"title": "...", "artist": "...", "url": "..."}]
++
++    Uses library_only=True on search to avoid provider results.
++    """
++    async with MusicAssistantClient(MA_BASE_URL, None, token=MA_TOKEN) as client:
++        results = await client.music.search(
++            search_query=artist_name,
++            media_types=[MediaType.ARTIST],
++            limit=10,
++            library_only=True,
++        )
++
++        # Some versions return dict, others return object with attributes.
++        artists = []
++        if isinstance(results, dict):
++            artists = results.get("artists") or results.get(MediaType.ARTIST) or []
++        else:
++            artists = getattr(results, "artists", []) or []
++
++        if not artists:
++            return []
++
++        artist = artists[0]
++        artist_id = getattr(artist, "item_id", None) or getattr(artist, "id", None)
++        if not artist_id:
++            return []
++
++        tracks = await client.music.get_artist_tracks(artist_id, limit=limit)
++        out: List[Dict[str, Any]] = []
++
++        for tr in tracks:
++            track_id = getattr(tr, "item_id", None) or getattr(tr, "id", None)
++            if not track_id:
++                continue
++
++            # Stable, directly playable URL via client
++            url = await client.music.get_track_preview_url(track_id)
++            if not url:
++                continue
++
++            title = getattr(tr, "name", None) or getattr(tr, "title", None) or "Unknown title"
++            artist_str = artist_name
++            artists_attr = getattr(tr, "artists", None)
++            if artists_attr and isinstance(artists_attr, list) and len(artists_attr) > 0:
++                artist_str = getattr(artists_attr[0], "name", artist_name) or artist_name
++
++            out.append({"title": title, "artist": artist_str, "url": url})
++
++        return out
++
++
++def fetch_tracks_by_artist(artist_name: str, limit: int = 50) -> List[Dict[str, Any]]:
++    """
++    Sync wrapper for ASK handlers.
++    """
++    try:
++        loop = asyncio.get_running_loop()
++    except RuntimeError:
++        loop = None
++
++    if loop and loop.is_running():
++        new_loop = asyncio.new_event_loop()
++        try:
++            return new_loop.run_until_complete(_fetch_tracks_by_artist_async(artist_name, limit=limit))
++        finally:
++            new_loop.close()
++    else:
++        return asyncio.run(_fetch_tracks_by_artist_async(artist_name, limit=limit))
+PATCH
