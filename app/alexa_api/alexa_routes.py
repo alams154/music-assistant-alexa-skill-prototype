@@ -6,6 +6,9 @@ module-level `_store` variable and exposes a simple status and
 retrieval endpoints similar to `ma_routes`.
 """
 
+import os
+import json
+from pathlib import Path
 from flask import jsonify, request
 
 
@@ -35,9 +38,48 @@ def register_routes(bp):
         return jsonify({'status': 'ok'})
 
     @bp.route('/latest-url', methods=['GET'])
-    def latest_url_ma():
+    def latest_url():
         """Return the last pushed stream metadata from the Alexa skill.
         """
         if not _store:
             return jsonify({'error': 'No URL available, please check if the Alexa skill has pushed a URL to the API'}), 404
         return jsonify(_store)
+    
+    @bp.route('/intents', methods=['GET'])
+    def intents():
+        """Return the list of built-in supported Alexa intents, locale specific"""
+        # Get the locale from environment variable, default to en-US
+        locale = os.environ.get('LOCALE', 'en-US')
+        
+        # Build path to the locale-specific intents file
+        intents_file = Path(__file__).parent.parent / 'models' / 'built-in' / f'{locale}.json'
+        
+        # Load intents from the JSON file
+        try:
+            with open(intents_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                intent_list = data.get('interactionModel', {}).get('languageModel', {}).get('intents', [])
+                intents_with_utterances = [
+                    {
+                        'intent': intent.get('intent'),
+                        'utterances': intent.get('utterances', [])
+                    }
+                    for intent in intent_list if intent.get('intent')
+                ]
+                
+                return jsonify({
+                    'locale': locale,
+                    'intents': intents_with_utterances
+                })
+        except FileNotFoundError:
+            return jsonify({
+                'error': f'Intents file for locale {locale} not found',
+                'locale': locale,
+                'intents': []
+            }), 404
+        except Exception as e:
+            return jsonify({
+                'error': f'Error loading intents: {str(e)}',
+                'locale': locale,
+                'intents': []
+            }), 500

@@ -35,7 +35,7 @@ def register_routes(bp):
         return jsonify({'status': 'ok'})
 
     @bp.route('/latest-url', methods=['GET'])
-    def latest_url_ma():
+    def latest_url():
         """Return the last pushed stream metadata for the Music Assistant.
         """
         if not _store:
