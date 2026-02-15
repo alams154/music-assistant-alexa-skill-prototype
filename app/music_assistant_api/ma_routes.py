@@ -31,7 +31,6 @@ def register_routes(bp):
             'album': data.get('album'),
             'imageUrl': data.get('imageUrl'),
         }
-        print('Received:', _store)
         return jsonify({'status': 'ok'})
 
     @bp.route('/latest-url', methods=['GET'])

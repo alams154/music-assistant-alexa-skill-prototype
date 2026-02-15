@@ -1,7 +1,7 @@
 {
   "interactionModel": {
     "languageModel": {
-      "invocationName": "",
+      "invocationName": "sag music assistant",
       "intents": [
         { "intent": "AMAZON.CancelIntent", "utterances": ["abbrechen", "vergiss es", "ist mir egal"] },
         { "intent": "AMAZON.FallbackIntent", "utterances": ["ich weiß nicht", "das hilft nicht"] },

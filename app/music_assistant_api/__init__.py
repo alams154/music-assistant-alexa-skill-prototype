@@ -39,7 +39,8 @@ def _ensure_logging_configured():
     root.addFilter(_ComponentFilter())
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s %(levelname)s [%(component)s] %(name)s %(message)s"
+        format="%(asctime)s %(levelname)s [%(component)s] %(name)s %(message)s",
+        datefmt="%H:%M:%S %Y-%m-%d %z"
     )
 
 

@@ -21,7 +21,7 @@ UNHANDLED_MSG = _("Sorry, I could not understand what you've just said.")
 CANNOT_SKIP_MSG = _("This is radio, you have to wait for previous or next track to play.")
 RESUME_MSG = _("Resuming {}")
 NOT_POSSIBLE_MSG = _("This is radio, you can not do that.  You can ask me to stop or pause to stop listening.")
-STOP_MSG = _("Goodbye.")
+STOP_MSG = _("")
 DEVICE_NOT_SUPPORTED = _("Sorry, this skill is not supported on this device")
 
 TEST = _("test english")

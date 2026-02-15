@@ -1,5 +1,5 @@
 import os
-from flask import Flask, request, jsonify, Response
+from flask import Flask, request, jsonify, Response, g
 from markupsafe import escape
 from flask_ask_sdk.skill_adapter import SkillAdapter
 from skill.lambda_function import sb  # sb is the SkillBuilder from skill/lambda_function.py
@@ -22,12 +22,30 @@ import re
 import shutil
 import urllib.parse
 import base64
+import logging
 
 
 from setup_helpers import sanitize_log, enqueue_setup_log, setup_reader_thread as _helpers_setup_reader_thread, read_master_loop as _helpers_read_master_loop
 from signal_helpers import register_signal_handlers
 
+# Ensure boto3 has a default region in container/dev environments to avoid
+# NoRegionError during imports that create AWS clients at module import time.
+os.environ.setdefault('AWS_REGION', os.environ.get('AWS_REGION', 'us-east-1'))
+os.environ.setdefault('AWS_DEFAULT_REGION', os.environ.get('AWS_DEFAULT_REGION', 'us-east-1'))
+
 app = Flask(__name__)
+# Optionally silence HTTP request logs (werkzeug/urllib3) when running
+# in container or debugger. Set QUIET_HTTP=0 to keep request logging.
+try:
+    quiet_http = os.environ.get('QUIET_HTTP', '1').lower()
+    if quiet_http in ('1', 'true', 'yes', 'on'):
+        logging.getLogger('werkzeug').setLevel(logging.WARNING)
+        logging.getLogger('urllib3').setLevel(logging.WARNING)
+        # Also reduce Flask's internal request logging
+        logging.getLogger('flask.app').setLevel(logging.WARNING)
+        app.logger.debug('QUIET_HTTP enabled: werkzeug/urllib3 log level set to WARNING')
+except Exception:
+    pass
 # Allow overriding where ASK CLI stores credentials so they persist across containers.
 # If ASK_CREDENTIALS_DIR is set (e.g. /root/.ask) set HOME to its parent so tools
 # that rely on ~/.ask (ASK CLI) use the mounted location.
@@ -89,8 +107,13 @@ alexa_app.wsgi_app = ProxyFix(alexa_app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 ma_app.wsgi_app = BasicAuthMiddleware(ma_app.wsgi_app)
 alexa_app.wsgi_app = BasicAuthMiddleware(alexa_app.wsgi_app)
 app.wsgi_app = DispatcherMiddleware(app.wsgi_app, {'/ma': ma_app.wsgi_app, '/alexa': alexa_app.wsgi_app})
-app.logger.info('Mounted music-assistant-api app at /ma and alexa API at /alexa')
-
+# Log mount information only when running the module as the main program
+try:
+    if __name__ == '__main__':
+        app.logger.info('Mounted MA API app at /ma and Alexa API at /alexa')
+except Exception:
+    # Fallback: do not allow logging failures to crash import
+    pass
 
 # Global basic auth for the app (protect everything except the root Alexa skill endpoint)
 @app.before_request
@@ -110,10 +133,87 @@ def _check_app_basic_auth():
         resp.headers['WWW-Authenticate'] = 'Basic realm="music-assistant-skill"'
         return resp
 
+
+# Capture incoming Alexa POST payloads so we can show them on the status page
+@app.before_request
+def _capture_incoming_intent():
+    if request.path == '/' and request.method == 'POST':
+        payload = None
+        try:
+            payload = request.get_json(silent=True)
+        except Exception:
+            payload = None
+        if not payload:
+            try:
+                raw = request.get_data(as_text=True)
+                if raw:
+                    import json as _json
+                    try:
+                        payload = _json.loads(raw)
+                    except Exception:
+                        payload = None
+            except Exception:
+                payload = None
+        # If still not parsed, try form fields (simulator fallback)
+        if not payload:
+            try:
+                if request.form:
+                    # simulator may post via form fields
+                    intent = request.form.get('intent')
+                    raw_slots = request.form.get('slots')
+                    if intent:
+                        payload = {"version": "1.0", "request": {"type": "IntentRequest", "intent": {"name": intent}}}
+                        if raw_slots:
+                            try:
+                                payload['request']['intent']['slots'] = _json.loads(raw_slots)
+                            except Exception:
+                                pass
+            except Exception:
+                pass
+
+        g._incoming_alexa_payload = payload or {}
+        g._incoming_alexa_ts = time.time()
+
+
+@app.after_request
+def _record_incoming_intent(response):
+    if getattr(g, '_incoming_alexa_payload', None) is not None:
+        try:
+            logs = app.config.setdefault('INTENT_LOGS', [])
+            entry = {
+                'incoming': g._incoming_alexa_payload,
+                'response_status': response.status_code,
+                'response_body': response.get_data(as_text=True),
+                'ts': getattr(g, '_incoming_alexa_ts', None)
+            }
+            logs.append(entry)
+            maxlen = app.config.get('INTENT_LOGS_MAXLEN', 500)
+            if len(logs) > maxlen:
+                del logs[0:len(logs)-maxlen]
+        except Exception:
+            pass
+    return response
+
 # Setup process state (separate from status page)
 _setup_proc = None
 _setup_logs = deque(maxlen=500)
 _setup_lock = threading.Lock()
+
+# Simulator logs (store recent simulated incoming intents + responses)
+app.config['SIMULATOR_LOGS'] = []
+app.config['SIMULATOR_LOGS_MAXLEN'] = 200
+# Centralized intent logs (all incoming intents, including simulator and real requests)
+app.config['INTENT_LOGS'] = []
+app.config['INTENT_LOGS_MAXLEN'] = 500
+
+
+# Register endpoint blueprints moved out of app.py (status, invocations, simulator)
+try:
+    from endpoints import status_bp, invocations_bp
+    app.register_blueprint(status_bp)
+    app.register_blueprint(invocations_bp)
+except Exception:
+    app.logger.exception('Could not register endpoints blueprints (may be running in partial state)')
 
 # Auth (ask configure --no-browser) process state
 _setup_auth_proc = None
@@ -150,334 +250,6 @@ def _read_master_loop(master_fd, prefix=None):
 @app.route("/", methods=["POST"])
 def invoke_skill():
     return skill_adapter.dispatch_request()
-
-
-@app.route("/status", methods=["GET"])
-def status():
-    """Simple GET status page for health checks and browsing."""
-    api_user = get_env_secret('APP_USERNAME')
-    api_pass = get_env_secret('APP_PASSWORD')
-
-    # Skill adapter status (we're running if this handler is invoked)
-    skill_html = '<span class="led green"></span> Skill running'
-
-    # If client requested JSON, perform full checks (may take time) and return structured data
-    want_json = request.args.get('format') == 'json' or 'application/json' in (request.headers.get('Accept') or '')
-    if want_json:
-        # Check ASK CLI and skill status
-        skill_ask_html = '<span class="muted">ASK CLI check unavailable</span>'
-        try:
-            skill_host = os.environ.get('SKILL_HOSTNAME', '').strip()
-            if shutil.which('ask') and skill_host:
-                ls = subprocess.run(['ask', 'smapi', 'list-skills-for-vendor', '--profile', 'default'], capture_output=True, text=True)
-                out = ls.stdout or ls.stderr or ''
-                m = re.search(r'amzn1\.ask\.skill\.[0-9a-fA-F\-]+', out)
-                if not m:
-                    skill_ask_html = '<span class="led red"></span> Music Assistant Skill interaction model not found via ASK CLI'
-                else:
-                    sid = m.group(0)
-                    mf = subprocess.run(['ask', 'smapi', 'get-skill-manifest', '--skill-id', sid, '--profile', 'default'], capture_output=True, text=True)
-                    mf_out = mf.stdout or mf.stderr or ''
-                    mm = re.search(r'https?://[^"\s\)\]]+', mf_out)
-                    try:
-                        if skill_host.startswith('http://') or skill_host.startswith('https://'):
-                            cfg_host = urllib.parse.urlparse(skill_host).netloc
-                        else:
-                            cfg_host = skill_host
-                    except Exception:
-                        cfg_host = skill_host
-
-                    testing_enabled = False
-                    try:
-                        en = subprocess.run(['ask', 'smapi', 'get-skill-enablement-status', '--skill-id', sid, '--stage', 'development', '--profile', 'default'], capture_output=True, text=True)
-                        en_out = en.stdout or en.stderr or ''
-                        if en.returncode == 0 or 'Command executed successfully' in en_out:
-                            testing_enabled = True
-                        else:
-                            if re.search(r'\[Error\]:\s*\{', en_out) or re.search(r'404', en_out):
-                                testing_enabled = False
-                            elif re.search(r'"isEnabled"\s*:\s*true', en_out, re.IGNORECASE) or re.search(r'"enabled"\s*:\s*true', en_out, re.IGNORECASE):
-                                testing_enabled = True
-                    except Exception:
-                        testing_enabled = False
-
-                    is_green = False
-                    if not mm:
-                        testing_msg = 'testing enabled' if testing_enabled else 'testing not enabled'
-                        skill_ask_html = f'<span class="led yellow"></span> Music Assistant Skill interaction model {escape(sid)} found; endpoint not set ({testing_msg})'
-                    else:
-                        uri = mm.group(0)
-                        try:
-                            parsed = urllib.parse.urlparse(uri)
-                            manifest_host = parsed.netloc
-                            if manifest_host == cfg_host:
-                                if testing_enabled:
-                                    skill_ask_html = f'<span class="led green"></span> Music Assistant Skill interaction model found; endpoint matches ({escape(manifest_host)}); testing enabled'
-                                    is_green = True
-                                else:
-                                    skill_ask_html = f'<span class="led yellow"></span> Music Assistant Skill interaction model found and endpoint matches ({escape(manifest_host)}); testing NOT enabled'
-                            else:
-                                testing_note = 'testing enabled' if testing_enabled else 'testing not enabled'
-                                skill_ask_html = f'<span class="led red"></span> Music Assistant Skill interaction model endpoint mismatch (manifest: {escape(manifest_host)} vs configured: {escape(cfg_host)}); {testing_note}'
-                        except Exception:
-                            testing_msg = 'testing enabled' if testing_enabled else 'testing not enabled'
-                            skill_ask_html = f'<span class="led yellow"></span> Music Assistant Skill interaction model found; endpoint parse failed ({testing_msg})'
-
-                    try:
-                        if not is_green:
-                            skill_ask_html += ' <button onclick="window.location=\'/setup\'" style="margin-left:8px">Open Setup</button>'
-                    except Exception:
-                        pass
-            else:
-                if not shutil.which('ask'):
-                    skill_ask_html = '<span class="muted">ask CLI not available in container</span>'
-                else:
-                    skill_ask_html = '<span class="muted">SKILL_HOSTNAME not configured</span>'
-        except Exception as e:
-            skill_ask_html = f'<span class="muted">ASK check error: {escape(str(e))}</span>'
-
-        # Music Assistant API status: call the locally mounted /ma/latest-url endpoint on this service.
-        endpoint_url = request.host_url.rstrip('/') + '/ma/latest-url'
-        try:
-            auth = (api_user, api_pass) if api_user and api_pass else None
-            resp = requests.get(endpoint_url, timeout=2, auth=auth)
-            try:
-                content_text = resp.content.decode('utf-8', errors='replace')
-            except Exception:
-                content_text = str(resp.content)
-            try:
-                parsed = json.loads(content_text)
-                pretty = json.dumps(parsed, indent=2, ensure_ascii=False)
-                content_preview = escape(pretty)
-            except Exception:
-                content_preview = escape(content_text)
-            if len(content_preview) > 500:
-                content_preview = content_preview[:500] + '...'
-            if resp.ok:
-                ma_api_html = (
-                    f'<span class="led green"></span> Music Assistant API reachable ({resp.status_code}) — /ma/latest-url'
-                    f"<pre style='white-space:pre-wrap;background:#f6f6f6;padding:8px;border-radius:4px;max-height:200px;overflow:auto'>"
-                    f"{content_preview}</pre>"
-                )
-            else:
-                ma_api_html = (
-                    f'<span class="led red"></span> Music Assistant API responded {resp.status_code} for /ma/latest-url'
-                    f"<pre style='white-space:pre-wrap;background:#fdf2f2;padding:8px;border-radius:4px;max-height:200px;overflow:auto'>"
-                    f"{content_preview}</pre>"
-                )
-        except RequestException as e:
-            ma_api_html = f'<span class="led red"></span> Error: {str(e)}'
-
-        # Alexa API status: call the locally mounted /alexa/latest-url endpoint on this service.
-        alexa_endpoint = request.host_url.rstrip('/') + '/alexa/latest-url'
-        try:
-            auth = (api_user, api_pass) if api_user and api_pass else None
-            resp = requests.get(alexa_endpoint, timeout=2, auth=auth)
-            try:
-                content_text = resp.content.decode('utf-8', errors='replace')
-            except Exception:
-                content_text = str(resp.content)
-            try:
-                parsed = json.loads(content_text)
-                pretty = json.dumps(parsed, indent=2, ensure_ascii=False)
-                content_preview = escape(pretty)
-            except Exception:
-                content_preview = escape(content_text)
-            if len(content_preview) > 500:
-                content_preview = content_preview[:500] + '...'
-            if resp.ok:
-                alexa_api_html = (
-                    f'<span class="led green"></span> Alexa API reachable ({resp.status_code}) — /alexa/latest-url'
-                    f"<pre style='white-space:pre-wrap;background:#f6f6f6;padding:8px;border-radius:4px;max-height:200px;overflow:auto'>"
-                    f"{content_preview}</pre>"
-                )
-            else:
-                alexa_api_html = (
-                    f'<span class="led red"></span> Alexa API responded {resp.status_code} for /alexa/latest-url'
-                    f"<pre style='white-space:pre-wrap;background:#fdf2f2;padding:8px;border-radius:4px;max-height:200px;overflow:auto'>"
-                    f"{content_preview}</pre>"
-                )
-        except RequestException as e:
-            alexa_api_html = f'<span class="led red"></span> Error: {str(e)}'
-
-        return jsonify({'skill_html': skill_html, 'skill_ask_html': skill_ask_html, 'ma_api_html': ma_api_html, 'alexa_api_html': alexa_api_html, 'created': False})
-
-    # Non-JSON request: render page immediately and let client poll for updates
-    try:
-        tpl_path = Path(__file__).parent / 'templates' / 'status.html'
-        tpl = tpl_path.read_text()
-        # initial placeholders; detailed checks will be fetched by client-side polling
-        tpl = tpl.replace('__SKILL_HTML__', skill_html)
-        tpl = tpl.replace('__SKILL_ASK_HTML__', '<span class="muted">Checking ASK CLI status...</span>')
-        tpl = tpl.replace('__MA_API_HTML__', '<span class="muted">Checking Music Assistant API...</span>')
-        tpl = tpl.replace('__ALEXA_API_HTML__', '<span class="muted">Checking Alexa API...</span>')
-        return Response(tpl, status=200, mimetype='text/html')
-    except Exception:
-        html = f"""<!doctype html>
-            <html>
-            <head><meta charset="utf-8"><title>Service Status</title></head>
-            <body>
-                <h1>Service Status</h1>
-                <div>{skill_html}</div>
-                <div><span class=\"muted\">Checking ASK CLI status...</span></div>
-                <div><span class=\"muted\">Checking Music Assistant API...</span></div>
-            </body>
-            </html>"""
-        return Response(html, status=200, mimetype='text/html')
-
-
-@app.route('/status/api', methods=['GET'])
-def status_api():
-    """Return Music Assistant API status fragment as JSON (fast, local API check)."""
-    api_user = get_env_secret('APP_USERNAME')
-    api_pass = get_env_secret('APP_PASSWORD')
-    # Return both MA and Alexa status fragments so the status page poller
-    # can update both rows in one request.
-    ma_api_html = '<span class="muted">Checking Music Assistant API...</span>'
-    alexa_api_html = '<span class="muted">Checking Alexa API...</span>'
-
-    # Check MA API
-    ma_endpoint = request.host_url.rstrip('/') + '/ma/latest-url'
-    try:
-        auth = (api_user, api_pass) if api_user and api_pass else None
-        resp = requests.get(ma_endpoint, timeout=2, auth=auth)
-        try:
-            content_text = resp.content.decode('utf-8', errors='replace')
-        except Exception:
-            content_text = str(resp.content)
-        try:
-            parsed = json.loads(content_text)
-            pretty = json.dumps(parsed, indent=2, ensure_ascii=False)
-            content_preview = escape(pretty)
-        except Exception:
-            content_preview = escape(content_text)
-        if len(content_preview) > 500:
-            content_preview = content_preview[:500] + '...'
-        if resp.ok:
-            ma_api_html = (
-                f'<span class="led green"></span> Music Assistant API reachable ({resp.status_code}) — /ma/latest-url'
-                f"<pre style='white-space:pre-wrap;background:#f6f6f6;padding:8px;border-radius:4px;max-height:200px;overflow:auto'>"
-                f"{content_preview}</pre>"
-            )
-        else:
-            ma_api_html = (
-                f'<span class="led red"></span> Music Assistant API responded {resp.status_code} for /ma/latest-url'
-                f"<pre style='white-space:pre-wrap;background:#fdf2f2;padding:8px;border-radius:4px;max-height:200px;overflow:auto'>"
-                f"{content_preview}</pre>"
-            )
-    except RequestException as e:
-        ma_api_html = f'<span class="led red"></span> Error: {str(e)}'
-
-    # Check Alexa API
-    alexa_endpoint = request.host_url.rstrip('/') + '/alexa/latest-url'
-    try:
-        auth = (api_user, api_pass) if api_user and api_pass else None
-        resp = requests.get(alexa_endpoint, timeout=2, auth=auth)
-        try:
-            content_text = resp.content.decode('utf-8', errors='replace')
-        except Exception:
-            content_text = str(resp.content)
-        try:
-            parsed = json.loads(content_text)
-            pretty = json.dumps(parsed, indent=2, ensure_ascii=False)
-            content_preview = escape(pretty)
-        except Exception:
-            content_preview = escape(content_text)
-        if len(content_preview) > 500:
-            content_preview = content_preview[:500] + '...'
-        if resp.ok:
-            alexa_api_html = (
-                f'<span class="led green"></span> Alexa API reachable ({resp.status_code}) — /alexa/latest-url'
-                f"<pre style='white-space:pre-wrap;background:#f6f6f6;padding:8px;border-radius:4px;max-height:200px;overflow:auto'>"
-                f"{content_preview}</pre>"
-            )
-        else:
-            alexa_api_html = (
-                f'<span class="led red"></span> Alexa API responded {resp.status_code} for /alexa/latest-url'
-                f"<pre style='white-space:pre-wrap;background:#fdf2f2;padding:8px;border-radius:4px;max-height:200px;overflow:auto'>"
-                f"{content_preview}</pre>"
-            )
-    except RequestException as e:
-        alexa_api_html = f'<span class="led red"></span> Error: {str(e)}'
-
-    return jsonify({'ma_api_html': ma_api_html, 'alexa_api_html': alexa_api_html})
-
-
-@app.route('/status/ask', methods=['GET'])
-def status_ask():
-    """Return ASK CLI status fragment as JSON (may be slower)."""
-    skill_ask_html = '<span class="muted">ASK CLI check unavailable</span>'
-    try:
-        skill_host = os.environ.get('SKILL_HOSTNAME', '').strip()
-        if shutil.which('ask') and skill_host:
-            ls = subprocess.run(['ask', 'smapi', 'list-skills-for-vendor', '--profile', 'default'], capture_output=True, text=True)
-            out = ls.stdout or ls.stderr or ''
-            m = re.search(r'amzn1\.ask\.skill\.[0-9a-fA-F\-]+', out)
-            if not m:
-                skill_ask_html = '<span class="led red"></span> Music Assistant Skill interaction model not found via ASK CLI'
-            else:
-                sid = m.group(0)
-                mf = subprocess.run(['ask', 'smapi', 'get-skill-manifest', '--skill-id', sid, '--profile', 'default'], capture_output=True, text=True)
-                mf_out = mf.stdout or mf.stderr or ''
-                mm = re.search(r'https?://[^"\s\)\]]+', mf_out)
-                try:
-                    if skill_host.startswith('http://') or skill_host.startswith('https://'):
-                        cfg_host = urllib.parse.urlparse(skill_host).netloc
-                    else:
-                        cfg_host = skill_host
-                except Exception:
-                    cfg_host = skill_host
-
-                testing_enabled = False
-                try:
-                    en = subprocess.run(['ask', 'smapi', 'get-skill-enablement-status', '--skill-id', sid, '--stage', 'development', '--profile', 'default'], capture_output=True, text=True)
-                    en_out = en.stdout or en.stderr or ''
-                    if en.returncode == 0 or 'Command executed successfully' in en_out:
-                        testing_enabled = True
-                    else:
-                        if re.search(r'\[Error\]:\s*\{', en_out) or re.search(r'404', en_out):
-                            testing_enabled = False
-                        elif re.search(r'"isEnabled"\s*:\s*true', en_out, re.IGNORECASE) or re.search(r'"enabled"\s*:\s*true', en_out, re.IGNORECASE):
-                            testing_enabled = True
-                except Exception:
-                    testing_enabled = False
-
-                is_green = False
-                if not mm:
-                    testing_msg = 'testing enabled' if testing_enabled else 'testing not enabled'
-                    skill_ask_html = f'<span class="led yellow"></span> Music Assistant Skill interaction model {escape(sid)} found; endpoint not set ({testing_msg})'
-                else:
-                    uri = mm.group(0)
-                    try:
-                        parsed = urllib.parse.urlparse(uri)
-                        manifest_host = parsed.netloc
-                        if manifest_host == cfg_host:
-                            if testing_enabled:
-                                skill_ask_html = f'<span class="led green"></span> Music Assistant Skill interaction model found; endpoint matches ({escape(manifest_host)}); testing enabled'
-                                is_green = True
-                            else:
-                                skill_ask_html = f'<span class="led yellow"></span> Music Assistant Skill interaction model found and endpoint matches ({escape(manifest_host)}); testing NOT enabled'
-                        else:
-                            testing_note = 'testing enabled' if testing_enabled else 'testing not enabled'
-                            skill_ask_html = f'<span class="led red"></span> Music Assistant Skill interaction model endpoint mismatch (manifest: {escape(manifest_host)} vs configured: {escape(cfg_host)}); {testing_note}'
-                    except Exception:
-                        testing_msg = 'testing enabled' if testing_enabled else 'testing not enabled'
-                        skill_ask_html = f'<span class="led yellow"></span> Music Assistant Skill interaction model found; endpoint parse failed ({testing_msg})'
-
-                try:
-                    if not is_green:
-                        skill_ask_html += ' <button onclick="window.location=\'/setup\'" style="margin-left:8px">Open Setup</button>'
-                except Exception:
-                    pass
-        else:
-            if not shutil.which('ask'):
-                skill_ask_html = '<span class="muted">ask CLI not available in container</span>'
-            else:
-                skill_ask_html = '<span class="muted">SKILL_HOSTNAME not configured</span>'
-    except Exception as e:
-        skill_ask_html = f'<span class="muted">ASK check error: {escape(str(e))}</span>'
-    return jsonify({'skill_ask_html': skill_ask_html})
-
 
 # Expose OpenAPI spec and Swagger UI from the main app so docs are available
 # at `/openapi.json` and `/docs` (keeps documentation separate from the API
@@ -717,7 +489,13 @@ def setup_start():
         # ASK already configured: start the create script directly
         try:
             # script is installed into the container at /app/scripts by the Dockerfile
-            script_path = '/app/scripts/ask_create_skill.sh'
+            # but when running locally the repository path should be used.
+            candidate = '/app/scripts/ask_create_skill.sh'
+            if os.path.exists(candidate):
+                script_path = candidate
+            else:
+                # repo-relative path
+                script_path = str(Path(__file__).parent.parent / 'scripts' / 'ask_create_skill.sh')
             app.logger.info('Launching setup script: %s', script_path)
             _setup_logs.append(f'Starting setup: endpoint={endpoint} profile={profile} locale={locale} stage={stage}')
             # run the top-level shell script via bash so it behaves like the original shell invocation
@@ -817,8 +595,12 @@ def setup_code():
         profile = 'default'
         locale = os.environ.get('LOCALE', 'en-US')
         stage = 'development'
-        # script is installed into the container at /app/scripts by the Dockerfile
-        script_path = '/app/scripts/ask_create_skill.sh'
+        # prefer container-installed path when present, otherwise use repo-relative scripts/
+        candidate = '/app/scripts/ask_create_skill.sh'
+        if os.path.exists(candidate):
+            script_path = candidate
+        else:
+            script_path = str(Path(__file__).parent.parent / 'scripts' / 'ask_create_skill.sh')
         # run the shell script via bash (matching the shell behaviour)
         cmd = ['/bin/bash', script_path, '--endpoint', endpoint_val, '--profile', profile, '--locale', locale, '--stage', stage]
         _enqueue_setup_log(f'Starting create script: {cmd}')

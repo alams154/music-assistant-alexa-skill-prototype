@@ -34,7 +34,6 @@ def register_routes(bp):
             'secondary': data.get('secondary'),
             'imageUrl': data.get('imageUrl'),
         }
-        print('Received:', _store)
         return jsonify({'status': 'ok'})
 
     @bp.route('/latest-url', methods=['GET'])
@@ -58,7 +57,9 @@ def register_routes(bp):
         try:
             with open(intents_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-                intent_list = data.get('interactionModel', {}).get('languageModel', {}).get('intents', [])
+                language_model = data.get('interactionModel', {}).get('languageModel', {})
+                invocation_name = language_model.get('invocationName')
+                intent_list = language_model.get('intents', [])
                 intents_with_utterances = [
                     {
                         'intent': intent.get('intent'),
@@ -66,20 +67,23 @@ def register_routes(bp):
                     }
                     for intent in intent_list if intent.get('intent')
                 ]
-                
+
                 return jsonify({
                     'locale': locale,
+                    'invocationName': invocation_name,
                     'intents': intents_with_utterances
                 })
         except FileNotFoundError:
             return jsonify({
                 'error': f'Intents file for locale {locale} not found',
                 'locale': locale,
+                'invocationName': None,
                 'intents': []
             }), 404
         except Exception as e:
             return jsonify({
                 'error': f'Error loading intents: {str(e)}',
                 'locale': locale,
+                'invocationName': None,
                 'intents': []
             }), 500

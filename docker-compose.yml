@@ -10,6 +10,7 @@ services:
       - DEBUG_PORT=5678 #optional
       - LOCALE=en-US # optional: skill locale (e.g. en-US, en-GB, de-DE)
       - AWS_DEFAULT_REGION=us-east-1 #optional
+      - TZ=America/Chicago # set container timezone (override as needed)
     secrets:
       - APP_USERNAME
       - APP_PASSWORD

@@ -30,7 +30,11 @@
                 "PYTHONDEVMODE": "1",
                 "AWS_DEFAULT_REGION": "us-east-1",
                 "AWS_REGION": "us-east-1",
-                "PORT": "5000"
+                "TZ": "America/Chicago",
+                "PORT": "5000",
+                "QUIET_HTTP": "1",
+                "SKILL_HOSTNAME": "<hostname>",
+                "MA_HOSTNAME": "<hostname>"
             },
             "console": "integratedTerminal"
         }

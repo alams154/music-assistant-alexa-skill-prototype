@@ -15,7 +15,7 @@ from ask_sdk_model.interfaces.audioplayer import (
 from ask_sdk_model.interfaces import display
 from ask_sdk_core.response_helper import ResponseFactory
 from ask_sdk_core.handler_input import HandlerInput
-from ask_sdk_model.interfaces.alexa.presentation.apl import RenderDocumentDirective
+from ask_sdk_model.interfaces.alexa.presentation.apl import RenderDocumentDirective, ExecuteCommandsDirective, ControlMediaCommand, MediaCommandType
 from . import data
 
 
@@ -184,19 +184,48 @@ def stop(text, response_builder, supports_apl=False):
     """
     # type: (str, ResponseFactory) -> Response
     response_builder.add_directive(StopDirective())
+
+    if text:
+        response_builder.speak(text)
+
+    return response_builder.response
+
+
+def pause(text, response_builder, supports_apl=False, session_new=False):
+    """Pause playback.
+
+    If the device supports APL, send an ExecuteCommands directive with a
+    ControlMedia command for pause (token must match the rendered APL token).
+    Otherwise, fall back to the AudioPlayer Stop directive.
+    """
+    # type: (str, ResponseFactory, bool) -> Response
     if supports_apl:
-    # Add blank APL directive to clear the screen
-        blank_apl_document = {
-            "type": "APL",
-            "version": "1.0",
-            "mainTemplate": {
-                "items": []
-            }
-        }
-        response_builder.add_directive(RenderDocumentDirective(
-            token="blankToken",
-            document=blank_apl_document
-        ))
+        try:
+            # If this request starts a new session (Alexa sent session.new==true)
+            # we need to re-render the APL document created by `play` so the
+            # UI is in sync. Otherwise send an ExecuteCommands directive to
+            # control the media element (pause).
+            if session_new:
+                try:
+                    add_apl(response_builder, start_paused=True)
+                except Exception:
+                    logging.exception('Failed to re-render APL on session new')
+                # keep the session open for further directives
+                response_builder.set_should_end_session(False)
+            else:
+                cmd = ControlMediaCommand(command=MediaCommandType.pause, component_id="videoPlayer")
+                response_builder.add_directive(
+                    ExecuteCommandsDirective(
+                        commands=[cmd],
+                        token="playbackToken"
+                    )
+                ).set_should_end_session(False)
+        except Exception:
+            logging.exception('Failed to add APL pause command; falling back to Stop')
+            response_builder.add_directive(StopDirective())
+    else:
+        response_builder.add_directive(StopDirective())
+
     if text:
         response_builder.speak(text)
 
@@ -209,7 +238,7 @@ def clear(response_builder):
         clear_behavior=ClearBehavior.CLEAR_ENQUEUED))
     return response_builder.response
 
-def add_apl(response_builder):
+def add_apl(response_builder, start_paused=False):
     """Add the RenderDocumentDirective"""
     # Replace MA-hosted image sources if MA_HOSTNAME is set.
     try:
@@ -512,7 +541,7 @@ def add_apl(response_builder):
                                                 "height": 1,
                                                 "width": 1,
                                                 "scale": "best-fill",
-                                                "autoplay": True,
+                                                "autoplay": (not start_paused),
                                                 "audioTrack": "background",
                                                 "source": "${audioSources}",
                                                 "position": "absolute",
@@ -615,7 +644,7 @@ def add_apl(response_builder):
                                                                 "primaryControlSize": "@primaryControlSize",
                                                                 "secondaryControls": "${audioControlType}",
                                                                 "secondaryControlSize": "@secondaryControlSize",
-                                                                "autoplay": True,
+                                                                "autoplay": (not start_paused),
                                                                 "theme": "${viewport.theme}"
                                                             }
                                                         ]

@@ -61,11 +61,11 @@ logging.setLogRecordFactory(_log_record_factory)
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s %(levelname)s [%(component)s] %(name)s %(message)s"
+    format="%(asctime)s %(levelname)s [%(component)s] %(name)s %(message)s",
+    datefmt="%H:%M:%S %Y-%m-%d %z"
 )
 
 supports_apl = False
-
 
 def _get_stream_url(request):
     """Return (url, audio_data) where url is resolved from util.audio_data.
@@ -243,9 +243,14 @@ class PauseIntentHandler(AbstractRequestHandler):
         # type: (HandlerInput) -> Response
         logger.info("In PauseIntentHandler")
         _ = handler_input.attributes_manager.request_attributes["_"]
-        return util.stop(text=None,
-                         response_builder=handler_input.response_builder,
-                         supports_apl=supports_apl)
+        session_new = False
+        if getattr(handler_input.request_envelope, 'session', None):
+            session_new = bool(handler_input.request_envelope.session.new)
+
+        return util.pause(text=None,
+                  response_builder=handler_input.response_builder,
+                  supports_apl=supports_apl,
+                  session_new=session_new)
 
 
 class ResumeIntentHandler(AbstractRequestHandler):
@@ -567,7 +572,6 @@ class LocalizationInterceptor(AbstractRequestInterceptor):
     def process(self, handler_input):
         # type: (HandlerInput) -> None
         locale = getattr(handler_input.request_envelope.request, 'locale', None)
-        logger.info("Locale is {}".format(locale))
         if locale:
             if locale.startswith("fr"):
                 locale_file_name = "fr-FR"
@@ -582,7 +586,6 @@ class LocalizationInterceptor(AbstractRequestInterceptor):
             else:
                 locale_file_name = locale
 
-            logger.info("Loading locale file: {}".format(locale_file_name))
             i18n = gettext.translation(
                 'data', localedir='locales', languages=[locale_file_name],
                 fallback=True)

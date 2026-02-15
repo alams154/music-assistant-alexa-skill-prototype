@@ -12,6 +12,8 @@
                 .red { background:#e74c3c; }
                 .row { margin: 8px 0; }
                 .muted { color:#666; font-size:0.9em }
+                .intent-toggle { cursor: pointer; background: transparent; border: none; padding: 0; font-size: 1em }
+                .intent-entry { margin-bottom:12px }
                 </style>
             </head>
             <body>
@@ -20,14 +22,21 @@
                 <div class="row" id="skill-ask-row">__SKILL_ASK_HTML__</div>
                 <div class="row" id="api-row">__MA_API_HTML__</div>
                 <div class="row" id="alexa-row">__ALEXA_API_HTML__</div>
+                <div class="row" id="simulator-row">__SIMULATOR_HTML__</div>
                 <script>
-                // Poll the APIs and ASK endpoints independently so results appear as they become available
-                (function pollApis(){
-                    fetch('/status/api').then(r=>r.json()).then(j=>{
+                // Fetch MA and Alexa checks independently so each row updates when ready
+                (function pollMa(){
+                    fetch('/status/ma').then(r=>r.json()).then(j=>{
                         try{ const maEl = document.getElementById('api-row'); if(maEl && j.ma_api_html){ maEl.innerHTML = j.ma_api_html; } }catch(e){}
+                        setTimeout(pollMa, 3000);
+                    }).catch(()=>{ setTimeout(pollMa, 5000); });
+                })();
+
+                (function pollAlexa(){
+                    fetch('/status/alexa').then(r=>r.json()).then(j=>{
                         try{ const alexaEl = document.getElementById('alexa-row'); if(alexaEl && j.alexa_api_html){ alexaEl.innerHTML = j.alexa_api_html; } }catch(e){}
-                        setTimeout(pollApis, 3000);
-                    }).catch(()=>{ setTimeout(pollApis, 5000); });
+                        setTimeout(pollAlexa, 3000);
+                    }).catch(()=>{ setTimeout(pollAlexa, 5000); });
                 })();
 
                 (function pollAsk(){
@@ -37,6 +46,27 @@
                         setTimeout(pollAsk, 5000);
                     }).catch(()=>{ setTimeout(pollAsk, 10000); });
                 })();
+
+                // Poll invocations count so the simulator row updates live
+                (function pollInvocations(){
+                    fetch('/status/invocations').then(r=>r.json()).then(j=>{
+                        try{ const simEl = document.getElementById('simulator-row'); if(simEl && j.simulator_html){ simEl.innerHTML = j.simulator_html; } }catch(e){}
+                        setTimeout(pollInvocations, 3000);
+                    }).catch(()=>{ setTimeout(pollInvocations, 5000); });
+                })();
+
+                // Delegated click handler to toggle intent payload/response pairs
+                document.addEventListener('click', function(e){
+                    try{
+                        var t = e.target || e.srcElement;
+                        if(t && t.classList && t.classList.contains('intent-toggle')){
+                            var pair = t.nextElementSibling;
+                            if(pair && pair.classList && pair.classList.contains('intent-pair')){
+                                pair.style.display = (pair.style.display === 'none' || pair.style.display === '') ? 'block' : 'none';
+                            }
+                        }
+                    }catch(err){}
+                });
                 </script>
             </body>
             </html>

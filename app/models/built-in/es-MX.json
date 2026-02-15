@@ -1,7 +1,7 @@
 {
   "interactionModel": {
     "languageModel": {
-      "invocationName": "",
+      "invocationName": "pídele a music assistant que",
       "intents": [
         { "intent": "AMAZON.CancelIntent", "utterances": ["cancelar", "olvídalo", "no importa"] },
         { "intent": "AMAZON.FallbackIntent", "utterances": ["no sé", "esto no funciona"] },

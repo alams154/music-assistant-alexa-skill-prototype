@@ -1,0 +1,79 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Invocations</title>
+  <style>
+        pre{white-space:pre-wrap;background:#f6f6f6;padding:8px;border-radius:4px}
+        .muted{color:#666}
+        button{padding:6px 10px}
+        .invocation{border-bottom:1px solid #efefef;padding:10px 0}
+        .invocation-header{display:flex;align-items:center;gap:8px}
+        .intent-pair{display:none}
+        .intent-toggle{background:#fff;border:1px solid #ddd;border-radius:4px;cursor:pointer}
+  </style>
+</head>
+<body>
+  <h1>Invocations</h1>
+  <p><a href="/status">Back to status</a></p>
+  <div id="invocations-list">__INVOCATIONS_BODY__</div>
+
+<script>
+var lastClickedIntentPair = null;
+var lastClickedPre = null;
+document.addEventListener('click', function(e){
+    var t = e.target;
+    if(t.classList && t.classList.contains('intent-toggle')){
+        var pair = t.parentNode.nextElementSibling;
+        if(!pair) return;
+        pair.style.display = (pair.style.display === 'none' || pair.style.display === '') ? 'block' : 'none';
+        lastClickedIntentPair = pair;
+        lastClickedPre = null;
+        return;
+    }
+    // If user clicks inside a payload/response area, remember that pair and the specific <pre>
+    var p = t;
+    lastClickedPre = null;
+    while(p && p !== document.body){
+        if(p.tagName && p.tagName.toLowerCase() === 'pre'){
+            lastClickedPre = p;
+            var pair = p.closest('.intent-pair');
+            if(pair) lastClickedIntentPair = pair;
+            break;
+        }
+        if(p.classList && p.classList.contains('intent-pair')){ lastClickedIntentPair = p; break; }
+        p = p.parentNode;
+    }
+});
+
+// Ctrl/Cmd+A behavior: if user last clicked inside an intent pair, select only
+// the payload/response pre block instead of selecting the whole document.
+document.addEventListener('keydown', function(e){
+    var isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+    var aPressed = (e.key && (e.key === 'a' || e.key === 'A'));
+    if(!aPressed) return;
+    if((isMac && e.metaKey) || (!isMac && e.ctrlKey)){
+        if(lastClickedPre){
+            e.preventDefault();
+            var range = document.createRange();
+            range.selectNodeContents(lastClickedPre);
+            var sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+            return;
+        }
+        if(lastClickedIntentPair){
+            e.preventDefault();
+            var range = document.createRange();
+            range.selectNodeContents(lastClickedIntentPair);
+            var sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+            return;
+        }
+    }
+});
+</script>
+
+</body>
+</html>
