@@ -141,7 +141,7 @@ def play(url, offset, text, response_builder, supports_apl=False):
             if resp.status_code >= 400:
                 logging.error('Audio URL returned HTTP %s: %s', resp.status_code, url)
                 response_builder.speak(
-                    "Sorry, I can't play the requested audio because the file is not available.")
+                    "Sorry, I can't reach the audio file. Please check that your stream URL is internet accessible via HTTPS at the MA_HOSTNAME variable you provided.")
                 response_builder.set_should_end_session(True)
                 return response_builder.response
         except requests.RequestException:
