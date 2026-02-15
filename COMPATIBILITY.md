@@ -14,5 +14,6 @@
 - **Echo Dot Clock (Gen 5)**
 - **Echo Plus (Gen 2)**
 - **Echo Pop (Gen 1)**
-### APL devices: 
+### APL devices:
+- **Echo Show 5 (Gen 1)**
 - **Echo Show 8 (Gen 2)**
