@@ -46,7 +46,7 @@ Note: manual creation of the skill in the Alexa Developer Console is no longer r
 | `DEBUG_PORT` | No | `5678` | Remote debug port (if you enable remote debugging). |
 | `LOCALE` | No | `en-US` | *REQUIRED if your device is not configured for en-US. Skill locale used by the setup and interaction model operations (examples: `en-US`, `en-GB`, `de-DE`). |
 | `AWS_DEFAULT_REGION` | No | `us-east-1` | AWS region used by ASK CLI operations when applicable. |
-| `TZ` | No | UTC | Container timezone (example: `America/Chicago`) to make logs/timestamps match your locale. |
+| `TZ` | No | `UTC` | Container timezone (example: `America/Chicago`) to make logs/timestamps match your locale. |
 
 **Secrets and persistence**
 
