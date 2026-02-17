@@ -34,7 +34,7 @@ The easiest way to run the project is with Docker Compose. This will build and s
 
 Note: manual creation of the skill in the Alexa Developer Console is no longer required — the `/setup` flow automates creation and enablement when possible.
 
-**Environment Variables**
+### Environment Variables
 
 | Variable | Required | Default | Description |
 |---|:---:|:---:|---|
