@@ -34,6 +34,30 @@ The easiest way to run the project is with Docker Compose. This will build and s
 
 Note: manual creation of the skill in the Alexa Developer Console is no longer required — the `/setup` flow automates creation and enablement when possible.
 
+**Environment Variables**
+
+| Variable | Required | Default | Description |
+|---|:---:|:---:|---|
+| `SKILL_HOSTNAME` | Yes | — | Must be a publicly reachable HTTPS host (example: `alexa.example.com`). Should proxy to your open port on this container (port 5000 by default).  Public hostname used in the Alexa skill manifest and to validate the skill endpoint. |
+| `MA_HOSTNAME` | No* | — | *REQUIRED if your device does not have a display (does not support APL). Music Assistant server hostname (example: `ma.example.com`). Should proxy to your stream port on the Music Assistant server (port 8097 by default). Also required if you would like album art on your APL device. |
+| `APP_USERNAME` | No | — | Username for the web UI and API basic authentication. In Docker Compose this is provided via a Docker secret (`/run/secrets/APP_USERNAME`) pointing to `./secrets/app_username.txt`, or as a plain env var when not using secrets. |
+| `APP_PASSWORD` | No | — | Password for the web UI and API basic authentication. Can be supplied as a Docker secret file or plain env var. |
+| `PORT` | No | `5000` | Port the app lives at. Ensure the `ports` mapping in [docker-compose.yml](docker-compose.yml) matches this value. |
+| `DEBUG_PORT` | No | `5678` | Remote debug port (if you enable remote debugging). |
+| `LOCALE` | No | `en-US` | *REQUIRED if your device is not configured for en-US. Skill locale used by the setup and interaction model operations (examples: `en-US`, `en-GB`, `de-DE`). |
+| `AWS_DEFAULT_REGION` | No | `us-east-1` | AWS region used by ASK CLI operations when applicable. |
+| `TZ` | No | UTC | Container timezone (example: `America/Chicago`) to make logs/timestamps match your locale. |
+
+**Secrets and persistence**
+
+- The example [docker-compose.yml](docker-compose.yml) demonstrates using Docker secrets for `APP_USERNAME` and `APP_PASSWORD` (files in `./secrets`). When using Docker secrets, the container environment will contain the path to the secret file (for example `/run/secrets/APP_PASSWORD`) and the service reads the file content.
+- To persist ASK CLI credentials between container runs, mount a host directory as `/root/.ask` (the example uses `./ask_data:/root/.ask`). This allows the setup flow to reuse existing ASK credentials and skip the browser auth flow when present.
+
+**Notes on values**
+
+- `SKILL_HOSTNAME` must refer to a public HTTPS endpoint reachable by Amazon; it is embedded in the skill manifest and used for endpoint validation.
+- If you override `PORT` or `DEBUG_PORT`, update the `ports` mapping in [docker-compose.yml](docker-compose.yml) accordingly (host:container).
+
 ## Basic Troubleshooting
 ### Status Page
 `/status`

@@ -19,3 +19,4 @@ raw.githubusercontent.com
 deb.nodesource.com
 flask.app
 app.app
+*.example.com
