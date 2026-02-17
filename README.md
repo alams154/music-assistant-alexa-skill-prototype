@@ -45,7 +45,7 @@ If you want to test as an add-on locally:
 3. In the add-on configuration, set the options described above (`MA_HOSTNAME`, `APP_USERNAME`, `APP_PASSWORD`, `PORT`, `DEBUG_PORT`, `AWS_DEFAULT_REGION`) as needed.
 4. Start the add-on and check the add-on logs for startup and any missing dependencies or configuration issues.
 
-Warning: Treat this add-on as a user convenience and validate thoroughly as this method has not been tested in a Home Assistant environment and may require adjustments to work properly as an add-on.
+**Warning**: Treat this add-on as a user convenience and validate thoroughly as this method has not been tested in a Home Assistant environment and may require adjustments to work properly as an add-on.
 
 ### 3. Using `docker run`
 
