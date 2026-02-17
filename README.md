@@ -34,6 +34,42 @@ The easiest way to run the project is with Docker Compose. This will build and s
 
 Note: manual creation of the skill in the Alexa Developer Console is no longer required — the `/setup` flow automates creation and enablement when possible.
 
+### 2. Running locally with `docker run`
+
+Run the published GitHub Container Registry image with `docker run`. Replace the image tag below with the appropriate tag or digest if needed.
+
+```sh
+docker run --rm \
+    -p 5000:5000 \
+    -e SKILL_HOSTNAME=alexa.example.com \
+    -e MA_HOSTNAME=ma.example.com \
+    -e PORT=5000 \
+    -e LOCALE=en-US \
+    -e AWS_DEFAULT_REGION=us-east-1 \
+    -v "$(pwd)/ask_data:/root/.ask" \
+    -v "$(pwd)/secrets/app_username.txt:/run/secrets/APP_USERNAME:ro" \
+    -v "$(pwd)/secrets/app_password.txt:/run/secrets/APP_PASSWORD:ro" \
+    ghcr.io/alams154/music-assistant-alexa-skill-prototype:latest
+```
+
+Notes:
+- Adjust `SKILL_HOSTNAME` to the public HTTPS host you'll use in the skill manifest.
+- The `ask_data` volume persists ASK CLI credentials so the setup flow can reuse them.
+- Mounting files into `/run/secrets` is a simple way to provide secrets for local testing; for production use Docker secrets or your platform's secret manager.
+
+### 3. Home Assistant add-on (untested)
+
+This repository contains an `addons/music-assistant-skill` folder with a simple Home Assistant add-on wrapper. Running it as an add-on in your environment may require additional changes.
+
+If you want to test as an add-on locally:
+
+1. Add this repository as a custom add-on repository in Home Assistant Supervisor (Supervisor > Add-on Store > Repositories).
+2. Install the "Music Assistant Alexa Skill" add-on and open the add-on configuration.
+3. In the add-on configuration, set the options described above (`MA_HOSTNAME`, `APP_USERNAME`, `APP_PASSWORD`, `PORT`, `DEBUG_PORT`, `AWS_DEFAULT_REGION`) as needed.
+4. Start the add-on and check the add-on logs for startup and any missing dependencies or configuration issues.
+
+Warning: Treat this add-on as a user convenience and validate thoroughly as this method has not been tested in a Home Assistant environment and may require adjustments to work properly as an add-on.
+
 ### Environment Variables
 
 | Variable | Required | Default | Description |
