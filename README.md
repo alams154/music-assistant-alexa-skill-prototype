@@ -3,10 +3,6 @@ This project is an Alexa skill prototype for controlling the Music Assistant ser
 
 ## How to Run
 
-### 1. Using Docker Compose (Recommended)
-
-The easiest way to run the project is with Docker Compose. This will build and start the Alexa skill container with required environment variables, secrets, and an optional persistent ASK credential volume.
-
 #### Prerequisites
 
 - An Amazon developer account: https://developer.amazon.com/en-US/docs/alexa/ask-overviews/create-developer-account.html
@@ -14,6 +10,10 @@ The easiest way to run the project is with Docker Compose. This will build and s
     ![Skill Access Management](assets/screenshots/skill-access-management.png)
 - Docker & Docker Compose installed on your host
 - A public HTTPS endpoint for the skill
+
+### 1. Using Docker Compose (Recommended)
+
+The easiest way to run the project is with Docker Compose. This will build and start the Alexa skill container with required environment variables, secrets, and an optional persistent ASK credential volume.
 
 #### Steps:
 
