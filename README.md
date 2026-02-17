@@ -10,7 +10,7 @@ The easiest way to run the project is with Docker Compose. This will build and s
 #### Prerequisites
 
 - An Amazon developer account: https://developer.amazon.com/en-US/docs/alexa/ask-overviews/create-developer-account.html
-- Skill Access Management enabled for your developer account: https://developer.amazon.com/alexa/console/ask/settings/access-managemen
+- Skill Access Management enabled for your developer account: [https://developer.amazon.com/alexa/console/ask/settings/access-management](https://developer.amazon.com/alexa/console/ask/settings/access-management)
     ![Skill Access Management](assets/screenshots/skill-access-management.png)
 - Docker & Docker Compose installed on your host
 - A public HTTPS endpoint for the skill
