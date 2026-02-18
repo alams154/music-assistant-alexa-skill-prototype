@@ -59,7 +59,7 @@ except Exception:
     pass
 skill_adapter = SkillAdapter(
     skill=sb.create(),
-    skill_id="",
+    skill_id="", # pyright: ignore[reportArgumentType]
     app=app)
 
 # Mount the Music Assistant API (only ma routes will be mounted at /ma)
@@ -154,11 +154,9 @@ def _capture_incoming_intent():
                         payload = None
             except Exception:
                 payload = None
-        # If still not parsed, try form fields (simulator fallback)
         if not payload:
             try:
                 if request.form:
-                    # simulator may post via form fields
                     intent = request.form.get('intent')
                     raw_slots = request.form.get('slots')
                     if intent:
@@ -199,15 +197,12 @@ _setup_proc = None
 _setup_logs = deque(maxlen=500)
 _setup_lock = threading.Lock()
 
-# Simulator logs (store recent simulated incoming intents + responses)
-app.config['SIMULATOR_LOGS'] = []
-app.config['SIMULATOR_LOGS_MAXLEN'] = 200
-# Centralized intent logs (all incoming intents, including simulator and real requests)
+# Centralized intent logs (all incoming intents)
 app.config['INTENT_LOGS'] = []
 app.config['INTENT_LOGS_MAXLEN'] = 500
 
 
-# Register endpoint blueprints moved out of app.py (status, invocations, simulator)
+# Register endpoint blueprints moved out of app.py (status and invocations)
 try:
     from endpoints import status_bp, invocations_bp
     app.register_blueprint(status_bp)
