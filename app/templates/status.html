@@ -22,7 +22,7 @@
                 <div class="row" id="skill-ask-row">__SKILL_ASK_HTML__</div>
                 <div class="row" id="api-row">__MA_API_HTML__</div>
                 <div class="row" id="alexa-row">__ALEXA_API_HTML__</div>
-                <div class="row" id="simulator-row">__SIMULATOR_HTML__</div>
+                <div class="row" id="invocations-row">__INVOCATIONS_HTML__</div>
                 <script>
                 // Fetch MA and Alexa checks independently so each row updates when ready
                 (function pollMa(){
@@ -47,10 +47,10 @@
                     }).catch(()=>{ setTimeout(pollAsk, 10000); });
                 })();
 
-                // Poll invocations count so the simulator row updates live
+                // Poll invocations count so the invocation row updates live
                 (function pollInvocations(){
                     fetch('/status/invocations').then(r=>r.json()).then(j=>{
-                        try{ const simEl = document.getElementById('simulator-row'); if(simEl && j.simulator_html){ simEl.innerHTML = j.simulator_html; } }catch(e){}
+                        try{ const invEl = document.getElementById('invocations-row'); if(invEl && j.invocations_html){ invEl.innerHTML = j.invocations_html; } }catch(e){}
                         setTimeout(pollInvocations, 3000);
                     }).catch(()=>{ setTimeout(pollInvocations, 5000); });
                 })();

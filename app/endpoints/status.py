@@ -180,11 +180,11 @@ def _build_status_json():
     intent_logs = current_app.config.get('INTENT_LOGS', [])
     count = len(intent_logs) if intent_logs else 0
     if count:
-        simulator_html = f'<a href="/invocations" target="_blank" rel="noopener noreferrer">View {count} invocations</a>'
+        invocations_html = f'<a href="/invocations" target="_blank" rel="noopener noreferrer">View {count} invocations</a>'
     else:
-        simulator_html = '<span class="muted">No recent invocations</span>'
+        invocations_html = '<span class="muted">No recent invocations</span>'
 
-    return {'skill_html': skill_html, 'skill_ask_html': skill_ask_html, 'ma_api_html': ma_api_html, 'alexa_api_html': alexa_api_html, 'simulator_html': simulator_html, 'created': False}
+    return {'skill_html': skill_html, 'skill_ask_html': skill_ask_html, 'ma_api_html': ma_api_html, 'alexa_api_html': alexa_api_html, 'invocations_html': invocations_html, 'created': False}
 
 
 def _compute_ma_api_html(api_user=None, api_pass=None):
@@ -284,10 +284,10 @@ def status():
         intent_logs = current_app.config.get('INTENT_LOGS', [])
         count = len(intent_logs) if intent_logs else 0
         if count:
-            simulator_html = f'<a href="/invocations" target="_blank" rel="noopener noreferrer">View {count} invocations</a>'
+            invocations_html = f'<a href="/invocations" target="_blank" rel="noopener noreferrer">View {count} invocations</a>'
         else:
-            simulator_html = '<span class="muted">No recent invocations</span>'
-        tpl = tpl.replace('__SIMULATOR_HTML__', simulator_html)
+            invocations_html = '<span class="muted">No recent invocations</span>'
+        tpl = tpl.replace('__INVOCATIONS_HTML__', invocations_html)
         return Response(tpl, status=200, mimetype='text/html')
     except Exception:
         html = """<!doctype html>
@@ -318,11 +318,11 @@ def status_ask():
 
 @status_bp.route('/status/invocations', methods=['GET'])
 def status_invocations():
-    """Return the current invocation count and simulator HTML so the UI can refresh it live."""
+    """Return the current invocation count and invocation HTML so the UI can refresh it live."""
     intent_logs = current_app.config.get('INTENT_LOGS', [])
     count = len(intent_logs) if intent_logs else 0
     if count:
-        simulator_html = f'<a href="/invocations" target="_blank" rel="noopener noreferrer">View {count} invocations</a>'
+        invocations_html = f'<a href="/invocations" target="_blank" rel="noopener noreferrer">View {count} invocations</a>'
     else:
-        simulator_html = '<span class="muted">No recent invocations</span>'
-    return jsonify({'count': count, 'simulator_html': simulator_html})
+        invocations_html = '<span class="muted">No recent invocations</span>'
+    return jsonify({'count': count, 'invocations_html': invocations_html})
