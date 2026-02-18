@@ -101,7 +101,10 @@ class CheckAudioInterfaceHandler(AbstractRequestHandler):
     """
     def can_handle(self, handler_input):
         # type: (HandlerInput) -> bool
-        if handler_input.request_envelope.context.system.device:
+        if (handler_input.request_envelope.context and 
+            handler_input.request_envelope.context.system and 
+            handler_input.request_envelope.context.system.device and
+            handler_input.request_envelope.context.system.device.supported_interfaces):
             # Since skill events won't have device information
             return handler_input.request_envelope.context.system.device.supported_interfaces.audio_player is None
         else:
