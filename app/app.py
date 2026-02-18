@@ -1,11 +1,8 @@
 import os
 from flask import Flask, request, jsonify, Response, g
-from markupsafe import escape
 from flask_ask_sdk.skill_adapter import SkillAdapter
 from skill.lambda_function import sb  # sb is the SkillBuilder from skill/lambda_function.py
-import requests
 import json
-from requests.exceptions import RequestException
 import music_assistant_api as ma_api
 import alexa_api as alexa_api
 from werkzeug.middleware.dispatcher import DispatcherMiddleware
@@ -19,8 +16,6 @@ from pathlib import Path
 import time
 import pty
 import re
-import shutil
-import urllib.parse
 import base64
 import logging
 
@@ -615,10 +610,11 @@ def setup_code():
             if rc is not None:
                 _enqueue_setup_log(f'Create script exited immediately with rc={rc}')
                 try:
-                    out = proc.stdout.read()
-                    if out:
-                        for ln in out.splitlines():
-                            _enqueue_setup_log(f'[CREATE-OUT] {ln}')
+                    if proc.stdout:
+                        out = proc.stdout.read()
+                        if out:
+                            for ln in out.splitlines():
+                                _enqueue_setup_log(f'[CREATE-OUT] {ln}')
                 except Exception:
                     pass
         except Exception as e:
