@@ -20,3 +20,6 @@ deb.nodesource.com
 flask.app
 app.app
 *.example.com
+www.soundhelix.com
+cloudflare-dns.com
+s3.amazonaws.com
