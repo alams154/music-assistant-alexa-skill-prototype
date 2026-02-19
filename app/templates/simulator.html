@@ -1,0 +1,351 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Simulator</title>
+  <style>
+    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial; padding: 20px; }
+    .muted { color: #666; }
+  </style>
+</head>
+<body>
+  <h1>Simulator</h1>
+  <p class="muted">This simulator UI allows sending test IntentRequests to the skill.</p>
+
+  <div>
+    <label for="intent">Intent:</label>
+    <select id="intent"></select>
+  </div>
+  <div style="margin-top:8px">
+    <strong>Selected intent:</strong> <span id="selected-intent" class="muted">(none)</span>
+  </div>
+  <div style="margin-top:8px">
+    <label>Target:</label>
+    <label><input type="radio" name="target" value="local" checked>local</label>
+    <label style="margin-left:12px"><input type="radio" name="target" value="hostname"> <span id="hostname-label">SKILL_HOSTNAME</span></label>
+  </div>
+  <div style="margin-top:8px">
+    <button id="send">Send Intent</button>
+  </div>
+
+  <h3>Payload</h3>
+  <p class="muted">Editable payload that will be sent to the skill (JSON).</p>
+  <textarea id="payload" style="width:100%;height:260px;background:#fff;border:1px solid #ddd;padding:8px;font-family:monospace;font-size:13px;">{
+  "version": "1.0",
+  "request": {
+    "type": "IntentRequest",
+    "intent": { "name": "" }
+  }
+}</textarea>
+
+  <h3>Response</h3>
+  <div id="response" style="background:#f6f6f6;padding:8px;border-radius:4px;min-height:120px;white-space:pre-wrap;overflow:auto"></div>
+  <div id="audio-controls" style="margin-top:12px;display:none;gap:8px;align-items:center;">
+    <button id="btn-play" title="Play/Pause">⏯</button>
+    <div id="now-playing" style="margin-left:12px;color:#333;font-size:13px;">(no audio)</div>
+  </div>
+  <audio id="sim-audio" style="display:none"></audio>
+
+  <script>
+    const skillHostname = __SKILL_HOSTNAME__ || '';
+    // Show configured hostname in the toggle label (or fallback text)
+    try{
+      const hl = document.getElementById('hostname-label');
+      if(hl) hl.textContent = (skillHostname || 'SKILL_HOSTNAME') + ' (SKILL_HOSTNAME)';
+    }catch(e){}
+    async function loadIntents(){
+      const res = await fetch('/simulator/api');
+      const j = await res.json();
+      const sel = document.getElementById('intent');
+      sel.innerHTML = '';
+      (j.intents||[]).forEach(it=>{
+        const opt = document.createElement('option');
+        opt.value = it.name;
+        opt.textContent = it.name + (it.samples && it.samples.length? ' — sample: '+it.samples[0] : '');
+        sel.appendChild(opt);
+      });
+      updateSelected();
+      // populate payload for first selection
+      if(sel.options.length){
+        const first = sel.options[sel.selectedIndex].value;
+        try{ await loadPayload(first); }catch(e){}
+      }
+    }
+
+    async function loadPayload(intentName){
+      try{
+        const r = await fetch('/simulator/payload?intent=' + encodeURIComponent(intentName));
+        const j = await r.json();
+        const ta = document.getElementById('payload');
+        ta.value = JSON.stringify(j, null, 2);
+      }catch(e){
+        // leave existing payload
+      }
+    }
+
+    function updateSelected(){
+      const sel = document.getElementById('intent');
+      const label = document.getElementById('selected-intent');
+      if(sel && label){
+        const opt = sel.options[sel.selectedIndex];
+        label.textContent = opt ? opt.value : '(none)';
+      }
+    }
+
+    document.getElementById('intent').addEventListener('change', updateSelected);
+
+    document.getElementById('intent').addEventListener('change', async (e)=>{
+      const name = e.target.value;
+      await loadPayload(name);
+    });
+
+    document.getElementById('send').addEventListener('click', async ()=>{
+      const intent = document.getElementById('intent').value;
+      updateSelected();
+      const use = document.querySelector('input[name="target"]:checked').value;
+      if(use === 'hostname' && !skillHostname){
+        alert('SKILL_HOSTNAME not configured on server');
+        return;
+      }
+      const ta = document.getElementById('payload');
+      let override = null;
+      try{
+        override = JSON.parse(ta.value);
+      }catch(e){
+        if(!confirm('Payload JSON is invalid. Send without override?')){
+          return;
+        }
+        override = null;
+      }
+      const body = { intent: intent, use: use };
+      if(override) body.override_payload = override;
+      const respEl = document.getElementById('response');
+      respEl.textContent = 'Sending...';
+      try{
+        const r = await fetch('/simulator/send', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+          const j = await r.json();
+          // Render response into the single response box. Do not clear it after rendering.
+          function renderResponse(obj){
+            const respBox = document.getElementById('response');
+            if(obj && typeof obj === 'object' && ('body' in obj) && ('status_code' in obj)){
+              let body = obj.body || '';
+              let rawBody = body;
+              if(typeof rawBody === 'string'){
+                try{ rawBody = rawBody.replace(/\\n/g,'\n'); }catch(e){}
+              }
+              if(respBox){
+                // First, attempt to parse as JSON (handles double-encoded JSON and common escapes)
+                function tryParseJson(s){
+                  try{
+                    let parsed = JSON.parse(s);
+                    if(typeof parsed === 'string'){
+                      try{ parsed = JSON.parse(parsed); }catch(e){}
+                    }
+                    return parsed;
+                  }catch(e){
+                    try{
+                      const unescaped = s.replace(/\\\"/g, '"').replace(/\\n/g, '\n');
+                      let parsed = JSON.parse(unescaped);
+                      if(typeof parsed === 'string'){
+                        try{ parsed = JSON.parse(parsed); }catch(e){}
+                      }
+                      return parsed;
+                    }catch(e2){
+                      return null;
+                    }
+                  }
+                }
+                const parsedJson = (typeof rawBody === 'string') ? tryParseJson(rawBody) : null;
+                if(parsedJson !== null){
+                  // pretty-print JSON inside a <pre>
+                  const pretty = JSON.stringify(parsedJson, null, 2);
+                  const escapeHtml = (s)=> s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+                  respBox.innerHTML = '<div style="font-weight:600;margin-bottom:8px">Status: ' + (obj.status_code || '') + '</div>' + '<pre style="white-space:pre-wrap;margin:0;">' + escapeHtml(pretty) + '</pre>';
+                  // If the skill response contains SSML, play it using the browser TTS
+                  try{
+                    const ssml = parsedJson && parsedJson.response && parsedJson.response.outputSpeech && parsedJson.response.outputSpeech.ssml;
+                    if(ssml && window.speechSynthesis){
+                      const tmp = document.createElement('div');
+                      tmp.innerHTML = ssml;
+                      const ttsText = tmp.textContent || tmp.innerText || '';
+                      if(ttsText && ttsText.trim()){
+                        try{ speechSynthesis.cancel(); }catch(_e){}
+                        const utter = new SpeechSynthesisUtterance(ttsText);
+                        // optional: set lang if available on payload
+                        if(parsedJson.request && parsedJson.request.locale) utter.lang = parsedJson.request.locale;
+                        speechSynthesis.speak(utter);
+                      }
+                    }
+                  }catch(e){}
+                  // Check for AudioPlayer directives and enqueue any stream URLs
+                  try{
+                    const dirs = parsedJson && parsedJson.response && parsedJson.response.directives;
+                    if(Array.isArray(dirs)){
+                      const urls = [];
+                    dirs.forEach(d=>{
+                      try{
+                        if(d && d.type === 'AudioPlayer.Play'){
+                          const stream = d.audioItem && d.audioItem.stream;
+                          if(stream){
+                            // prefer explicit url, fall back to token if it looks like a URL
+                            if(stream.url) urls.push(stream.url);
+                            else if(stream.token && typeof stream.token === 'string' && stream.token.startsWith('http')) urls.push(stream.token);
+                          }
+                        }
+                      }catch(_){}
+                    });
+                    if(urls.length) enqueueAndPlayUrls(urls);
+                    }
+                  }catch(e){}
+                }else{
+                  // Not JSON — if it looks like HTML, render it; otherwise show raw text
+                  const maybeHtml = typeof rawBody === 'string' && /<[^>]+>/.test(rawBody);
+                  if(maybeHtml){
+                    respBox.innerHTML = '<div style="font-weight:600;margin-bottom:8px">Status: ' + (obj.status_code || '') + '</div>' + rawBody;
+                    // also attempt to play SSML if the raw HTML includes a <speak> element
+                    try{
+                      const speakMatch = typeof rawBody === 'string' && rawBody.match(/<speak[\s\S]*?>[\s\S]*?<\/speak>/i);
+                      if(speakMatch && window.speechSynthesis){
+                        const tmp = document.createElement('div'); tmp.innerHTML = speakMatch[0];
+                        const tts = tmp.textContent || tmp.innerText || '';
+                        if(tts && tts.trim()){
+                          try{ speechSynthesis.cancel(); }catch(_e){}
+                          speechSynthesis.speak(new SpeechSynthesisUtterance(tts));
+                        }
+                      }
+                    }catch(e){}
+                  }else{
+                    respBox.textContent = 'Status: ' + (obj.status_code || '') + '\n\n' + rawBody;
+                  }
+                }
+              }
+              return;
+            }
+            // fallback: display JSON/stringified body
+            try{
+              if(respBox) respBox.textContent = JSON.stringify(obj, null, 2);
+            }catch(e){
+              if(respBox) respBox.textContent = String(obj);
+            }
+          }
+          // render into the response box (do not overwrite with an empty string)
+          renderResponse(j);
+      }catch(e){
+        respEl.textContent = String(e);
+      }
+    });
+
+    loadIntents().catch(()=>{});
+
+    // Make the response pre selectable via Ctrl/Cmd+A when focused
+    try{
+      const respBox = document.getElementById('response');
+      if(respBox){
+        respBox.setAttribute('tabindex', '0');
+        respBox.setAttribute('title', 'Focus and press Ctrl/Cmd+A to select response');
+        respBox.addEventListener('keydown', (e)=>{
+          if((e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A')){
+            e.preventDefault();
+            try{
+              const range = document.createRange();
+              range.selectNodeContents(respBox);
+              const sel = window.getSelection();
+              sel.removeAllRanges();
+              sel.addRange(range);
+            }catch(_){
+              // fallback: select entire text by creating a temporary textarea
+              const txt = respBox.textContent || '';
+              const ta = document.createElement('textarea');
+              document.body.appendChild(ta);
+              ta.value = txt;
+              ta.select();
+              setTimeout(()=>{ document.body.removeChild(ta); }, 50);
+            }
+          }
+        });
+      }
+      // ensure rendered response div is visible (we always render HTML)
+      const renderDiv = document.getElementById('response-render');
+      if(renderDiv) renderDiv.style.display = 'block';
+    }catch(e){}
+
+    // Audio playback queue/state
+    const audioEl = document.getElementById('sim-audio');
+    const btnPlay = document.getElementById('btn-play');
+    const nowPlaying = document.getElementById('now-playing');
+    let audioQueue = [];
+    let audioIndex = -1;
+
+    function updateNowPlaying(){
+      if(audioIndex >= 0 && audioQueue[audioIndex]){
+        nowPlaying.textContent = 'Now playing: ' + audioQueue[audioIndex];
+      }else{
+        nowPlaying.textContent = '(no audio)';
+      }
+    }
+
+    function playAtIndex(i){
+      if(!audioQueue.length) return;
+      if(i < 0 || i >= audioQueue.length) return;
+      audioIndex = i;
+      // Ensure we don't request CORS for playback (some hosts don't set CORS headers)
+      try{ audioEl.removeAttribute('crossorigin'); audioEl.crossOrigin = null; }catch(_e){}
+      audioEl.preload = 'metadata';
+      audioEl.src = audioQueue[audioIndex];
+      audioEl.style.display = '';
+      audioEl.play().catch(()=>{});
+      btnPlay.textContent = 'Pause';
+      updateNowPlaying();
+    }
+
+    function playNext(){
+      if(audioIndex + 1 < audioQueue.length){
+        playAtIndex(audioIndex + 1);
+      } else {
+        // stop at end
+        audioEl.pause();
+        audioEl.currentTime = 0;
+        btnPlay.textContent = 'Play';
+        audioIndex = -1;
+        updateNowPlaying();
+        // hide controls when queue finished
+        try{ document.getElementById('audio-controls').style.display = 'none'; }catch(_){ }
+      }
+    }
+
+    btnPlay.addEventListener('click', ()=>{
+      if(audioEl.paused){
+        if(audioIndex === -1 && audioQueue.length) playAtIndex(0);
+        else audioEl.play().catch(()=>{});
+        btnPlay.textContent = '⏸';
+      } else {
+        audioEl.pause();
+        btnPlay.textContent = '▶';
+      }
+    });
+
+    audioEl.addEventListener('ended', ()=>{ playNext(); });
+    audioEl.addEventListener('play', ()=>{ btnPlay.textContent = '⏸'; });
+    audioEl.addEventListener('pause', ()=>{ btnPlay.textContent = '▶'; });
+
+    // Helper to enqueue audio URLs and start playback
+    function enqueueAndPlayUrls(urls){
+      if(!urls || !urls.length) return;
+      // validate URLs and only keep http(s) URLs
+      function isValidAudioUrl(u){
+        try{ const parsed = new URL(u); return (parsed.protocol === 'http:' || parsed.protocol === 'https:'); }catch(e){ return false; }
+      }
+      const valid = urls.filter(u => !!u && isValidAudioUrl(u));
+      if(!valid.length) return;
+      // ensure controls are visible
+      try{ document.getElementById('audio-controls').style.display = 'flex'; }catch(_){ }
+      const startIndex = audioQueue.length === 0 ? 0 : audioQueue.length;
+      audioQueue = audioQueue.concat(valid);
+      if(audioIndex === -1){
+        playAtIndex(startIndex);
+      }
+      updateNowPlaying();
+    }
+  </script>
+</body>
+</html>

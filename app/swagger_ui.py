@@ -23,6 +23,13 @@ OPENAPI_SPEC: Dict[str, Any] = {
                                     "imageUrl": {"type": "string"},
                                 },
                                 "required": ["streamUrl"],
+                            },
+                            "example": {
+                                "streamUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
+                                "title": "Sample Track",
+                                "artist": "Sample Artist",
+                                "album": "Sample Album",
+                                "imageUrl": "https://example.com/cover.jpg"
                             }
                         }
                     }
