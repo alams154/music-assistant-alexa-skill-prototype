@@ -41,7 +41,7 @@ def register_routes(bp):
         """Return the last pushed stream metadata from the Alexa skill.
         """
         if not _store:
-            return jsonify({'error': 'No URL available, please check if the Alexa skill has pushed a URL to the API'}), 404
+            return jsonify({'error': 'Check skill invocations and skill logs.  If there are no invocations, you have made a configuration error'}), 404
         return jsonify(_store)
     
     @bp.route('/intents', methods=['GET'])
