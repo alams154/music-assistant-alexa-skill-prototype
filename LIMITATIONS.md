@@ -13,4 +13,4 @@
 - Alexa groups (including stereo) are not supported at this time
 
 ### APL devices:
- - If follow up mode is enabled on the device in the Alexa app, the follow up prompt will continously stay open because of the constant metadata refresh
+ - A follow up prompt will continously stay open because of the constant metadata refresh
