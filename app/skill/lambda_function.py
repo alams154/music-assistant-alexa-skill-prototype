@@ -2,6 +2,7 @@
 
 import logging
 import gettext
+import os
 from ask_sdk.standard import StandardSkillBuilder
 from ask_sdk_core.dispatch_components import (
     AbstractRequestHandler, AbstractExceptionHandler,
@@ -27,10 +28,21 @@ class _ComponentFilter(logging.Filter):
     """
     def filter(self, record):
         name = (record.name or "")
+        path = (getattr(record, 'pathname', '') or '')
+        norm_path = path.replace(os.sep, '/') if path else ''
         if name.startswith('music_assistant_api') or name.startswith('ma_routes'):
             record.component = 'API'
         elif name.startswith('alexa') or name == 'lambda_function' or name.startswith('ask_sdk'):
             record.component = 'Skill'
+        elif norm_path:
+            if "/app/skill/" in norm_path:
+                record.component = 'Skill'
+            elif "/app/music_assistant_api/" in norm_path or "/app/alexa_api/" in norm_path:
+                record.component = 'API'
+            elif "/app/endpoints/" in norm_path or norm_path.endswith("/app.py"):
+                record.component = 'UI/Web'
+            else:
+                record.component = 'UI/Web'
         else:
             record.component = 'UI/Web'
         return True
@@ -49,10 +61,21 @@ def _log_record_factory(*args, **kwargs):
     record = _orig_log_record_factory(*args, **kwargs)
     if not hasattr(record, 'component'):
         name = (getattr(record, 'name', '') or '')
+        path = (getattr(record, 'pathname', '') or '')
+        norm_path = path.replace(os.sep, '/') if path else ''
         if name.startswith('music_assistant_api') or name.startswith('ma_routes'):
             record.component = 'API'
         elif name.startswith('alexa') or name == 'lambda_function' or name.startswith('ask_sdk'):
             record.component = 'Skill'
+        elif norm_path:
+            if "/app/skill/" in norm_path:
+                record.component = 'Skill'
+            elif "/app/music_assistant_api/" in norm_path or "/app/alexa_api/" in norm_path:
+                record.component = 'API'
+            elif "/app/endpoints/" in norm_path or norm_path.endswith("/app.py"):
+                record.component = 'UI/Web'
+            else:
+                record.component = 'UI/Web'
         else:
             record.component = 'UI/Web'
     return record
@@ -425,6 +448,71 @@ class ExceptionEncounteredHandler(AbstractRequestHandler):
 
 # ###################################################################
 
+# ########## APL INTERFACE HANDLERS #################################
+# This section contains handlers related to APL interface
+
+class APLUserEventHandler(AbstractRequestHandler):
+    """Handler for APL UserEvent requests.
+    
+    This handles periodic metadata refresh events sent from the APL document.
+    When the APL display sends a UserEvent with eventType='MetadataRefresh',
+    this handler fetches the latest metadata from Music Assistant and sends
+    an updated APL document to refresh the display.
+    """
+    def can_handle(self, handler_input):
+        # type: (HandlerInput) -> bool
+        if not is_request_type("Alexa.Presentation.APL.UserEvent")(handler_input):
+            return False
+        
+        # Check if this is a metadata refresh event
+        request = handler_input.request_envelope.request
+        try:
+            arguments = getattr(request, 'arguments', [])
+            if arguments and len(arguments) > 0:
+                event_type = arguments[0]
+                return event_type == 'MetadataRefresh'
+        except Exception:
+            pass
+        return False
+
+    def handle(self, handler_input):
+        # type: (HandlerInput) -> Response
+        
+        # Fetch latest metadata from Music Assistant
+        changed = False
+        try:
+            result = data.get_latest()
+            changed = bool(result and result.get('changed'))
+            if changed:
+                logger.info("Metadata changed")
+            else:
+                logger.debug("Metadata unchanged, skipping update")
+        except Exception:
+            logger.exception("Failed to fetch latest metadata")
+        
+        # Check if we have valid metadata
+        if not data.info.get('audioSources'):
+            logger.warning("No audio sources available for metadata refresh")
+        else:
+            # Send updated APL document with new metadata
+            if changed:
+                try:
+                    util.update_apl_metadata(handler_input.response_builder)
+                    logger.info("APL metadata update directive added to response")
+                except Exception:
+                    logger.exception("Failed to update APL metadata")
+        
+        # Always schedule the next refresh so polling continues.
+        try:
+            util.schedule_apl_refresh(handler_input.response_builder)
+        except Exception:
+            logger.exception("Failed to schedule APL refresh")
+        
+        # Explicitly keep session open to allow continued UserEvents
+        return handler_input.response_builder.set_should_end_session(False).response
+
+# ###################################################################
+
 # ########## PLAYBACK CONTROLLER INTERFACE HANDLERS #################
 # This section contains handlers related to Playback Controller interface
 # https://developer.amazon.com/docs/custom-skills/playback-controller-interface-reference.html#requests
@@ -546,6 +634,10 @@ class RequestLogger(AbstractRequestInterceptor):
         request = handler_input.request_envelope.request
         try:
             req_type = getattr(request, 'object_type', type(request).__name__)
+            # Skip noisy APL UserEvent logs.
+            if req_type == "Alexa.Presentation.APL.UserEvent":
+                return
+
             # If this is an IntentRequest, log intent name and slots
             if hasattr(request, 'intent') and request.intent:
                 intent_name = getattr(request.intent, 'name', None)
@@ -616,6 +708,7 @@ sb.add_request_handler(LaunchRequestOrPlayAudioHandler())
 sb.add_request_handler(PlayCommandHandler())
 sb.add_request_handler(HelpIntentHandler())
 sb.add_request_handler(ExceptionEncounteredHandler())
+sb.add_request_handler(APLUserEventHandler())
 sb.add_request_handler(UnhandledIntentHandler())
 sb.add_request_handler(NextOrPreviousIntentHandler())
 sb.add_request_handler(NextOrPreviousCommandHandler())

@@ -52,6 +52,9 @@ info = {
             "secondaryText": ""
 }
 
+# Track the last version we've seen to avoid unnecessary updates
+_last_version = None
+
 def get_latest(api_hostname: Optional[str] = None,
                path: str = '/ma/latest-url',
                scheme: str = 'http',
@@ -60,9 +63,11 @@ def get_latest(api_hostname: Optional[str] = None,
                password: Optional[str] = None) -> dict:
     """Fetch latest stream info from music-assistant API and map to APL fields.
 
-    Expected JSON shape: {"streamUrl":..., "title":..., "artist":..., "album":..., "imageUrl":...}
+    Expected JSON shape: {"streamUrl":..., "title":..., "artist":..., "album":..., "imageUrl":..., "version":..., "timestamp":...}
+    
+    Returns a dict with 'changed': bool indicating if the data actually changed.
     """
-    global info
+    global info, _last_version
 
     port = os.environ.get('PORT')
     api_hostname = f'127.0.0.1:{port}'
@@ -93,11 +98,17 @@ def get_latest(api_hostname: Optional[str] = None,
             code = getattr(resp, 'status', None) or getattr(resp, 'getcode', lambda: None)()
             if code and int(code) != 200:
                 logging.warning('Request to %s returned status %s', url, code)
-                return
+                return {'changed': False}
             payload = json.loads(resp.read().decode('utf-8'))
             if not isinstance(payload, dict):
                 logging.warning('Unexpected payload shape from %s', url)
-                return
+                return {'changed': False}
+            
+            # Check if version has changed
+            current_version = payload.get('version')
+            if current_version is not None and current_version == _last_version:
+                logging.debug(f"Data version {current_version} unchanged, skipping update")
+                return {'changed': False}
 
             stream_url = payload.get('streamUrl') or ''
             title = payload.get('title', '') or ''
@@ -130,9 +141,14 @@ def get_latest(api_hostname: Optional[str] = None,
                 'primaryText': title,
                 'secondaryText': secondary
             })
-            return
+            
+            # Update the last seen version
+            if current_version is not None:
+                _last_version = current_version
+            
+            return {'changed': True}
     except urllib.error.URLError as e:
         logging.warning('Could not reach %s: %s', url, e)
     except Exception:
         logging.exception('Error while loading latest data from %s', url)
-    return
+    return {'changed': False}

@@ -15,8 +15,9 @@ from ask_sdk_model.interfaces.audioplayer import (
 from ask_sdk_model.interfaces import display
 from ask_sdk_core.response_helper import ResponseFactory
 from ask_sdk_core.handler_input import HandlerInput
-from ask_sdk_model.interfaces.alexa.presentation.apl import RenderDocumentDirective, ExecuteCommandsDirective, ControlMediaCommand, MediaCommandType
+from ask_sdk_model.interfaces.alexa.presentation.apl import ExecuteCommandsDirective, ControlMediaCommand, MediaCommandType
 from . import data
+from .apl import add_apl
 
 
 def get_ma_hostname(raise_on_http_scheme=True):
@@ -238,468 +239,126 @@ def clear(response_builder):
         clear_behavior=ClearBehavior.CLEAR_ENQUEUED))
     return response_builder.response
 
-def add_apl(response_builder, start_paused=False):
-    """Add the RenderDocumentDirective"""
-    # Replace MA-hosted image sources if MA_HOSTNAME is set.
+
+def update_apl_metadata(response_builder):
+    """Update the APL document with the latest metadata without interrupting playback.
+    
+    This function sends ExecuteCommands directives to update only the text and image
+    components, avoiding a full document re-render that would restart audio playback.
+    This is called in response to UserEvent requests from the APL document.
+    """
+    # type: (ResponseFactory) -> None
     try:
-        hostname = get_ma_hostname(raise_on_http_scheme=False)
-    except ValueError:
-        hostname = ''
+        from ask_sdk_model.interfaces.alexa.presentation.apl import ExecuteCommandsDirective
+        
+        # Replace MA-hosted image sources if MA_HOSTNAME is set
+        try:
+            hostname = get_ma_hostname(raise_on_http_scheme=False)
+        except ValueError:
+            hostname = ''
 
-    if hostname:
-        data.info["coverImageSource"] = replace_ip_in_url(data.info.get("coverImageSource", ""), hostname)
+        cover_image = data.info.get("coverImageSource", "")
+        background_image = data.info.get("backgroundImageSource", "")
+        
+        if hostname:
+            cover_image = replace_ip_in_url(cover_image, hostname)
+            background_image = replace_ip_in_url(background_image, hostname)
+        
+        # Build SetValue commands to update individual components
+        commands = []
+        
+        # Update primary text (song title)
+        if data.info.get("primaryText"):
+            commands.append({
+                "type": "SetValue",
+                "componentId": "Audio_PrimaryText",
+                "property": "text",
+                "value": data.info["primaryText"]
+            })
+        
+        # Update secondary text (artist/album)
+        if data.info.get("secondaryText"):
+            commands.append({
+                "type": "SetValue",
+                "componentId": "Audio_SecondaryText",
+                "property": "text",
+                "value": data.info["secondaryText"]
+            })
+        
+        # Update cover image and bound data so conditional rendering refreshes.
+        if cover_image:
+            commands.append({
+                "type": "SetValue",
+                "componentId": "AudioPlayerRoot",
+                "property": "coverImageSource",
+                "value": cover_image
+            })
+            commands.append({
+                "type": "SetValue",
+                "componentId": "Audio_CoverArt",
+                "property": "imageSource",
+                "value": cover_image
+            })
+        
+        # Update background image and bound data so layouts recompute.
+        if background_image:
+            commands.append({
+                "type": "SetValue",
+                "componentId": "AudioPlayerRoot",
+                "property": "backgroundImageSource",
+                "value": background_image
+            })
+            commands.append({
+                "type": "SetValue",
+                "componentId": "AlexaBackground",
+                "property": "backgroundImageSource",
+                "value": background_image
+            })
+        
+        # Send ExecuteCommands directive if we have any commands
+        if commands:
+            response_builder.add_directive(
+                ExecuteCommandsDirective(
+                    commands=commands,
+                    token="playbackToken"
+                )
+            )
+        else:
+            logging.warning("No SetValue commands generated - no metadata to update")
+        
+    except Exception:
+        logging.exception('Error while updating APL metadata')
 
-    apl_document = {
-        "type": "APL",
-        "version": "2024.3",
-        "theme": "dark",
-        "import": [
+
+def schedule_apl_refresh(response_builder, delay_ms=1000):
+    """Schedule the next APL metadata refresh via a UserEvent.
+
+    This keeps refreshes alive even if the onMount loop does not repeat.
+    """
+    # type: (ResponseFactory, int) -> None
+    try:
+        from ask_sdk_model.interfaces.alexa.presentation.apl import ExecuteCommandsDirective
+
+        commands = [
             {
-                "name": "alexa-layouts",
-                "version": "1.7.0"
-            }
-        ],
-        "resources": [
-            {
-                "description": "Default resource definitions for Audio template",
-                "colors": {
-                    "colorText": "@colorText"
-                },
-                "dimensions": {
-                    "assetHeight": "425dp",
-                    "assetWidth": "425dp",
-                    "coverImageShadowRadius": "40dp",
-                    "coverImageShadowVerticalOffset": "20dp",
-                    "mainViewHeight": "85%",
-                    "mainViewTopSpacing": "15%",
-                    "primaryControlSize": "120dp",
-                    "secondaryControlSize": "92dp",
-                    "sliderIndeterminateHeight": "80dp",
-                    "sliderPaddingTop": "@spacingMedium",
-                    "trackInfoLeftPadding": "@spacingMedium",
-                    "transportLayoutMargins": "0"
-                },
-                "numbers": {
-                    "primarySongTextMaxLines": 3,
-                    "secondarySongTextMaxLines": 2
-                }
+                "type": "Idle",
+                "delay": int(delay_ms)
             },
             {
-                "description": "Resource definitions for Audio template - hubLandscapeMedium",
-                "when": "${@viewportProfile == @hubLandscapeMedium}",
-                "dimensions": {
-                    "assetHeight": "300dp",
-                    "assetWidth": "300dp",
-                    "primaryControlSize": "80dp",
-                    "secondaryControlSize": "60dp",
-                    "sliderPaddingTop": "0"
-                }
-            },
-            {
-                "description": "Resource definitions for Audio template - hubLandscapeSmall",
-                "when": "${@viewportProfile == @hubLandscapeSmall}",
-                "dimensions": {
-                    "assetHeight": "206dp",
-                    "assetWidth": "206dp",
-                    "primaryControlSize": "80dp",
-                    "secondaryControlSize": "60dp",
-                    "sliderIndeterminateHeight": "60dp",
-                    "sliderPaddingTop": "0"
-                },
-                "numbers": {
-                    "primarySongTextMaxLines": 1,
-                    "secondarySongTextMaxLines": 2
-                }
-            },
-            {
-                "description": "Resource definitions for Audio template - round",
-                "when": "${@viewportProfile == @hubRoundSmall}",
-                "dimensions": {
-                    "assetHeight": "96dp",
-                    "assetWidth": "96dp",
-                    "mainViewHeight": "80%",
-                    "mainViewTopSpacing": "20%",
-                    "primaryControlSize": "80dp",
-                    "secondaryControlSize": "60dp",
-                    "sliderIndeterminateHeight": "40dp",
-                    "sliderPaddingTop": "@spacingSmall",
-                    "trackInfoLeftPadding": 0
-                },
-                "numbers": {
-                    "primarySongTextMaxLines": 1,
-                    "secondarySongTextMaxLines": 1
-                }
-            },
-            {
-                "description": "Resource definitions for Audio template - tv full screen",
-                "when": "${@viewportProfile == @tvLandscapeXLarge}",
-                "dimensions": {
-                    "assetHeight": "240dp",
-                    "assetWidth": "240dp",
-                    "coverImageShadowRadius": "20dp",
-                    "coverImageShadowVerticalOffset": "10dp",
-                    "primaryControlSize": "60dp",
-                    "secondaryControlSize": "46dp",
-                    "sliderIndeterminateHeight": "40dp"
-                },
-                "numbers": {
-                    "primarySongTextMaxLines": 4,
-                    "secondarySongTextMaxLines": 2
-                }
-            },
-            {
-                "when": "${viewport.theme == 'light'}",
-                "colors": {
-                    "colorText": "@colorTextReversed"
-                }
-            }
-        ],
-        "layouts": {
-            "AudioPlayer": {
-                "parameters": [
-                    {
-                        "name": "audioControlType",
-                        "description": "The type of audio control to use. Default is skip (foward and backwards). Other options are skip | jump10 | jump30 | none.",
-                        "type": "string",
-                        "default": "skip"
-                    },
-                    {
-                        "name": "audioSources",
-                        "description": "Audio single source or an array of sources. Audios will be in a playlist if multiple sources are provided.",
-                        "type": "any"
-                    },
-                    {
-                        "name": "backgroundImageSource",
-                        "description": "URL for the background image source.",
-                        "type": "string"
-                    },
-                    {
-                        "name": "coverImageSource",
-                        "description": "URL for the cover image source. If not provided, text content will be left aligned.",
-                        "type": "string"
-                    },
-                    {
-                        "name": "headerTitle",
-                        "description": "Title text to render in the header.",
-                        "type": "string"
-                    },
-                    {
-                        "name": "headerSubtitle",
-                        "description": "Subtitle Text to render in the header.",
-                        "type": "string"
-                    },
-                    {
-                        "name": "headerAttributionImage",
-                        "description": "URL for attribution image or logo source (PNG/vector).",
-                        "type": "string"
-                    },
-                    {
-                        "name": "primaryText",
-                        "description": "Primary text for the media.",
-                        "type": "string"
-                    },
-                    {
-                        "name": "secondaryText",
-                        "description": "Secondary text for the media.",
-                        "type": "string"
-                    },
-                    {
-                        "name": "sliderType",
-                        "description": "Determinate for full control of the slider with transport control. Indeterminate is an ambient progress bar with animation.",
-                        "type": "string",
-                        "default": "determinate"
-                    }
-                ],
-                "item": [
-                    {
-                        "type": "Container",
-                        "height": "100vh",
-                        "width": "100vw",
-                        "bind": [
-                            {
-                                "name": "sliderThumbPosition",
-                                "type": "number",
-                                "value": 0
-                            },
-                            {
-                                "name": "sliderActive",
-                                "type": "boolean",
-                                "value": False
-                            },
-                            {
-                                "name": "videoProgressValue",
-                                "type": "number",
-                                "value": 0
-                            },
-                            {
-                                "name": "videoTotalValue",
-                                "type": "number",
-                                "value": 0
-                            }
-                        ],
-                        "items": [
-                            {
-                                "type": "AlexaBackground",
-                                "id": "AlexaBackground",
-                                "description": "Main backgroud",
-                                "backgroundImageSource": "${backgroundImageSource}"
-                            },
-                            {
-                                "type": "AlexaHeader",
-                                "id": "AlexaHeader",
-                                "width": "100%",
-                                "headerTitle": "${headerTitle}",
-                                "headerSubtitle": "${headerSubtitle}",
-                                "headerAttributionImage": "${headerAttributionImage}"
-                            },
-                            {
-                                "type": "Container",
-                                "position": "absolute",
-                                "width": "100%",
-                                "height": "@mainViewHeight",
-                                "top": "@mainViewTopSpacing",
-                                "alignItems": "center",
-                                "justifyContent": "center",
-                                "items": [
-                                    {
-                                        "description": "Cover image and track info",
-                                        "type": "Container",
-                                        "width": "100%",
-                                        "paddingLeft": "@marginHorizontal",
-                                        "paddingRight": "@marginHorizontal",
-                                        "height": "auto",
-                                        "direction": "${@viewportProfile != @hubRoundSmall ? 'row' : 'column'}",
-                                        "items": [
-                                            {
-                                                "description": "Cover image",
-                                                "type": "Container",
-                                                "id": "Audio_CoverImage",
-                                                "paddingEnd": "${coverImageSource != '' ? @trackInfoLeftPadding : 0}",
-                                                "justifyContent": "${@viewportProfile != @hubRoundSmall ? 'center' : 'end'}",
-                                                "items": [
-                                                    {
-                                                        "when": "${@viewportProfile != @hubRoundSmall && coverImageSource != ''}",
-                                                        "type": "Container",
-                                                        "height": "@assetHeight",
-                                                        "width": "@assetWidth",
-                                                        "items": [
-                                                            {
-                                                                "type": "AlexaImage",
-                                                                "imageSource": "${coverImageSource}",
-                                                                "imageScale": "best-fill",
-                                                                "imageWidth": "@assetWidth",
-                                                                "imageHeight": "@assetHeight",
-                                                                "imageAspectRatio": "square",
-                                                                "imageShadow": True
-                                                            }
-                                                        ]
-                                                    }
-                                                ]
-                                            },
-                                            {
-                                                "description": "Track Info",
-                                                "type": "Container",
-                                                "height": "${@viewportProfile != @hubRoundSmall ? '@assetHeight' : 'auto'}",
-                                                "direction": "column",
-                                                "shrink": 1,
-                                                "alignItems": "${@viewportProfile != @hubRoundSmall ? 'start' : 'bottom'}",
-                                                "justifyContent": "end",
-                                                "items": [
-                                                    {
-                                                        "type": "Text",
-                                                        "id": "Audio_PrimaryText",
-                                                        "accessibilityLabel": "${primaryText}",
-                                                        "text": "${primaryText}",
-                                                        "style": "textStyleDisplay4",
-                                                        "textAlign": "${@viewportProfile != @hubRoundSmall ? 'auto' : 'center'}",
-                                                        "paddingBottom": "@spacingXSmall"
-                                                    },
-                                                    {
-                                                        "type": "Text",
-                                                        "id": "Audio_SecondaryText",
-                                                        "accessibilityLabel": "${secondaryText}",
-                                                        "text": "${secondaryText}",
-                                                        "style": "textStyleBody",
-                                                        "textAlign": "${@viewportProfile != @hubRoundSmall ? 'auto' : 'center'}"
-                                                    }
-                                                ]
-                                            }
-                                        ]
-                                    },
-                                    {
-                                        "type": "Container",
-                                        "description": "Slider and controls.",
-                                        "id": "Audio_AudioInfo",
-                                        "width": "100%",
-                                        "paddingLeft": "${@marginHorizontal - @spacingMedium}",
-                                        "paddingRight": "${@marginHorizontal - @spacingMedium}",
-                                        "items": [
-                                            {
-                                                "description": "A hidden Video component to play the audio.",
-                                                "type": "Video",
-                                                "id": "videoPlayer",
-                                                "height": 1,
-                                                "width": 1,
-                                                "scale": "best-fill",
-                                                "autoplay": (not start_paused),
-                                                "audioTrack": "background",
-                                                "source": "${audioSources}",
-                                                "position": "absolute",
-                                                "onPlay": [
-                                                    {
-                                                        "type": "SetValue",
-                                                        "property": "videoTotalValue",
-                                                        "value": "${event.duration}"
-                                                    }
-                                                ],
-                                                "onTrackUpdate": [
-                                                    {
-                                                        "type": "SetValue",
-                                                        "property": "videoTotalValue",
-                                                        "value": "${event.duration}"
-                                                    }
-                                                ],
-                                                "onTimeUpdate": [
-                                                    {
-                                                        "type": "SetValue",
-                                                        "property": "videoProgressValue",
-                                                        "value": "${event.currentTime}"
-                                                    },
-                                                    {
-                                                        "type": "SetValue",
-                                                        "componentId": "slider",
-                                                        "property": "progressValue",
-                                                        "value": "${videoProgressValue}"
-                                                    },
-                                                    {
-                                                        "type": "SetValue",
-                                                        "property": "videoTotalValue",
-                                                        "value": "${event.duration}"
-                                                    }
-                                                ],
-                                                "onTrackReady": [
-                                                    {
-                                                        "type": "SetValue",
-                                                        "property": "videoTotalValue",
-                                                        "value": "${event.duration}"
-                                                    }
-                                                ],
-                                                "onTrackFail": [
-                                                    {
-                                                        "type": "SetValue",
-                                                        "property": "videoTotalValue",
-                                                        "value": "0"
-                                                    }
-                                                ]
-                                            },
-                                            {
-                                                "description": "Determinate Slider Container",
-                                                "when": "${sliderType != 'indeterminate'}",
-                                                "type": "Container",
-                                                "width": "100%",
-                                                "paddingTop": "@sliderPaddingTop",
-                                                "items": [
-                                                    {
-                                                        "type": "Container",
-                                                        "width": "100%",
-                                                        "alignItems": "center",
-                                                        "item": [
-                                                            {
-                                                                "type": "AlexaSlider",
-                                                                "id": "slider",
-                                                                "progressValue": "${videoProgressValue}",
-                                                                "totalValue": "${videoTotalValue}",
-                                                                "positionPropertyName": "sliderThumbPosition",
-                                                                "metadataDisplayed": True,
-                                                                "metadataPosition": "above_right",
-                                                                "width": "100%",
-                                                                "theme": "${viewport.theme}",
-                                                                "onUpCommand": [
-                                                                    {
-                                                                        "type": "ControlMedia",
-                                                                        "componentId": "videoPlayer",
-                                                                        "command": "seek",
-                                                                        "value": "${sliderThumbPosition - videoProgressValue}"
-                                                                    }
-                                                                ],
-                                                                "onMoveCommand": [
-                                                                    {
-                                                                        "type": "SetValue",
-                                                                        "property": "sliderActive",
-                                                                        "value": True
-                                                                    }
-                                                                ],
-                                                                "onDownCommand": [
-                                                                    {
-                                                                        "type": "SetValue",
-                                                                        "property": "sliderActive",
-                                                                        "value": True
-                                                                    }
-                                                                ]
-                                                            },
-                                                            {
-                                                                "type": "AlexaTransportControls",
-                                                                "mediaComponentId": "videoPlayer",
-                                                                "playPauseToggleButtonId": "playPauseToggleButtonId",
-                                                                "primaryControlSize": "@primaryControlSize",
-                                                                "secondaryControls": "${audioControlType}",
-                                                                "secondaryControlSize": "@secondaryControlSize",
-                                                                "autoplay": (not start_paused),
-                                                                "theme": "${viewport.theme}"
-                                                            }
-                                                        ]
-                                                    }
-                                                ]
-                                            },
-                                            {
-                                                "description": "Indeterminate Slider Container",
-                                                "when": "${sliderType == 'indeterminate'}",
-                                                "type": "Container",
-                                                "width": "100%",
-                                                "height": "@sliderIndeterminateHeight",
-                                                "alignItems": "center",
-                                                "justifyContent": "end",
-                                                "item": [
-                                                    {
-                                                        "type": "AlexaProgressBar",
-                                                        "progressBarType": "indeterminate",
-                                                        "width": "${viewport.width - (@marginHorizontal*2)}"
-                                                    }
-                                                ]
-                                            }
-                                        ]
-                                    }
-                                ]
-                            }
-                        ]
-                    }
+                "type": "SendEvent",
+                "arguments": [
+                    "MetadataRefresh",
+                    "${refreshTick}"
                 ]
             }
-        },
-        "mainTemplate": {
-            "parameters": [
-                "payload"
-            ],
-            "items": [
-                {
-                    "type": "AudioPlayer",
-                    "audioSources": data.info["audioSources"],
-                    "backgroundImageSource": data.info["backgroundImageSource"],
-                    "coverImageSource": data.info["coverImageSource"],
-                    "headerAttributionImage": data.info["headerAttributionImage"],
-                    "headerTitle": data.info["headerTitle"],
-                    "headerSubtitle": data.info["headerSubtitle"],
-                    "primaryText": data.info["primaryText"],
-                    "secondaryText": data.info["secondaryText"],
-                    "sliderType": "determinate"
-                }
-            ]
-        }
-    }
-    response_builder.add_directive(
-        RenderDocumentDirective(
-            token="playbackToken",
-            document=apl_document,
-            datasources={}
+        ]
+
+        response_builder.add_directive(
+            ExecuteCommandsDirective(
+                commands=commands,
+                token="playbackToken"
+            )
         )
-    )
+    except Exception:
+        logging.exception('Error while scheduling APL refresh')
+

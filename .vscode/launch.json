@@ -2,22 +2,6 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python: Remote Attach",
-            "type": "debugpy",
-            "request": "attach",
-            "connect": {
-                "host": "localhost",
-                "port": 5678
-            },
-            "pathMappings": [
-                {
-                    "localRoot": "${workspaceFolder}/app",
-                    "remoteRoot": "/app/src"
-                }
-            ]
-        }
-        ,
-        {
             "name": "Music Assistant Alexa Skill: Server",
             "type": "debugpy",
             "request": "launch",
@@ -37,6 +21,21 @@
                 "MA_HOSTNAME": "<hostname>"
             },
             "console": "integratedTerminal"
-        }
+        },
+        {
+            "name": "Python: Remote Attach",
+            "type": "debugpy",
+            "request": "attach",
+            "connect": {
+                "host": "localhost",
+                "port": 5678
+            },
+            "pathMappings": [
+                {
+                    "localRoot": "${workspaceFolder}/app",
+                    "remoteRoot": "/app/src"
+                }
+            ]
+        },
     ]
 }

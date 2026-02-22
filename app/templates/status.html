@@ -14,6 +14,7 @@
                 .muted { color:#666; font-size:0.9em }
                 .intent-toggle { cursor: pointer; background: transparent; border: none; padding: 0; font-size: 1em }
                 .intent-entry { margin-bottom:12px }
+                .status-box:focus { outline: 2px solid #00A4E3; outline-offset: 2px; }
                 </style>
             </head>
             <body>
@@ -22,6 +23,7 @@
                 <div class="row" id="skill-ask-row">__SKILL_ASK_HTML__</div>
                 <div class="row" id="api-row">__MA_API_HTML__</div>
                 <div class="row" id="alexa-row">__ALEXA_API_HTML__</div>
+                <div class="row" id="metadata-row">__METADATA_HTML__</div>
                 <div class="row" id="invocations-row">__INVOCATIONS_HTML__</div>
                 <script>
                 // Fetch MA and Alexa checks independently so each row updates when ready
@@ -37,6 +39,13 @@
                         try{ const alexaEl = document.getElementById('alexa-row'); if(alexaEl && j.alexa_api_html){ alexaEl.innerHTML = j.alexa_api_html; } }catch(e){}
                         setTimeout(pollAlexa, 3000);
                     }).catch(()=>{ setTimeout(pollAlexa, 5000); });
+                })();
+
+                (function pollMetadata(){
+                    fetch('/status/metadata').then(r=>r.json()).then(j=>{
+                        try{ const metadataEl = document.getElementById('metadata-row'); if(metadataEl && j.metadata_html){ metadataEl.innerHTML = j.metadata_html; } }catch(e){}
+                        setTimeout(pollMetadata, 3000);
+                    }).catch(()=>{ setTimeout(pollMetadata, 5000); });
                 })();
 
                 (function pollAsk(){
@@ -59,11 +68,45 @@
                 document.addEventListener('click', function(e){
                     try{
                         var t = e.target || e.srcElement;
+                        if(t && t.closest){
+                            var box = t.closest('pre.status-box');
+                            if(box && box.focus){
+                                box.focus();
+                            }
+                        }
                         if(t && t.classList && t.classList.contains('intent-toggle')){
                             var pair = t.nextElementSibling;
                             if(pair && pair.classList && pair.classList.contains('intent-pair')){
                                 pair.style.display = (pair.style.display === 'none' || pair.style.display === '') ? 'block' : 'none';
                             }
+                        }
+                    }catch(err){}
+                });
+
+                // Limit Ctrl/Cmd+A selection to the focused status box.
+                document.addEventListener('keydown', function(e){
+                    try{
+                        var isSelectAll = (e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A');
+                        if(!isSelectAll){ return; }
+
+                        var sel = window.getSelection ? window.getSelection() : null;
+                        var pre = null;
+
+                        if(document.activeElement && document.activeElement.classList && document.activeElement.classList.contains('status-box')){
+                            pre = document.activeElement;
+                        } else if(sel && sel.anchorNode){
+                            var anchor = sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentElement;
+                            if(anchor && anchor.closest){
+                                pre = anchor.closest('pre.status-box');
+                            }
+                        }
+
+                        if(pre && sel && document.createRange){
+                            e.preventDefault();
+                            var range = document.createRange();
+                            range.selectNodeContents(pre);
+                            sel.removeAllRanges();
+                            sel.addRange(range);
                         }
                     }catch(err){}
                 });

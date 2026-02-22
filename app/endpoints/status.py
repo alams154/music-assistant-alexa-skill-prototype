@@ -127,18 +127,16 @@ def _build_status_json():
             content_preview = escape(pretty)
         except Exception:
             content_preview = escape(content_text)
-        if len(content_preview) > 500:
-            content_preview = content_preview[:500] + '...'
         if resp.ok:
             ma_api_html = (
                 f'<span class="led green"></span> Music Assistant API reachable ({resp.status_code}) — /ma/latest-url'
-                f"<pre style='white-space:pre-wrap;background:#f6f6f6;padding:8px;border-radius:4px;max-height:200px;overflow:auto'>"
+                f"<pre class='status-box' tabindex='0' style='white-space:pre-wrap;background:#f6f6f6;padding:8px;border-radius:4px;max-height:200px;overflow:auto;user-select:text'>"
                 f"{content_preview}</pre>"
             )
         else:
             ma_api_html = (
                 f'<span class="led red"></span> Music Assistant API responded {resp.status_code} for /ma/latest-url'
-                f"<pre style='white-space:pre-wrap;background:#fdf2f2;padding:8px;border-radius:4px;max-height:200px;overflow:auto'>"
+                f"<pre class='status-box' tabindex='0' style='white-space:pre-wrap;background:#fdf2f2;padding:8px;border-radius:4px;max-height:200px;overflow:auto;user-select:text'>"
                 f"{content_preview}</pre>"
             )
     except RequestException as e:
@@ -159,22 +157,42 @@ def _build_status_json():
             content_preview = escape(pretty)
         except Exception:
             content_preview = escape(content_text)
-        if len(content_preview) > 500:
-            content_preview = content_preview[:500] + '...'
         if resp.ok:
             alexa_api_html = (
                 f'<span class="led green"></span> Alexa API reachable ({resp.status_code}) — /alexa/latest-url'
-                f"<pre style='white-space:pre-wrap;background:#f6f6f6;padding:8px;border-radius:4px;max-height:200px;overflow:auto'>"
+                f"<pre class='status-box' tabindex='0' style='white-space:pre-wrap;background:#f6f6f6;padding:8px;border-radius:4px;max-height:200px;overflow:auto;user-select:text'>"
                 f"{content_preview}</pre>"
             )
         else:
             alexa_api_html = (
                 f'<span class="led red"></span> Alexa API responded {resp.status_code} for /alexa/latest-url'
-                f"<pre style='white-space:pre-wrap;background:#fdf2f2;padding:8px;border-radius:4px;max-height:200px;overflow:auto'>"
+                f"<pre class='status-box' tabindex='0' style='white-space:pre-wrap;background:#fdf2f2;padding:8px;border-radius:4px;max-height:200px;overflow:auto;user-select:text'>"
                 f"{content_preview}</pre>"
             )
     except RequestException as e:
         alexa_api_html = f'<span class="led red"></span> Error: {str(e)}'
+
+    # Metadata Refresh display (APL updates)
+    try:
+        from skill import data as skill_data
+        metadata_info = dict(skill_data.info)  # Create a copy
+        pretty_metadata = json.dumps(metadata_info, indent=2, ensure_ascii=False)
+        content_preview = escape(pretty_metadata)
+        
+        if metadata_info.get('audioSources') or metadata_info.get('primaryText'):
+            metadata_html = (
+                f'<span class="led green"></span> APL Metadata Refresh (current data)'
+                f"<pre class='status-box' tabindex='0' style='white-space:pre-wrap;background:#f6f6f6;padding:8px;border-radius:4px;max-height:200px;overflow:auto;user-select:text'>"
+                f"{content_preview}</pre>"
+            )
+        else:
+            metadata_html = (
+                f'<span class="led yellow"></span> APL Metadata Refresh (no data loaded yet)'
+                f"<pre class='status-box' tabindex='0' style='white-space:pre-wrap;background:#fff9e6;padding:8px;border-radius:4px;max-height:200px;overflow:auto;user-select:text'>"
+                f"{content_preview}</pre>"
+            )
+    except Exception as e:
+        metadata_html = f'<span class="led red"></span> Error loading metadata: {escape(str(e))}'
 
     # lightweight invocations link
     intent_logs = current_app.config.get('INTENT_LOGS', [])
@@ -184,7 +202,7 @@ def _build_status_json():
     else:
         invocations_html = '<span class="muted">No recent invocations</span>'
 
-    return {'skill_html': skill_html, 'skill_ask_html': skill_ask_html, 'ma_api_html': ma_api_html, 'alexa_api_html': alexa_api_html, 'invocations_html': invocations_html, 'created': False}
+    return {'skill_html': skill_html, 'skill_ask_html': skill_ask_html, 'ma_api_html': ma_api_html, 'alexa_api_html': alexa_api_html, 'metadata_html': metadata_html, 'invocations_html': invocations_html, 'created': False}
 
 
 def _compute_ma_api_html(api_user=None, api_pass=None):
@@ -204,18 +222,16 @@ def _compute_ma_api_html(api_user=None, api_pass=None):
             content_preview = escape(pretty)
         except Exception:
             content_preview = escape(content_text)
-        if len(content_preview) > 500:
-            content_preview = content_preview[:500] + '...'
         if resp.ok:
             return (
                 f'<span class="led green"></span> Music Assistant API reachable ({resp.status_code}) — /ma/latest-url'
-                f"<pre style='white-space:pre-wrap;background:#f6f6f6;padding:8px;border-radius:4px;max-height:200px;overflow:auto'>"
+                f"<pre class='status-box' tabindex='0' style='white-space:pre-wrap;background:#f6f6f6;padding:8px;border-radius:4px;max-height:200px;overflow:auto;user-select:text'>"
                 f"{content_preview}</pre>"
             )
         else:
             return (
                 f'<span class="led red"></span> Music Assistant API responded {resp.status_code} for /ma/latest-url'
-                f"<pre style='white-space:pre-wrap;background:#fdf2f2;padding:8px;border-radius:4px;max-height:200px;overflow:auto'>"
+                f"<pre class='status-box' tabindex='0' style='white-space:pre-wrap;background:#fdf2f2;padding:8px;border-radius:4px;max-height:200px;overflow:auto;user-select:text'>"
                 f"{content_preview}</pre>"
             )
     except RequestException as e:
@@ -239,18 +255,16 @@ def _compute_alexa_api_html(api_user=None, api_pass=None):
             content_preview = escape(pretty)
         except Exception:
             content_preview = escape(content_text)
-        if len(content_preview) > 500:
-            content_preview = content_preview[:500] + '...'
         if resp.ok:
             return (
                 f'<span class="led green"></span> Alexa API reachable ({resp.status_code}) — /alexa/latest-url'
-                f"<pre style='white-space:pre-wrap;background:#f6f6f6;padding:8px;border-radius:4px;max-height:200px;overflow:auto'>"
+                f"<pre class='status-box' tabindex='0' style='white-space:pre-wrap;background:#f6f6f6;padding:8px;border-radius:4px;max-height:200px;overflow:auto;user-select:text'>"
                 f"{content_preview}</pre>"
             )
         else:
             return (
                 f'<span class="led red"></span> Alexa API responded {resp.status_code} for /alexa/latest-url'
-                f"<pre style='white-space:pre-wrap;background:#fdf2f2;padding:8px;border-radius:4px;max-height:200px;overflow:auto'>"
+                f"<pre class='status-box' tabindex='0' style='white-space:pre-wrap;background:#fdf2f2;padding:8px;border-radius:4px;max-height:200px;overflow:auto;user-select:text'>"
                 f"{content_preview}</pre>"
             )
     except RequestException as e:
@@ -265,6 +279,49 @@ def status_ma():
 @status_bp.route('/status/alexa', methods=['GET'])
 def status_alexa():
     return jsonify({'alexa_api_html': _compute_alexa_api_html()})
+
+
+def _compute_metadata_html():
+    """Compute HTML showing the current APL metadata being sent in refreshes."""
+    try:
+        from skill import data as skill_data
+        from skill.util import get_ma_hostname, replace_ip_in_url
+        
+        metadata_info = dict(skill_data.info)  # Create a copy
+        
+        # Apply MA_HOSTNAME replacement to image URLs for display
+        try:
+            hostname = get_ma_hostname(raise_on_http_scheme=False)
+            if hostname:
+                if metadata_info.get('coverImageSource'):
+                    metadata_info['coverImageSource'] = replace_ip_in_url(metadata_info['coverImageSource'], hostname)
+                if metadata_info.get('backgroundImageSource'):
+                    metadata_info['backgroundImageSource'] = replace_ip_in_url(metadata_info['backgroundImageSource'], hostname)
+        except Exception:
+            pass  # If hostname replacement fails, show original URLs
+        
+        pretty_metadata = json.dumps(metadata_info, indent=2, ensure_ascii=False)
+        content_preview = escape(pretty_metadata)
+        
+        if metadata_info.get('audioSources') or metadata_info.get('primaryText'):
+            return (
+                f'<span class="led green"></span> APL Metadata Refresh (current data)'
+                f"<pre class='status-box' tabindex='0' style='white-space:pre-wrap;background:#f6f6f6;padding:8px;border-radius:4px;max-height:200px;overflow:auto;user-select:text'>"
+                f"{content_preview}</pre>"
+            )
+        else:
+            return (
+                f'<span class="led yellow"></span> APL Metadata Refresh (no data loaded yet)'
+                f"<pre class='status-box' tabindex='0' style='white-space:pre-wrap;background:#fff9e6;padding:8px;border-radius:4px;max-height:200px;overflow:auto;user-select:text'>"
+                f"{content_preview}</pre>"
+            )
+    except Exception as e:
+        return f'<span class="led red"></span> Error loading metadata: {escape(str(e))}'
+
+
+@status_bp.route('/status/metadata', methods=['GET'])
+def status_metadata():
+    return jsonify({'metadata_html': _compute_metadata_html()})
 
 @status_bp.route('/status', methods=['GET'])
 def status():
@@ -281,6 +338,7 @@ def status():
         tpl = tpl.replace('__SKILL_ASK_HTML__', '<span class="muted">Checking ASK CLI status...</span>')
         tpl = tpl.replace('__MA_API_HTML__', '<span class="muted">Checking Music Assistant API...</span>')
         tpl = tpl.replace('__ALEXA_API_HTML__', '<span class="muted">Checking Alexa API...</span>')
+        tpl = tpl.replace('__METADATA_HTML__', '<span class="muted">Loading APL metadata...</span>')
         intent_logs = current_app.config.get('INTENT_LOGS', [])
         count = len(intent_logs) if intent_logs else 0
         if count:
