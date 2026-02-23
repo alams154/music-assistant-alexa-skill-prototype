@@ -106,5 +106,5 @@ See [COMPATIBILITY.md](COMPATIBILITY.md) for known supported devices, languages,
 
 See [LIMITATIONS.md](LIMITATIONS.md) for known limitations.
 
-See [DISCLAIMER.md] for security concerns and development disclosures.
+See [DISCLAIMER.md](DISCLAIMER.md) for security concerns and development disclosures.
 
