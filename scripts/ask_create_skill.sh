@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # ./scripts/ask_create_skill.sh --profile default --endpoint https://test.app --upload-models > ./tmp/ask_create_with_complete_invocation.txt 2>&1 || tru
-set -euo pipefail
+set -euo
+set -o pipefail
 
 # Create an Alexa skill using ASK CLI based on the README instructions
 # - adjusts the `en-US` locale invocation name to "Music Assistant"
