@@ -118,8 +118,8 @@
           ],
           "name": "Ma Radio",
           "description": "Ecoutez Ma Radio, moins de bla bla, plus de la la la\n\nMa Radio vous donne le meilleur son, 24h sur 24h\n\nPour démarrer, dites juste : \"Alexa, lance Ma Radio\" ou \"Alexa, démarre ma radio\"\".\n\nA n'importe quel moment, vous pouvez dire \"Alexa, stop\" pour arrêter.",
-          "smallIconUri": "https://raw.githubusercontent.com/music-assistant/server/refs/heads/dev/music_assistant/logo.png",
-          "largeIconUri": "https://raw.githubusercontent.com/music-assistant/server/refs/heads/dev/music_assistant/logo.png"
+          "smallIconUri": "https://raw.githubusercontent.com/alams154/music-assistant-alexa-skill-prototype/refs/heads/master/assets/icons/ma_108x108.png",
+          "largeIconUri": "https://raw.githubusercontent.com/alams154/music-assistant-alexa-skill-prototype/refs/heads/master/assets/icons/ma_512x512.png"
         },
         "es-ES": {
           "summary": "Escucha Mi Radio",
@@ -133,9 +133,9 @@
             "radio"
           ],
           "name": "Mi Radio",
-          "description": "Escucha Mi Radio.\n\nPara empezar, solo tienes que decir \"Alexa, abre mi radio\" o \"Alexa, pide a mi radio poner la radio\".\n\nEn cualquier momento, tu puedes parar la radio diciendo \"Alexa, para\"",
-          "smallIconUri": "https://raw.githubusercontent.com/music-assistant/server/refs/heads/dev/music_assistant/logo.png",
-          "largeIconUri": "https://raw.githubusercontent.com/music-assistant/server/refs/heads/dev/music_assistant/logo.png"
+          "description": "Escucha Mi Radio.\n\nPara empezar, solo tienes que decir \"Alexa, abre mi radio\" o \"Alexa, pide a mi radio poner la radio\".\n\nEn cualquier momento, tu puedes parar la radio diciendo \"Alexa, para\"",
+          "smallIconUri": "https://raw.githubusercontent.com/alams154/music-assistant-alexa-skill-prototype/refs/heads/master/assets/icons/ma_108x108.png",
+          "largeIconUri": "https://raw.githubusercontent.com/alams154/music-assistant-alexa-skill-prototype/refs/heads/master/assets/icons/ma_512x512.png"
         },
         "es-MX": {
           "summary": "Escucha Mi Radio",
@@ -149,9 +149,9 @@
             "radio"
           ],
           "name": "Mi Radio",
-          "description": "Escucha Mi Radio.\n\nPara empezar, solo tienes que decir \"Alexa, abre mi radio\" o \"Alexa, pide a mi radio poner la radio\".\n\nEn cualquier momento, tu puedes parar la radio diciendo \"Alexa, para\"",
-          "smallIconUri": "https://raw.githubusercontent.com/music-assistant/server/refs/heads/dev/music_assistant/logo.png",
-          "largeIconUri": "https://raw.githubusercontent.com/music-assistant/server/refs/heads/dev/music_assistant/logo.png"
+          "description": "Escucha Mi Radio.\n\nPara empezar, solo tienes que decir \"Alexa, abre mi radio\" o \"Alexa, pide a mi radio poner la radio\".\n\nEn cualquier momento, tu puedes parar la radio diciendo \"Alexa, para\"",
+          "smallIconUri": "https://raw.githubusercontent.com/alams154/music-assistant-alexa-skill-prototype/refs/heads/master/assets/icons/ma_108x108.png",
+          "largeIconUri": "https://raw.githubusercontent.com/alams154/music-assistant-alexa-skill-prototype/refs/heads/master/assets/icons/ma_512x512.png"
         },
         "it-IT": {
           "summary": "Ascolta la mia radio.",
@@ -167,8 +167,8 @@
           ],
           "name": "La Mia Radio",
           "description": "Ascolta La Mia Radio.\n\nPer iniziare, basta dire \"Alexa, apri La Mia Radio\" o \"Alexa, chiedi a la mia radio di avviare la radio\".\n\nIn qualsiasi momento, puoi interrompere la radio dicendo \"Alexa, basta\"",
-          "smallIconUri": "https://raw.githubusercontent.com/music-assistant/server/refs/heads/dev/music_assistant/logo.png",
-          "largeIconUri": "https://raw.githubusercontent.com/music-assistant/server/refs/heads/dev/music_assistant/logo.png"
+          "smallIconUri": "https://raw.githubusercontent.com/alams154/music-assistant-alexa-skill-prototype/refs/heads/master/assets/icons/ma_108x108.png",
+          "largeIconUri": "https://raw.githubusercontent.com/alams154/music-assistant-alexa-skill-prototype/refs/heads/master/assets/icons/ma_512x512.png"
         },
         "pt-BR": {
           "summary": "Ouça Minha Rádio.",
@@ -184,8 +184,8 @@
           ],
           "name": "Minha Rádio",
           "description": "Ouça Minha Rádio.\n\nPara começar, basta dizer \"Alexa, abra Minha Rádio\" ou \"Alexa, peça para minha rádio tocar\".\n\nA qualquer momento, você pode parar a rádio dizendo \"Alexa, pare\"",
-          "smallIconUri": "https://raw.githubusercontent.com/music-assistant/server/refs/heads/dev/music_assistant/logo.png",
-          "largeIconUri": "https://raw.githubusercontent.com/music-assistant/server/refs/heads/dev/music_assistant/logo.png"
+          "smallIconUri": "https://raw.githubusercontent.com/alams154/music-assistant-alexa-skill-prototype/refs/heads/master/assets/icons/ma_108x108.png",
+          "largeIconUri": "https://raw.githubusercontent.com/alams154/music-assistant-alexa-skill-prototype/refs/heads/master/assets/icons/ma_512x512.png"
         },
         "de-DE": {
           "summary": "Höre Mein Radio — einfach einschalten und genießen.",
