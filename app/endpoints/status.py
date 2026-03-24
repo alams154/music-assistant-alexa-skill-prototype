@@ -11,6 +11,7 @@ import requests
 from requests.exceptions import RequestException
 from env_secrets import get_env_secret
 from pathlib import Path
+from setup_helpers import has_functional_cli_config
 
 status_bp = Blueprint('status_bp', __name__)
 
@@ -24,86 +25,93 @@ def _build_status_json():
     try:
         skill_host = os.environ.get('SKILL_HOSTNAME', '').strip()
         if shutil.which('ask') and skill_host:
-            ls = subprocess.run(['ask', 'smapi', 'list-skills-for-vendor', '--profile', 'default'], capture_output=True, text=True)
-            out = ls.stdout or ls.stderr or ''
-            m = re.search(r'amzn1\.ask\.skill\.[0-9a-fA-F\-]+', out)
-            if not m:
-                skill_ask_html = '<span class="led red"></span> Music Assistant Skill interaction model not found via ASK CLI'
-            else:
-                sid = m.group(0)
-                mf = subprocess.run(['ask', 'smapi', 'get-skill-manifest', '--skill-id', sid, '--profile', 'default'], capture_output=True, text=True)
-                mf_out = mf.stdout or mf.stderr or ''
-                mm = re.search(r'https?://[^"\s\)\]]+', mf_out)
+            if not has_functional_cli_config(profile='default'):
+                skill_ask_html = '<span class="led yellow"></span> ASK CLI credentials are not configured for profile default'
                 try:
-                    if skill_host.startswith('http://') or skill_host.startswith('https://'):
-                        cfg_host = urllib.parse.urlparse(skill_host).netloc
-                    else:
-                        cfg_host = skill_host
-                except Exception:
-                    cfg_host = skill_host
-
-                testing_enabled = False
-                try:
-                    en = subprocess.run(['ask', 'smapi', 'get-skill-enablement-status', '--skill-id', sid, '--stage', 'development', '--profile', 'default'], capture_output=True, text=True)
-                    en_out = en.stdout or en.stderr or ''
-                    if en.returncode == 0 or 'Command executed successfully' in en_out:
-                        testing_enabled = True
-                    else:
-                        if re.search(r'\[Error\]:\s*\{', en_out) or re.search(r'404', en_out):
-                            testing_enabled = False
-                        elif re.search(r'"isEnabled"\s*:\s*true', en_out, re.IGNORECASE) or re.search(r'"enabled"\s*:\s*true', en_out, re.IGNORECASE):
-                            testing_enabled = True
-                except Exception:
-                    testing_enabled = False
-
-                is_green = False
-                if not mm:
-                    testing_msg = 'testing enabled' if testing_enabled else 'testing not enabled'
-                    skill_ask_html = f'<span class="led yellow"></span> Music Assistant Skill interaction model {escape(sid)} found; endpoint not set ({testing_msg})'
-                else:
-                    uri = mm.group(0)
-                    try:
-                        parsed = urllib.parse.urlparse(uri)
-                        manifest_host = parsed.netloc
-                        locale_list = []
-                        try:
-                            mf_json = None
-                            try:
-                                mf_json = json.loads(mf_out)
-                            except Exception:
-                                idx = mf_out.find('{')
-                                if idx != -1:
-                                    try:
-                                        mf_json = json.loads(mf_out[idx:])
-                                    except Exception:
-                                        mf_json = None
-                            if mf_json:
-                                locales_obj = mf_json.get('manifest', {}).get('publishingInformation', {}).get('locales', {})
-                                if isinstance(locales_obj, dict):
-                                    locale_list = list(locales_obj.keys())
-                        except Exception:
-                            locale_list = []
-
-                        locale_display = ','.join(locale_list) if locale_list else 'unknown'
-
-                        if manifest_host == cfg_host:
-                            if testing_enabled:
-                                skill_ask_html = f'<span class="led green"></span> Music Assistant Skill interaction model found; endpoint matches ({escape(manifest_host)}); testing enabled; locale: {escape(locale_display)}'
-                                is_green = True
-                            else:
-                                skill_ask_html = f'<span class="led yellow"></span> Music Assistant Skill interaction model found and endpoint matches ({escape(manifest_host)}); testing NOT enabled'
-                        else:
-                            testing_note = 'testing enabled' if testing_enabled else 'testing not enabled'
-                            skill_ask_html = f'<span class="led red"></span> Music Assistant Skill interaction model endpoint mismatch (manifest: {escape(manifest_host)} vs configured: {escape(cfg_host)}); {testing_note}'
-                    except Exception:
-                        testing_msg = 'testing enabled' if testing_enabled else 'testing not enabled'
-                        skill_ask_html = f'<span class="led yellow"></span> Music Assistant Skill interaction model found; endpoint parse failed ({testing_msg})'
-
-                try:
-                    if not is_green:
-                        skill_ask_html += ' <button onclick="window.location=\'/setup\'" style="margin-left:8px">Open Setup</button>'
+                    skill_ask_html += ' <button onclick="window.location=\'/setup\'" style="margin-left:8px">Open Setup</button>'
                 except Exception:
                     pass
+            else:
+                ls = subprocess.run(['ask', 'smapi', 'list-skills-for-vendor', '--profile', 'default'], capture_output=True, text=True)
+                out = ls.stdout or ls.stderr or ''
+                m = re.search(r'amzn1\.ask\.skill\.[0-9a-fA-F\-]+', out)
+                if not m:
+                    skill_ask_html = '<span class="led red"></span> Music Assistant Skill interaction model not found via ASK CLI'
+                else:
+                    sid = m.group(0)
+                    mf = subprocess.run(['ask', 'smapi', 'get-skill-manifest', '--skill-id', sid, '--profile', 'default'], capture_output=True, text=True)
+                    mf_out = mf.stdout or mf.stderr or ''
+                    mm = re.search(r'https?://[^"\s\)\]]+', mf_out)
+                    try:
+                        if skill_host.startswith('http://') or skill_host.startswith('https://'):
+                            cfg_host = urllib.parse.urlparse(skill_host).netloc
+                        else:
+                            cfg_host = skill_host
+                    except Exception:
+                        cfg_host = skill_host
+
+                    testing_enabled = False
+                    try:
+                        en = subprocess.run(['ask', 'smapi', 'get-skill-enablement-status', '--skill-id', sid, '--stage', 'development', '--profile', 'default'], capture_output=True, text=True)
+                        en_out = en.stdout or en.stderr or ''
+                        if en.returncode == 0 or 'Command executed successfully' in en_out:
+                            testing_enabled = True
+                        else:
+                            if re.search(r'\[Error\]:\s*\{', en_out) or re.search(r'404', en_out):
+                                testing_enabled = False
+                            elif re.search(r'"isEnabled"\s*:\s*true', en_out, re.IGNORECASE) or re.search(r'"enabled"\s*:\s*true', en_out, re.IGNORECASE):
+                                testing_enabled = True
+                    except Exception:
+                        testing_enabled = False
+
+                    is_green = False
+                    if not mm:
+                        testing_msg = 'testing enabled' if testing_enabled else 'testing not enabled'
+                        skill_ask_html = f'<span class="led yellow"></span> Music Assistant Skill interaction model {escape(sid)} found; endpoint not set ({testing_msg})'
+                    else:
+                        uri = mm.group(0)
+                        try:
+                            parsed = urllib.parse.urlparse(uri)
+                            manifest_host = parsed.netloc
+                            locale_list = []
+                            try:
+                                mf_json = None
+                                try:
+                                    mf_json = json.loads(mf_out)
+                                except Exception:
+                                    idx = mf_out.find('{')
+                                    if idx != -1:
+                                        try:
+                                            mf_json = json.loads(mf_out[idx:])
+                                        except Exception:
+                                            mf_json = None
+                                if mf_json:
+                                    locales_obj = mf_json.get('manifest', {}).get('publishingInformation', {}).get('locales', {})
+                                    if isinstance(locales_obj, dict):
+                                        locale_list = list(locales_obj.keys())
+                            except Exception:
+                                locale_list = []
+
+                            locale_display = ','.join(locale_list) if locale_list else 'unknown'
+
+                            if manifest_host == cfg_host:
+                                if testing_enabled:
+                                    skill_ask_html = f'<span class="led green"></span> Music Assistant Skill interaction model found; endpoint matches ({escape(manifest_host)}); testing enabled; locale: {escape(locale_display)}'
+                                    is_green = True
+                                else:
+                                    skill_ask_html = f'<span class="led yellow"></span> Music Assistant Skill interaction model found and endpoint matches ({escape(manifest_host)}); testing NOT enabled'
+                            else:
+                                testing_note = 'testing enabled' if testing_enabled else 'testing not enabled'
+                                skill_ask_html = f'<span class="led red"></span> Music Assistant Skill interaction model endpoint mismatch (manifest: {escape(manifest_host)} vs configured: {escape(cfg_host)}); {testing_note}'
+                        except Exception:
+                            testing_msg = 'testing enabled' if testing_enabled else 'testing not enabled'
+                            skill_ask_html = f'<span class="led yellow"></span> Music Assistant Skill interaction model found; endpoint parse failed ({testing_msg})'
+
+                    try:
+                        if not is_green:
+                            skill_ask_html += ' <button onclick="window.location=\'/setup\'" style="margin-left:8px">Open Setup</button>'
+                    except Exception:
+                        pass
         else:
             if not shutil.which('ask'):
                 skill_ask_html = '<span class="muted">ask CLI not available in container</span>'

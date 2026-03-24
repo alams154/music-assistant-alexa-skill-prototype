@@ -67,6 +67,80 @@ fi
 mkdir -p "$OUT_DIR"
 mkdir -p "$TMP_DIR"
 
+# Verify credentials for the requested profile before running any SMAPI
+# commands. If cli_config exists but is non-functional, delete it so a
+# subsequent auth flow can recreate it cleanly.
+ASK_CFG_DIR="${ASK_CREDENTIALS_DIR:-$HOME/.ask}"
+ASK_CFG_PATH="$ASK_CFG_DIR/cli_config"
+ASK_CFG_STATE="$(python3 - "$ASK_CFG_PATH" "$PROFILE" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+cfg_path = Path(sys.argv[1])
+profile = sys.argv[2]
+cfg_path.parent.mkdir(parents=True, exist_ok=True)
+
+if not cfg_path.exists():
+  print('missing')
+  raise SystemExit(0)
+
+try:
+  data = json.loads(cfg_path.read_text(encoding='utf-8'))
+except Exception:
+  data = None
+
+def has_tokens(entry):
+  if not isinstance(entry, dict):
+    return False
+  token = entry.get('token')
+  if isinstance(token, dict):
+    access = str(token.get('access_token') or '').strip()
+    refresh = str(token.get('refresh_token') or '').strip()
+    if access or refresh:
+      return True
+  access = str(entry.get('access_token') or '').strip()
+  refresh = str(entry.get('refresh_token') or '').strip()
+  return bool(access or refresh)
+
+functional = False
+if isinstance(data, dict):
+  profiles = data.get('profiles')
+  if isinstance(profiles, dict):
+    functional = has_tokens(profiles.get(profile))
+
+if functional:
+  print('functional')
+  raise SystemExit(0)
+
+try:
+  cfg_path.unlink(missing_ok=True)
+except Exception:
+  print('delete_failed')
+  raise SystemExit(0)
+
+print('deleted_nonfunctional')
+PY
+)"
+
+if [ "$ASK_CFG_STATE" = "delete_failed" ]; then
+  echo "Error: failed to delete non-functional ASK cli_config at $ASK_CFG_PATH" >&2
+  exit 6
+fi
+
+if [ "$ASK_CFG_STATE" != "functional" ]; then
+  if [ "$ASK_CFG_STATE" = "deleted_nonfunctional" ]; then
+    echo "Deleted non-functional ASK cli_config at $ASK_CFG_PATH." >&2
+  fi
+  if [ "$ASK_CFG_STATE" = "missing" ]; then
+    echo "ASK cli_config is missing for profile '$PROFILE'." >&2
+  else
+    echo "ASK cli_config is non-functional for profile '$PROFILE'." >&2
+  fi
+  echo "Run the /setup auth flow (or 'ask configure --no-browser') to create usable credentials." >&2
+  exit 6
+fi
+
 # Query existing skill(s) named "Music Assistant" for this vendor/profile
 LIST_FILE="$TMP_DIR/list_skills.json"
 ask smapi list-skills-for-vendor --profile "$PROFILE" > "$LIST_FILE" 2>&1 || true

@@ -21,6 +21,7 @@ import logging
 
 
 from setup_helpers import sanitize_log, enqueue_setup_log, setup_reader_thread as _helpers_setup_reader_thread, read_master_loop as _helpers_read_master_loop
+from setup_helpers import ask_home_from_credentials_dir, has_functional_cli_config, prepare_cli_config_for_configure
 from signal_helpers import register_signal_handlers
 
 # Ensure boto3 has a default region in container/dev environments to avoid
@@ -42,14 +43,13 @@ try:
 except Exception:
     pass
 # Allow overriding where ASK CLI stores credentials so they persist across containers.
-# If ASK_CREDENTIALS_DIR is set (e.g. /root/.ask) set HOME to its parent so tools
-# that rely on ~/.ask (ASK CLI) use the mounted location.
+# If ASK_CREDENTIALS_DIR is set (e.g. /root/.ask), set HOME to its parent so
+# tools that rely on ~/.ask (ASK CLI) use the mounted location.
 try:
-    # If the persistent credentials volume is mounted at /root/.ask inside the
-    # container, set HOME to /root so ASK CLI and related tools use ~/.ask there.
-    if Path('/root/.ask').exists():
-        os.environ['HOME'] = '/root'
-        app.logger.info('Using persistent ASK credentials at /root/.ask')
+    ask_home = ask_home_from_credentials_dir()
+    if ask_home:
+        os.environ['HOME'] = ask_home
+        app.logger.info('Using ASK credentials under HOME=%s', ask_home)
 except Exception:
     pass
 skill_adapter = SkillAdapter(
@@ -328,11 +328,10 @@ def setup_ui():
     except Exception:
         auth_url = None
 
-    # If persistent ASK credentials are present at /root/.ask, suppress the
-    # browser-based authorization UI and do not expose an auth URL to the client.
+    # Suppress auth URL when functional credentials already exist.
     try:
-        if Path('/root/.ask').exists():
-            app.logger.info('Persistent ASK credentials found; suppressing auth UI')
+        if has_functional_cli_config(profile='default'):
+            app.logger.info('Functional ASK credentials found; suppressing auth UI')
             auth_url = None
     except Exception:
         pass
@@ -371,8 +370,7 @@ def setup_ui():
     # If valid ASK CLI credentials are present, show a notice on the setup page.
     try:
         creds_html = ''
-        # The ASK CLI stores a cli_config under ~/.ask/cli_config when configured.
-        if Path('/root/.ask/cli_config').exists():
+        if has_functional_cli_config(profile='default'):
             creds_html = '<div style="margin-top:8px;color:green;font-weight:600">Persistent ASK credentials detected — setup will use existing credentials.</div>'
     except Exception:
         creds_html = ''
@@ -451,11 +449,6 @@ def setup_start():
 
     endpoint = _normalize(endpoint)
 
-    # helper: is ASK CLI already configured (simple check)
-    def ask_configured():
-        cfg = Path.home() / '.ask' / 'cli_config'
-        return cfg.exists()
-
     with _setup_lock:
         # If a setup script is already running, report it
         if _setup_proc and _setup_proc.poll() is None:
@@ -473,8 +466,15 @@ def setup_start():
             app.logger.exception('check failed')
             return jsonify({'error':'check failed'}), 500
 
-        # If ASK CLI is not configured, start the no-browser auth flow and return auth_started
-        if not ask_configured():
+        # If ASK CLI is not configured with functional credentials, remove any
+        # non-functional cli_config and start the no-browser auth flow.
+        if not has_functional_cli_config(profile=profile):
+            ok, prep_msg = prepare_cli_config_for_configure(profile=profile)
+            if prep_msg:
+                _enqueue_setup_log(prep_msg)
+            if not ok:
+                app.logger.error('Unable to prepare ASK cli_config for auth: %s', prep_msg)
+                return jsonify({'error': 'failed preparing ASK cli_config for auth'}), 500
             with _setup_auth_lock:
                 global _setup_auth_proc
                 if _setup_auth_proc and _setup_auth_proc.poll() is None:
@@ -604,6 +604,10 @@ def setup_code():
     if rc != 0:
         _setup_logs.append(f'Auth process exited with code {rc}')
         return jsonify({'error':f'auth failed (rc {rc})'}), 500
+
+    if not has_functional_cli_config(profile='default'):
+        _setup_logs.append('Auth completed but cli_config is still non-functional; run setup again and verify ASK login')
+        return jsonify({'error': 'auth completed but cli_config is non-functional'}), 500
 
     _setup_logs.append('Auth completed successfully; starting skill creation')
 
