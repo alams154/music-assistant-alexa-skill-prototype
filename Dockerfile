@@ -105,7 +105,6 @@ ENV DEBUG_PORT=${DEBUG_PORT}
 
 # Expose the port the app runs on
 EXPOSE ${PORT}
-EXPOSE ${DEBUG_PORT}
 
 # If DEBUG_PORT is empty or set to 0, run without debugpy. Otherwise start debugpy.
 CMD ["/bin/sh", "-lc", "if [ -n \"${DEBUG_PORT}\" ] && [ \"${DEBUG_PORT}\" != \"0\" ]; then exec /app/venv/bin/python -m debugpy --listen 0.0.0.0:${DEBUG_PORT} src/app.py; else exec /app/venv/bin/python src/app.py; fi"]
