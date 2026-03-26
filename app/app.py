@@ -523,6 +523,17 @@ def setup_start():
                     _pending_profile = profile
                     try:
                         _PENDING_FILE.write_text(endpoint)
+                        # Also persist the pending profile so it can be restored after a restart
+                        try:
+                            pending_profile_file = (
+                                _PENDING_FILE.with_suffix(_PENDING_FILE.suffix + ".profile")
+                                if hasattr(_PENDING_FILE, "with_suffix") else None
+                            )
+                            if pending_profile_file is not None:
+                                pending_profile_file.write_text(profile)
+                        except Exception:
+                            # Failure to persist the pending profile should not block the auth flow
+                            pass
                     except Exception:
                         pass
                     _setup_auth_master_fd = master_fd
