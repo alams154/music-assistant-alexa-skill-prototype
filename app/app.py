@@ -23,7 +23,6 @@ import logging
 from setup_helpers import sanitize_log, enqueue_setup_log, setup_reader_thread as _helpers_setup_reader_thread, read_master_loop as _helpers_read_master_loop
 from setup_helpers import ask_home_from_credentials_dir, has_functional_cli_config, prepare_cli_config_for_configure
 from setup_helpers import get_functional_profiles, get_active_profile, save_active_profile
-from setup_helpers import get_functional_profiles, get_active_profile, save_active_profile
 from signal_helpers import register_signal_handlers
 
 # Ensure boto3 has a default region in container/dev environments to avoid
