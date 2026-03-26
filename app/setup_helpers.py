@@ -102,6 +102,52 @@ def has_functional_cli_config(profile: str = 'default') -> bool:
     refresh_token = str(entry.get('refresh_token') or '').strip()
     return bool(access_token or refresh_token)
 
+def get_functional_profiles() -> list:
+    """Return names of all profiles in cli_config that have functional credentials.
+
+    Falls back to ['default'] when no functional profiles are found so there is
+    always at least one option in the UI.
+    """
+    data = _load_cli_config(get_ask_cli_config_path())
+    if not data:
+        return ['default']
+    profiles = data.get('profiles')
+    if not isinstance(profiles, dict) or not profiles:
+        return ['default']
+    functional = [name for name in profiles if has_functional_cli_config(profile=name)]
+    return functional if functional else ['default']
+
+
+def _active_profile_path() -> Path:
+    return get_ask_credentials_dir() / 'active_profile.txt'
+
+
+def get_active_profile() -> str:
+    """Return the last profile selected by the user.
+
+    Falls back to the first functional profile (or 'default') if the file is
+    absent or contains an unknown/non-functional profile name.
+    """
+    try:
+        stored = _active_profile_path().read_text(encoding='utf-8').strip()
+        if stored and has_functional_cli_config(profile=stored):
+            return stored
+    except Exception:
+        pass
+    functional = get_functional_profiles()
+    return functional[0] if functional else 'default'
+
+
+def save_active_profile(profile: str) -> None:
+    """Persist the active profile to disk so it survives container restarts."""
+    try:
+        path = _active_profile_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(profile, encoding='utf-8')
+    except Exception:
+        pass
+
+
 def sanitize_log(s: str) -> str:
     try:
         if not isinstance(s, str):

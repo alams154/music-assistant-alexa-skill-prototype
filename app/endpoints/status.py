@@ -11,7 +11,7 @@ import requests
 from requests.exceptions import RequestException
 from env_secrets import get_env_secret
 from pathlib import Path
-from setup_helpers import has_functional_cli_config
+from setup_helpers import has_functional_cli_config, get_active_profile
 
 status_bp = Blueprint('status_bp', __name__)
 
@@ -25,21 +25,22 @@ def _build_status_json():
     try:
         skill_host = os.environ.get('SKILL_HOSTNAME', '').strip()
         if shutil.which('ask') and skill_host:
-            if not has_functional_cli_config(profile='default'):
-                skill_ask_html = '<span class="led yellow"></span> ASK CLI credentials are not configured for profile default'
+            ask_profile = get_active_profile()
+            if not has_functional_cli_config(profile=ask_profile):
+                skill_ask_html = f'<span class="led yellow"></span> ASK CLI credentials are not configured for profile {escape(ask_profile)}'
                 try:
                     skill_ask_html += ' <button onclick="window.location=\'/setup\'" style="margin-left:8px">Open Setup</button>'
                 except Exception:
                     pass
             else:
-                ls = subprocess.run(['ask', 'smapi', 'list-skills-for-vendor', '--profile', 'default'], capture_output=True, text=True)
+                ls = subprocess.run(['ask', 'smapi', 'list-skills-for-vendor', '--profile', ask_profile], capture_output=True, text=True)
                 out = ls.stdout or ls.stderr or ''
                 m = re.search(r'amzn1\.ask\.skill\.[0-9a-fA-F\-]+', out)
                 if not m:
                     skill_ask_html = '<span class="led red"></span> Music Assistant Skill interaction model not found via ASK CLI'
                 else:
                     sid = m.group(0)
-                    mf = subprocess.run(['ask', 'smapi', 'get-skill-manifest', '--skill-id', sid, '--profile', 'default'], capture_output=True, text=True)
+                    mf = subprocess.run(['ask', 'smapi', 'get-skill-manifest', '--skill-id', sid, '--profile', ask_profile], capture_output=True, text=True)
                     mf_out = mf.stdout or mf.stderr or ''
                     mm = re.search(r'https?://[^"\s\)\]]+', mf_out)
                     try:
@@ -52,7 +53,7 @@ def _build_status_json():
 
                     testing_enabled = False
                     try:
-                        en = subprocess.run(['ask', 'smapi', 'get-skill-enablement-status', '--skill-id', sid, '--stage', 'development', '--profile', 'default'], capture_output=True, text=True)
+                        en = subprocess.run(['ask', 'smapi', 'get-skill-enablement-status', '--skill-id', sid, '--stage', 'development', '--profile', ask_profile], capture_output=True, text=True)
                         en_out = en.stdout or en.stderr or ''
                         if en.returncode == 0 or 'Command executed successfully' in en_out:
                             testing_enabled = True

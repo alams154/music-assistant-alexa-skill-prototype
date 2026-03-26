@@ -6,6 +6,10 @@
     <div>
         <div style="margin-bottom:8px;">Skill endpoint is read from container configuration (SKILL_HOSTNAME)</div>
         __CREDENTIALS_HTML__
+        <div style="margin-bottom:8px;" id="profile-row">
+            <label for="profile-select" style="font-weight:600;margin-right:6px;">ASK CLI Profile:</label>
+            <select id="profile-select" style="min-width:140px;padding:2px 6px;"></select>
+        </div>
         <div><button id="setup-start">Start Setup</button></div>
         <div id="auth-area" style="display:none;margin-top:8px">
             <div><a id="auth-link" href="#" target="_blank">Open authorization page</a></div>
@@ -22,6 +26,8 @@
     const initialLogs = __INITIAL_LOGS__;
     const initialAuth = __INITIAL_AUTH__;
     const initialCreated = __INITIAL_CREATED__;
+    const initialProfiles = __PROFILES_JSON__;
+    const initialActiveProfile = __ACTIVE_PROFILE__;
     (function(){
         const startBtn = document.getElementById('setup-start');
         const logsEl = document.getElementById('setup-logs');
@@ -29,9 +35,33 @@
         const authLink = document.getElementById('auth-link');
         const codeEntry = document.getElementById('code-entry');
         const codeForm = document.getElementById('code-form');
+        const profileSelect = document.getElementById('profile-select');
         // Track whether we've already opened the auth URL in a tab/window
         let authOpened = false;
         const downloadBtn = document.getElementById('download-logs');
+
+        function populateProfiles(profiles, active){
+            try{
+                profileSelect.innerHTML = '';
+                const list = (profiles && profiles.length) ? profiles : ['default'];
+                list.forEach(function(p){
+                    const opt = document.createElement('option');
+                    opt.value = p;
+                    opt.textContent = p;
+                    if(p === active){ opt.selected = true; }
+                    profileSelect.appendChild(opt);
+                });
+                // Hide the row when only 'default' is present and no override stored
+                const row = document.getElementById('profile-row');
+                if(row){ row.style.display = (list.length > 1 || (list.length === 1 && list[0] !== 'default')) ? '' : 'none'; }
+            }catch(e){/* ignore */}
+        }
+
+        function refreshProfiles(){
+            fetch('/setup/profiles').then(r=>r.json()).then(function(j){
+                populateProfiles(j.profiles, j.active);
+            }).catch(function(){/* silently ignore — initial values are already shown */});
+        }
 
         function showStatusButton(){
             try{
@@ -47,6 +77,10 @@
         }
 
         function renderInitial(){
+            // Populate profile selector from server-injected data
+            populateProfiles(initialProfiles, initialActiveProfile);
+            // Fetch fresh profile list (in case credentials changed since page load)
+            refreshProfiles();
             // Render any initial logs/auth embedded in the page
             try{ logsEl.textContent = JSON.stringify(initialLogs || [], null, 2); logsEl.scrollTop = logsEl.scrollHeight; }catch(e){ logsEl.textContent = ''; }
             if(initialCreated){ showStatusButton(); return; }
@@ -98,7 +132,8 @@
         }
 
         startBtn.addEventListener('click', function(){
-            fetch('/setup/start', {method:'POST'}).then(async (r)=>{
+            const profile = profileSelect ? profileSelect.value : 'default';
+            fetch('/setup/start', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({profile: profile})}).then(async (r)=>{
                 let j = {};
                 try{ j = await r.json(); }catch(e){}
                 if(!r.ok){ logsEl.textContent = (j.error || JSON.stringify(j) || 'Error starting setup'); }

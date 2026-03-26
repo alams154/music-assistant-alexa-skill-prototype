@@ -22,6 +22,8 @@ import logging
 
 from setup_helpers import sanitize_log, enqueue_setup_log, setup_reader_thread as _helpers_setup_reader_thread, read_master_loop as _helpers_read_master_loop
 from setup_helpers import ask_home_from_credentials_dir, has_functional_cli_config, prepare_cli_config_for_configure
+from setup_helpers import get_functional_profiles, get_active_profile, save_active_profile
+from setup_helpers import get_functional_profiles, get_active_profile, save_active_profile
 from signal_helpers import register_signal_handlers
 
 # Ensure boto3 has a default region in container/dev environments to avoid
@@ -233,6 +235,7 @@ except Exception:
 _setup_auth_proc = None
 _setup_auth_lock = threading.Lock()
 _pending_endpoint = None
+_pending_profile = None
 _setup_auth_master_fd = None
 _PENDING_FILE = Path(os.environ.get('TMPDIR', '/tmp')) / 'ask_pending_endpoint.txt'
 
@@ -393,6 +396,16 @@ def setup_ui():
         page = page.replace('__INITIAL_AUTH__', json.dumps(auth_url))
         page = page.replace('__INITIAL_CREATED__', json.dumps(bool(initial_created)))
         page = page.replace('__CREDENTIALS_HTML__', creds_html)
+        try:
+            profiles_list = get_functional_profiles()
+        except Exception:
+            profiles_list = ['default']
+        try:
+            active_profile = get_active_profile()
+        except Exception:
+            active_profile = 'default'
+        page = page.replace('__PROFILES_JSON__', json.dumps(profiles_list))
+        page = page.replace('__ACTIVE_PROFILE__', json.dumps(active_profile))
         return Response(page, mimetype='text/html')
 
     # Fallback: simple inline page if template is missing
@@ -411,6 +424,20 @@ def setup_logs_download():
     return resp
 
 
+@app.route('/setup/profiles', methods=['GET'])
+def setup_profiles():
+    """Return the list of ASK CLI profiles that have functional credentials."""
+    try:
+        profiles = get_functional_profiles()
+    except Exception:
+        profiles = ['default']
+    try:
+        active = get_active_profile()
+    except Exception:
+        active = 'default'
+    return jsonify({'profiles': profiles, 'active': active})
+
+
 @app.route('/setup/start', methods=['POST'])
 def setup_start():
     global _setup_proc
@@ -420,8 +447,12 @@ def setup_start():
     # Allow override for local testing if provided in request body (kept for compatibility)
     if not endpoint:
         endpoint = data.get('endpoint')
-    # Fixed options (user-not-editable). `LOCALE` may be set in the environment.
-    profile = 'default'
+    # Profile can be chosen by the user on the setup page (only functional profiles are listed).
+    # Fall back to get_active_profile() which itself falls back to 'default'.
+    try:
+        profile = (data.get('profile') or '').strip() or get_active_profile()
+    except Exception:
+        profile = 'default'
     locale = os.environ.get('LOCALE', 'en-US')
     stage = 'development'
     upload_models = True
@@ -484,12 +515,13 @@ def setup_start():
                     _setup_logs.append('Starting ASK CLI no-browser configure. Follow the auth URL printed in logs.')
                     # Spawn ask configure inside a pseudo-tty so it prints the auth URL.
                     master_fd, slave_fd = pty.openpty()
-                    auth_cmd = ['ask','configure','--no-browser']
+                    auth_cmd = ['ask','configure','--no-browser','--profile',profile]
                     _setup_auth_proc = subprocess.Popen(auth_cmd, stdin=slave_fd, stdout=slave_fd, stderr=slave_fd, close_fds=True)
                     os.close(slave_fd)
-                    # remember the endpoint requested so we can start creation after auth
-                    global _pending_endpoint, _setup_auth_master_fd
+                    # remember the endpoint and profile so we can start creation after auth
+                    global _pending_endpoint, _pending_profile, _setup_auth_master_fd
                     _pending_endpoint = endpoint
+                    _pending_profile = profile
                     try:
                         _PENDING_FILE.write_text(endpoint)
                     except Exception:
@@ -532,6 +564,11 @@ def setup_start():
                 script_path = str(Path(__file__).parent.parent / 'scripts' / 'ask_create_skill.sh')
             app.logger.info('Launching setup script: %s', script_path)
             _setup_logs.append(f'Starting setup: endpoint={endpoint} profile={profile} locale={locale} stage={stage}')
+            # Persist the chosen profile so the status page and future sessions use it
+            try:
+                save_active_profile(profile)
+            except Exception:
+                pass
             # run the top-level shell script via bash so it behaves like the original shell invocation
             cmd = ['/bin/bash', script_path, '--endpoint', endpoint, '--profile', profile, '--locale', locale, '--stage', stage]
             if not upload_models:
@@ -605,15 +642,15 @@ def setup_code():
         _setup_logs.append(f'Auth process exited with code {rc}')
         return jsonify({'error':f'auth failed (rc {rc})'}), 500
 
-    if not has_functional_cli_config(profile='default'):
+    if not has_functional_cli_config(profile=(_pending_profile or 'default')):
         _setup_logs.append('Auth completed but cli_config is still non-functional; run setup again and verify ASK login')
         return jsonify({'error': 'auth completed but cli_config is non-functional'}), 500
 
     _setup_logs.append('Auth completed successfully; starting skill creation')
 
     # Now start the create-skill script (use fixed options)
-    # Use the pending endpoint saved when auth was started
-    global _pending_endpoint
+    # Use the pending endpoint and profile saved when auth was started
+    global _pending_endpoint, _pending_profile
     endpoint_val = _pending_endpoint
     if not endpoint_val:
         # try to recover from tmp file in case the app restarted or state was lost
@@ -630,7 +667,12 @@ def setup_code():
 
     # Start the create script now
     try:
-        profile = 'default'
+        profile = _pending_profile or 'default'
+        # Persist so the status page uses the same profile
+        try:
+            save_active_profile(profile)
+        except Exception:
+            pass
         locale = os.environ.get('LOCALE', 'en-US')
         stage = 'development'
         # prefer container-installed path when present, otherwise use repo-relative scripts/
@@ -667,8 +709,9 @@ def setup_code():
                     pass
         except Exception as e:
             _enqueue_setup_log(f'Error while checking create script immediate status: {e}')
-        # clear pending endpoint after starting
+        # clear pending endpoint and profile after starting
         _pending_endpoint = None
+        _pending_profile = None
         try:
             if _PENDING_FILE.exists():
                 _PENDING_FILE.unlink()
