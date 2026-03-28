@@ -68,6 +68,70 @@ if needle in src:
 else:
     print('No patch needed for verifier.py')
 PY
+
+# Apply certvalidator registry.py patch so OS trust-root iteration does not crash
+# with asn1crypto >= 1.5.1. certvalidator 0.11.1 (2016) calls
+# trust_root.subject.hashable for every OS CA cert; asn1crypto 1.5.1 changed
+# NameTypeAndValue internals so that call raises KeyError for certain cert
+# structures present in modern CA stores. Wrap the call in try/except so
+# incompatible trust roots are skipped rather than aborting every Alexa request.
+RUN /app/venv/bin/python - <<'PY'
+import sysconfig, os, sys
+try:
+        site = sysconfig.get_paths()['purelib']
+except Exception:
+        print('Could not determine site-packages path; skipping registry patch')
+        sys.exit(0)
+
+registry_path = os.path.join(site, 'certvalidator', 'registry.py')
+if not os.path.exists(registry_path):
+        print('registry.py not found at', registry_path, '; skipping patch')
+        sys.exit(0)
+
+with open(registry_path, 'r', encoding='utf-8') as f:
+        src = f.read()
+
+needle = (
+    '        for trust_root in trust_roots:\n'
+    '            hashable = trust_root.subject.hashable\n'
+    '            if hashable not in self._subject_map:\n'
+    '                self._subject_map[hashable] = []\n'
+    '            self._subject_map[hashable].append(trust_root)\n'
+    '            if trust_root.key_identifier:\n'
+    '                self._key_identifier_map[trust_root.key_identifier] = trust_root\n'
+    '            self._ca_lookup[trust_root.signature] = True'
+)
+patch = (
+    '        for trust_root in trust_roots:\n'
+    '            try:\n'
+    '                hashable = trust_root.subject.hashable\n'
+    '            except Exception:\n'
+    '                # Skip trust roots whose subject cannot be hashed by this\n'
+    '                # version of asn1crypto (certvalidator 0.11.1 incompatibility)\n'
+    '                continue\n'
+    '            if hashable not in self._subject_map:\n'
+    '                self._subject_map[hashable] = []\n'
+    '            self._subject_map[hashable].append(trust_root)\n'
+    '            if trust_root.key_identifier:\n'
+    '                self._key_identifier_map[trust_root.key_identifier] = trust_root\n'
+    '            self._ca_lookup[trust_root.signature] = True'
+)
+
+if needle in src:
+    new_src = src.replace(needle, patch)
+    backup = registry_path + '.orig'
+    try:
+        if not os.path.exists(backup):
+            with open(backup, 'w', encoding='utf-8') as b:
+                b.write(src)
+        with open(registry_path, 'w', encoding='utf-8') as f:
+            f.write(new_src)
+        print('Patched', registry_path, '(backup at', backup + ')')
+    except Exception as e:
+        print('Failed to write patch:', e)
+else:
+    print('No patch needed for registry.py (needle not found)')
+PY
 # Install ASK CLI (v2) globally so container can run `ask configure`
 RUN npm install -g ask-cli || true
 
