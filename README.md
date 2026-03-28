@@ -29,6 +29,7 @@ The easiest way to run the project is with Docker Compose. This will build and s
 5. The service will be available at `http://localhost:5000` (or the IP/port you configured).
 6. In your browser, open the setup UI at `http://localhost:5000/setup`. The setup page will:
    - detect existing persistent ASK credentials (if present) and skip the browser-based auth flow
+    - allow selecting a vendor when your ASK account has multiple vendors (or use `VENDOR_ID` env var)
    - guide you through the ASK CLI authorization flow if credentials are not present
    - run the automated skill creation/update, interaction model upload, model build polling, and testing enablement.
 
@@ -58,6 +59,7 @@ docker run --rm \
     -e MA_HOSTNAME=ma.example.com \
     -e PORT=5000 \
     -e LOCALE=en-US \
+    -e VENDOR_ID=<your-vendor-id> \
     -e AWS_DEFAULT_REGION=us-east-1 \
     -v "$(pwd)/ask_data:/root/.ask" \
     -v "$(pwd)/secrets/app_username.txt:/run/secrets/APP_USERNAME:ro" \
@@ -81,6 +83,7 @@ Notes:
 | `PORT` | No | `5000` | Port the app lives at. Ensure the `ports` mapping in [docker-compose.yml](docker-compose.yml) matches this value. |
 | `DEBUG_PORT` | No | `5678` | Remote debug port (if you enable remote debugging). |
 | `LOCALE` | *No | `en-US` | ***REQUIRED** if your device is not configured for en-US. Skill locale used by the setup and interaction model operations (examples: `en-US`, `en-GB`, `de-DE`). |
+| `VENDOR_ID` | No | — | Optional Amazon vendor id to force ASK CLI vendor-scoped commands when your profile has access to multiple vendors. If not set, `/setup` allows selecting the vendor in the UI. |
 | `AWS_DEFAULT_REGION` | No | `us-east-1` | AWS region used by ASK CLI operations when applicable. |
 | `TZ` | No | `UTC` | Container timezone (example: `America/Chicago`) to make logs/timestamps match your locale. |
 

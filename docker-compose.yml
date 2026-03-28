@@ -9,6 +9,7 @@ services:
       - PORT=5000 #optional
       - DEBUG_PORT=5678 #optional
       - LOCALE=en-US # optional: skill locale (e.g. en-US, en-GB, de-DE)
+      - VENDOR_ID= # optional: set when the profile has multiple Amazon vendors
       - AWS_DEFAULT_REGION=us-east-1 #optional
       - TZ=America/Chicago # set container timezone (override as needed)
     secrets:

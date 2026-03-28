@@ -22,6 +22,7 @@ import logging
 
 from setup_helpers import sanitize_log, enqueue_setup_log, setup_reader_thread as _helpers_setup_reader_thread, read_master_loop as _helpers_read_master_loop
 from setup_helpers import ask_home_from_credentials_dir, has_functional_cli_config, prepare_cli_config_for_configure
+from setup_helpers import get_vendors, get_active_vendor, save_active_vendor
 from signal_helpers import register_signal_handlers
 
 # Ensure boto3 has a default region in container/dev environments to avoid
@@ -233,6 +234,7 @@ except Exception:
 _setup_auth_proc = None
 _setup_auth_lock = threading.Lock()
 _pending_endpoint = None
+_pending_vendor_id = None
 _setup_auth_master_fd = None
 _PENDING_FILE = Path(os.environ.get('TMPDIR', '/tmp')) / 'ask_pending_endpoint.txt'
 
@@ -328,9 +330,11 @@ def setup_ui():
     except Exception:
         auth_url = None
 
+    setup_profile = 'default'
+
     # Suppress auth URL when functional credentials already exist.
     try:
-        if has_functional_cli_config(profile='default'):
+        if has_functional_cli_config(profile=setup_profile):
             app.logger.info('Functional ASK credentials found; suppressing auth UI')
             auth_url = None
     except Exception:
@@ -370,10 +374,28 @@ def setup_ui():
     # If valid ASK CLI credentials are present, show a notice on the setup page.
     try:
         creds_html = ''
-        if has_functional_cli_config(profile='default'):
+        if has_functional_cli_config(profile=setup_profile):
             creds_html = '<div style="margin-top:8px;color:green;font-weight:600">Persistent ASK credentials detected — setup will use existing credentials.</div>'
     except Exception:
         creds_html = ''
+
+    try:
+        initial_vendors = get_vendors(profile=setup_profile)
+    except Exception:
+        initial_vendors = []
+    try:
+        vendor_env = str(os.environ.get('VENDOR_ID') or '').strip()
+    except Exception:
+        vendor_env = ''
+    try:
+        active_vendor = vendor_env or get_active_vendor(profile=setup_profile)
+    except Exception:
+        active_vendor = vendor_env
+    if not active_vendor and len(initial_vendors) == 1:
+        try:
+            active_vendor = str(initial_vendors[0].get('id') or '').strip()
+        except Exception:
+            active_vendor = ''
 
     # Compute initial created flag for first render (Done. Skill ID)
     try:
@@ -393,6 +415,9 @@ def setup_ui():
         page = page.replace('__INITIAL_AUTH__', json.dumps(auth_url))
         page = page.replace('__INITIAL_CREATED__', json.dumps(bool(initial_created)))
         page = page.replace('__CREDENTIALS_HTML__', creds_html)
+        page = page.replace('__VENDORS_JSON__', json.dumps(initial_vendors))
+        page = page.replace('__ACTIVE_VENDOR__', json.dumps(active_vendor))
+        page = page.replace('__VENDOR_FROM_ENV__', json.dumps(bool(vendor_env)))
         return Response(page, mimetype='text/html')
 
     # Fallback: simple inline page if template is missing
@@ -411,6 +436,36 @@ def setup_logs_download():
     return resp
 
 
+@app.route('/setup/vendors', methods=['GET'])
+def setup_vendors():
+    profile = (request.args.get('profile') or 'default').strip() or 'default'
+    try:
+        vendors = get_vendors(profile=profile)
+    except Exception:
+        vendors = []
+
+    try:
+        vendor_env = str(os.environ.get('VENDOR_ID') or '').strip()
+    except Exception:
+        vendor_env = ''
+
+    if vendor_env:
+        active = vendor_env
+    else:
+        try:
+            active = get_active_vendor(profile=profile)
+        except Exception:
+            active = ''
+
+    if not active and len(vendors) == 1:
+        try:
+            active = str(vendors[0].get('id') or '').strip()
+        except Exception:
+            active = ''
+
+    return jsonify({'vendors': vendors, 'active': active, 'from_env': bool(vendor_env)})
+
+
 @app.route('/setup/start', methods=['POST'])
 def setup_start():
     global _setup_proc
@@ -422,13 +477,18 @@ def setup_start():
         endpoint = data.get('endpoint')
     # Fixed options (user-not-editable). `LOCALE` may be set in the environment.
     profile = 'default'
+    vendor_env = str(os.environ.get('VENDOR_ID') or '').strip()
+    requested_vendor = str(data.get('vendor_id') or '').strip()
+    vendor_id = vendor_env or requested_vendor
     locale = os.environ.get('LOCALE', 'en-US')
     stage = 'development'
     upload_models = True
 
     # Immediate trace so UI shows activity when button is clicked
     try:
-        _enqueue_setup_log(f"Received /setup/start request; resolved endpoint={endpoint!r}")
+        _enqueue_setup_log(
+            f"Received /setup/start request; resolved endpoint={endpoint!r} profile={profile!r} vendor_id={vendor_id or '<auto>'!r}"
+        )
     except Exception:
         _setup_logs.append('Received /setup/start request')
 
@@ -466,6 +526,33 @@ def setup_start():
             app.logger.exception('check failed')
             return jsonify({'error':'check failed'}), 500
 
+        try:
+            available_vendors = get_vendors(profile=profile)
+        except Exception:
+            available_vendors = []
+
+        if not vendor_id and len(available_vendors) == 1:
+            try:
+                vendor_id = str(available_vendors[0].get('id') or '').strip()
+            except Exception:
+                vendor_id = ''
+
+        if not vendor_id and len(available_vendors) > 1:
+            msg = 'multiple vendors detected; choose a vendor in /setup or set VENDOR_ID'
+            _setup_logs.append(f'Error: {msg}')
+            return jsonify({'error': msg}), 400
+
+        if vendor_id and available_vendors and not any(v.get('id') == vendor_id for v in available_vendors):
+            msg = f"selected vendor_id '{vendor_id}' not found for ASK profile '{profile}'"
+            _setup_logs.append(f'Error: {msg}')
+            return jsonify({'error': msg}), 400
+
+        if vendor_id:
+            try:
+                save_active_vendor(vendor_id=vendor_id, profile=profile)
+            except Exception:
+                pass
+
         # If ASK CLI is not configured with functional credentials, remove any
         # non-functional cli_config and start the no-browser auth flow.
         if not has_functional_cli_config(profile=profile):
@@ -487,9 +574,10 @@ def setup_start():
                     auth_cmd = ['ask','configure','--no-browser']
                     _setup_auth_proc = subprocess.Popen(auth_cmd, stdin=slave_fd, stdout=slave_fd, stderr=slave_fd, close_fds=True)
                     os.close(slave_fd)
-                    # remember the endpoint requested so we can start creation after auth
-                    global _pending_endpoint, _setup_auth_master_fd
+                    # remember setup context so we can start creation after auth
+                    global _pending_endpoint, _pending_vendor_id, _setup_auth_master_fd
                     _pending_endpoint = endpoint
+                    _pending_vendor_id = vendor_id
                     try:
                         _PENDING_FILE.write_text(endpoint)
                     except Exception:
@@ -531,9 +619,13 @@ def setup_start():
                 # repo-relative path
                 script_path = str(Path(__file__).parent.parent / 'scripts' / 'ask_create_skill.sh')
             app.logger.info('Launching setup script: %s', script_path)
-            _setup_logs.append(f'Starting setup: endpoint={endpoint} profile={profile} locale={locale} stage={stage}')
+            _setup_logs.append(
+                f'Starting setup: endpoint={endpoint} profile={profile} vendor_id={vendor_id or "<auto>"} locale={locale} stage={stage}'
+            )
             # run the top-level shell script via bash so it behaves like the original shell invocation
             cmd = ['/bin/bash', script_path, '--endpoint', endpoint, '--profile', profile, '--locale', locale, '--stage', stage]
+            if vendor_id:
+                cmd.extend(['--vendor-id', vendor_id])
             if not upload_models:
                 cmd.append('--no-upload-models')
             proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
@@ -612,8 +704,8 @@ def setup_code():
     _setup_logs.append('Auth completed successfully; starting skill creation')
 
     # Now start the create-skill script (use fixed options)
-    # Use the pending endpoint saved when auth was started
-    global _pending_endpoint
+    # Use the pending endpoint/vendor context saved when auth was started
+    global _pending_endpoint, _pending_vendor_id
     endpoint_val = _pending_endpoint
     if not endpoint_val:
         # try to recover from tmp file in case the app restarted or state was lost
@@ -631,6 +723,21 @@ def setup_code():
     # Start the create script now
     try:
         profile = 'default'
+        vendor_env = str(os.environ.get('VENDOR_ID') or '').strip()
+        vendor_id = vendor_env or (_pending_vendor_id or '')
+        if not vendor_id:
+            try:
+                available_vendors = get_vendors(profile=profile)
+            except Exception:
+                available_vendors = []
+            if len(available_vendors) == 1:
+                try:
+                    vendor_id = str(available_vendors[0].get('id') or '').strip()
+                except Exception:
+                    vendor_id = ''
+            elif len(available_vendors) > 1:
+                _setup_logs.append('Error: multiple vendors detected; select vendor in /setup and start setup again')
+                return jsonify({'error': 'multiple vendors detected; select vendor in /setup and start setup again'}), 400
         locale = os.environ.get('LOCALE', 'en-US')
         stage = 'development'
         # prefer container-installed path when present, otherwise use repo-relative scripts/
@@ -641,6 +748,8 @@ def setup_code():
             script_path = str(Path(__file__).parent.parent / 'scripts' / 'ask_create_skill.sh')
         # run the shell script via bash (matching the shell behaviour)
         cmd = ['/bin/bash', script_path, '--endpoint', endpoint_val, '--profile', profile, '--locale', locale, '--stage', stage]
+        if vendor_id:
+            cmd.extend(['--vendor-id', vendor_id])
         _enqueue_setup_log(f'Starting create script: {cmd}')
         try:
             proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
@@ -667,8 +776,9 @@ def setup_code():
                     pass
         except Exception as e:
             _enqueue_setup_log(f'Error while checking create script immediate status: {e}')
-        # clear pending endpoint after starting
+        # clear pending context after starting
         _pending_endpoint = None
+        _pending_vendor_id = None
         try:
             if _PENDING_FILE.exists():
                 _PENDING_FILE.unlink()
