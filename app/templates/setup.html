@@ -6,6 +6,11 @@
     <div>
         <div style="margin-bottom:8px;">Skill endpoint is read from container configuration (SKILL_HOSTNAME)</div>
         __CREDENTIALS_HTML__
+        <div id="vendor-row" style="display:none;margin-bottom:8px;">
+            <label for="vendor-select" style="display:inline-block;min-width:120px;">Vendor</label>
+            <select id="vendor-select" style="min-width:260px;"></select>
+            <span id="vendor-hint" style="margin-left:8px;color:#666;"></span>
+        </div>
         <div><button id="setup-start">Start Setup</button></div>
         <div id="auth-area" style="display:none;margin-top:8px">
             <div><a id="auth-link" href="#" target="_blank">Open authorization page</a></div>
@@ -22,6 +27,9 @@
     const initialLogs = __INITIAL_LOGS__;
     const initialAuth = __INITIAL_AUTH__;
     const initialCreated = __INITIAL_CREATED__;
+    const initialVendors = __VENDORS_JSON__;
+    const initialActiveVendor = __ACTIVE_VENDOR__;
+    const initialVendorFromEnv = __VENDOR_FROM_ENV__;
     (function(){
         const startBtn = document.getElementById('setup-start');
         const logsEl = document.getElementById('setup-logs');
@@ -29,9 +37,49 @@
         const authLink = document.getElementById('auth-link');
         const codeEntry = document.getElementById('code-entry');
         const codeForm = document.getElementById('code-form');
+        const vendorRow = document.getElementById('vendor-row');
+        const vendorSelect = document.getElementById('vendor-select');
+        const vendorHint = document.getElementById('vendor-hint');
         // Track whether we've already opened the auth URL in a tab/window
         let authOpened = false;
         const downloadBtn = document.getElementById('download-logs');
+
+        function populateVendors(vendors, activeVendor, fromEnv){
+            const list = Array.isArray(vendors) ? vendors : [];
+            vendorSelect.innerHTML = '';
+
+            for(const v of list){
+                const id = String((v && v.id) || '').trim();
+                if(!id){ continue; }
+                const name = String((v && v.name) || id);
+                const opt = document.createElement('option');
+                opt.value = id;
+                opt.textContent = `${name} (${id})`;
+                vendorSelect.appendChild(opt);
+            }
+
+            if(activeVendor){
+                const hasActive = list.some(v => String((v && v.id) || '').trim() === activeVendor);
+                if(!hasActive){
+                    const opt = document.createElement('option');
+                    opt.value = activeVendor;
+                    opt.textContent = `${activeVendor} (configured)`;
+                    vendorSelect.appendChild(opt);
+                }
+                vendorSelect.value = activeVendor;
+            }
+
+            vendorSelect.disabled = !!fromEnv;
+            vendorHint.textContent = fromEnv ? 'Locked by VENDOR_ID environment variable' : '';
+            // Only show when selection is meaningful (more than one vendor) or env override is active.
+            vendorRow.style.display = (list.length > 1 || !!fromEnv) ? 'block' : 'none';
+        }
+
+        function refreshVendors(){
+            fetch('/setup/vendors?profile=default').then(r=>r.json()).then(j=>{
+                populateVendors(j.vendors || [], j.active || '', !!j.from_env);
+            }).catch(()=>{});
+        }
 
         function showStatusButton(){
             try{
@@ -47,6 +95,8 @@
         }
 
         function renderInitial(){
+            populateVendors(initialVendors || [], initialActiveVendor || '', !!initialVendorFromEnv);
+            refreshVendors();
             // Render any initial logs/auth embedded in the page
             try{ logsEl.textContent = JSON.stringify(initialLogs || [], null, 2); logsEl.scrollTop = logsEl.scrollHeight; }catch(e){ logsEl.textContent = ''; }
             if(initialCreated){ showStatusButton(); return; }
@@ -80,6 +130,7 @@
         function pollLogs(){
             fetch('/setup?format=json').then(r=>r.json()).then(j=>{
                 try{ logsEl.textContent = JSON.stringify(j.logs || [], null, 2); logsEl.scrollTop = logsEl.scrollHeight; }catch(e){ logsEl.textContent = ''; }
+                refreshVendors();
                 if(j.created){
                     // Show a button the user can click to go to the status page
                     try{ showStatusButton(); return; }catch(e){}
@@ -98,7 +149,12 @@
         }
 
         startBtn.addEventListener('click', function(){
-            fetch('/setup/start', {method:'POST'}).then(async (r)=>{
+            const payload = {};
+            const selectedVendor = String((vendorSelect && vendorSelect.value) || '').trim();
+            if(selectedVendor){
+                payload.vendor_id = selectedVendor;
+            }
+            fetch('/setup/start', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)}).then(async (r)=>{
                 let j = {};
                 try{ j = await r.json(); }catch(e){}
                 if(!r.ok){ logsEl.textContent = (j.error || JSON.stringify(j) || 'Error starting setup'); }
