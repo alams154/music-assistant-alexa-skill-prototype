@@ -132,25 +132,30 @@ def play(url, offset, text, response_builder, supports_apl=False):
 
         url = replace_ip_in_url(url, hostname)
 
-        # Ensure the resource exists and appears playable. Try HEAD first, fall back to GET.
-        try:
-            head_resp = requests.head(url, allow_redirects=True, timeout=5)
-            resp = head_resp
-            if head_resp.status_code >= 400:
-                resp = requests.get(url, stream=True, allow_redirects=True, timeout=5)
+        skip_validation = os.environ.get('SKIP_URL_VALIDATION', 'false').lower() in ('true', '1', 'yes')
 
-            if resp.status_code >= 400:
-                logging.error('Audio URL returned HTTP %s: %s', resp.status_code, url)
+        if skip_validation:
+            logging.info('Stream URL (validation skipped via SKIP_URL_VALIDATION): %s', url)
+        else:
+            # Ensure the resource exists and appears playable. Try HEAD first, fall back to GET.
+            try:
+                head_resp = requests.head(url, allow_redirects=True, timeout=5)
+                resp = head_resp
+                if head_resp.status_code >= 400:
+                    resp = requests.get(url, stream=True, allow_redirects=True, timeout=5)
+
+                if resp.status_code >= 400:
+                    logging.error('Audio URL returned HTTP %s: %s', resp.status_code, url)
+                    response_builder.speak(
+                        "Sorry, I can't reach the audio file. Please check that your stream URL is internet accessible via HTTPS at the MA_HOSTNAME variable you provided.")
+                    response_builder.set_should_end_session(True)
+                    return response_builder.response
+            except requests.RequestException:
+                logging.exception('Play Function URL: %s', url)
                 response_builder.speak(
                     "Sorry, I can't reach the audio file. Please check that your stream URL is internet accessible via HTTPS at the MA_HOSTNAME variable you provided.")
                 response_builder.set_should_end_session(True)
                 return response_builder.response
-        except requests.RequestException:
-            logging.exception('Play Function URL: %s', url)
-            response_builder.speak(
-                "Sorry, I can't reach the audio file. Please check that your stream URL is internet accessible via HTTPS at the MA_HOSTNAME variable you provided.")
-            response_builder.set_should_end_session(True)
-            return response_builder.response
 
         response_builder.add_directive(
             PlayDirective(
