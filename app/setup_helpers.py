@@ -1,6 +1,7 @@
 import os
 import re
 import json
+import subprocess
 from pathlib import Path
 
 
@@ -101,6 +102,114 @@ def has_functional_cli_config(profile: str = 'default') -> bool:
     access_token = str(entry.get('access_token') or '').strip()
     refresh_token = str(entry.get('refresh_token') or '').strip()
     return bool(access_token or refresh_token)
+
+
+def _parse_json_from_cli_output(raw: str):
+    try:
+        return json.loads(raw)
+    except Exception:
+        pass
+    try:
+        idx = raw.find('{')
+        if idx != -1:
+            return json.loads(raw[idx:])
+    except Exception:
+        pass
+    return None
+
+
+def get_vendors(profile: str = 'default') -> list[dict]:
+    """Return vendors available for the ASK profile.
+
+    Each entry has: {'id': '<vendor-id>', 'name': '<display-name>'}
+    """
+    if not profile:
+        profile = 'default'
+    if not has_functional_cli_config(profile=profile):
+        return []
+
+    try:
+        proc = subprocess.run(
+            ['ask', 'smapi', 'list-vendors', '--profile', profile],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except Exception:
+        return []
+
+    raw = (proc.stdout or '').strip()
+    if not raw:
+        raw = (proc.stderr or '').strip()
+    if not raw:
+        return []
+
+    obj = _parse_json_from_cli_output(raw)
+    if not isinstance(obj, dict):
+        return []
+
+    vendors_raw = obj.get('vendors')
+    if not isinstance(vendors_raw, list):
+        return []
+
+    seen = set()
+    vendors = []
+    for item in vendors_raw:
+        if not isinstance(item, dict):
+            continue
+        vid = str(item.get('id') or item.get('vendorId') or item.get('vendor_id') or '').strip()
+        if not vid or vid in seen:
+            continue
+        seen.add(vid)
+        vname = str(item.get('name') or item.get('vendorName') or item.get('displayName') or vid).strip()
+        vendors.append({'id': vid, 'name': vname})
+    return vendors
+
+
+def _active_vendor_path() -> Path:
+    return get_ask_credentials_dir() / 'active_vendor.json'
+
+
+def get_active_vendor(profile: str = 'default') -> str:
+    """Return the persisted vendor id for a profile when available."""
+    path = _active_vendor_path()
+    try:
+        data = json.loads(path.read_text(encoding='utf-8'))
+    except Exception:
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
+
+    stored = str(data.get(profile) or '').strip()
+    if not stored:
+        return ''
+
+    vendors = get_vendors(profile=profile)
+    if vendors and any(v.get('id') == stored for v in vendors):
+        return stored
+    return ''
+
+
+def save_active_vendor(vendor_id: str, profile: str = 'default') -> None:
+    """Persist selected vendor id per ASK profile."""
+    path = _active_vendor_path()
+    try:
+        existing = json.loads(path.read_text(encoding='utf-8'))
+    except Exception:
+        existing = {}
+    if not isinstance(existing, dict):
+        existing = {}
+
+    if vendor_id:
+        existing[profile] = vendor_id
+    else:
+        existing.pop(profile, None)
+
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(existing, indent=2), encoding='utf-8')
+    except Exception:
+        pass
 
 def sanitize_log(s: str) -> str:
     try:
