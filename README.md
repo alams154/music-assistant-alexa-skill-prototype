@@ -101,6 +101,11 @@ Notes:
 
 Returns a simple status page showing the local API health and an ASK CLI driven check for whether the Music Assistant skill exists, whether its endpoint matches `SKILL_HOSTNAME`, and whether testing is enabled. When the check is not green, the status page provides a quick link to `/setup`.
 
+### TLS Support
+TLS 1.3 is not supported
+
+If using Cloudflare, set minimum TLS version to 1.2
+
 ---
 
 See [COMPATIBILITY.md](COMPATIBILITY.md) for known supported devices, languages, and regions.
