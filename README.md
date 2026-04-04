@@ -34,7 +34,7 @@ The easiest way to run the project is with Docker Compose. This will build and s
 
 Note: manual creation of the skill in the Alexa Developer Console is no longer required — the `/setup` flow automates creation and enablement when possible.
 
-### 2. Home Assistant add-on (Not Working)
+### 2. Home Assistant add-on (NOT WORKING)
 
 This repository contains an `addons/music-assistant-skill` folder with a simple Home Assistant add-on wrapper. Running it as an add-on in your environment may require additional changes.
 
