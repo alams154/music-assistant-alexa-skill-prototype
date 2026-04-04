@@ -55,7 +55,7 @@ def replace_ip_in_url(url, hostname):
     if not url:
         return url
     try:
-        new_url = re.sub(r'^https?://\d+\.\d+\.\d+\.\d+(?::\d+)?', hostname, url)
+        new_url = re.sub(r'^https?://[^/]+', hostname, url)
     except re.error:
         # In case the regex fails for some odd reason, just return original
         return url.replace(' ', '%20')
