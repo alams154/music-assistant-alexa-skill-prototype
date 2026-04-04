@@ -81,6 +81,9 @@ Desktop.ini
 
 # Build files
 tmp
+addons/music-assistant-skill/app
+addons/music-assistant-skill/assets
+addons/music-assistant-skill/scripts
 
 # ASK CLI data
 ask_data/

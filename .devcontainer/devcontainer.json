@@ -1,0 +1,35 @@
+{
+  "name": "Alexa Skill HA Dev Container",
+  "image": "ghcr.io/home-assistant/devcontainer:3-apps",
+  "appPort": ["7123:8123", "7357:4357", "5000:5000", "5678:5678"],
+  "postStartCommand": "bash .devcontainer/post_start_nosudo.sh",
+  "runArgs": ["-e", "GIT_EDITOR=code --wait", "--privileged"],
+  "workspaceFolder": "/mnt/supervisor/addons/local/${localWorkspaceFolderBasename}",
+  "workspaceMount": "source=${localWorkspaceFolder},target=${containerWorkspaceFolder},type=bind,consistency=cached",
+  "remoteUser": "root",
+  "containerUser": "root",
+  "containerEnv": {
+    "WORKSPACE_DIRECTORY": "${containerWorkspaceFolder}"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": ["timonwong.shellcheck", "esbenp.prettier-vscode"],
+      "settings": {
+        "terminal.integrated.profiles.linux": {
+          "zsh": {
+            "path": "/usr/bin/zsh"
+          }
+        },
+        "terminal.integrated.defaultProfile.linux": "zsh",
+        "editor.formatOnPaste": false,
+        "editor.formatOnSave": true,
+        "editor.formatOnType": true,
+        "files.trimTrailingWhitespace": true
+      }
+    }
+  },
+  "mounts": [
+    "type=volume,target=/var/lib/docker",
+    "type=volume,target=/mnt/supervisor"
+  ]
+}
