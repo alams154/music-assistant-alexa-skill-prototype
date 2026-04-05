@@ -41,7 +41,7 @@ Set these in the Supervisor add-on configuration:
 
 ### Notes
 
-- The add-on Dockerfile copies the repository into the image and runs the Flask-based service at `app/app.py`.
+- The add-on is configured to pull the prebuilt container image from GHCR (`ghcr.io/alams154/music-assistant-skill:<version>`).
 - The image includes the packages needed to build Python dependencies from `requirements.txt`.
 - If `DEBUG_PORT` is enabled, the container starts the app under `debugpy` so VS Code can attach to it.
 - This add-on is provided as a development convenience. For production or publication to the official add-on store, additional hardening and configuration is recommended.

@@ -1,7 +1,8 @@
 {
   "name": "Music Assistant Alexa Skill",
-  "version": "0.0.38-beta",
+  "version": "0.0.39-beta",
   "slug": "music_assistant_skill",
+  "image": "ghcr.io/alams154/music-assistant-skill:latest",
   "description": "Expose the Music Assistant Alexa skill as a Home Assistant add-on (development/edge use).",
   "arch": [
     "aarch64",
