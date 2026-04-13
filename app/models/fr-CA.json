@@ -1,0 +1,37 @@
+{
+  "interactionModel": {
+    "languageModel": {
+      "invocationName": "",
+      "intents": [
+        { "intent": "AMAZON.CancelIntent", "utterances": ["annuler", "laisse tomber", "oublie ça"] },
+        { "intent": "AMAZON.FallbackIntent", "utterances": ["je ne sais pas", "ce n'est pas ça"] },
+        { "intent": "AMAZON.HelpIntent", "utterances": ["aide", "aide-moi", "peux-tu m'aider"] },
+        { "intent": "AMAZON.LoopOffIntent", "utterances": ["boucle désactivée", "arrêter la boucle"] },
+        { "intent": "AMAZON.LoopOnIntent", "utterances": ["répéter", "activer la boucle", "jouer en boucle"] },
+        { "intent": "AMAZON.NextIntent", "utterances": ["suivant", "passer", "passer au suivant"] },
+        { "intent": "AMAZON.NoIntent", "utterances": ["non", "non merci"] },
+        { "intent": "AMAZON.PauseIntent", "utterances": ["pause", "met en pause"] },
+        { "intent": "AMAZON.PreviousIntent", "utterances": ["précédent", "reviens en arrière"] },
+        { "intent": "AMAZON.RepeatIntent", "utterances": ["répète", "dis encore", "répéter cela"] },
+        { "intent": "AMAZON.ResumeIntent", "utterances": ["reprendre", "continuer"] },
+        { "intent": "AMAZON.SelectIntent", "utterances": ["sélectionne cet élément", "choisis cette option", "montre la première option"] },
+        { "intent": "AMAZON.SendToPhoneIntent", "utterances": ["envoie à mon téléphone", "envoie le lien sur mon portable"] },
+        { "intent": "AMAZON.ShuffleOffIntent", "utterances": ["désactiver aléatoire", "arrêter le shuffle"] },
+        { "intent": "AMAZON.ShuffleOnIntent", "utterances": ["mélanger", "mettre en lecture aléatoire"] },
+        { "intent": "AMAZON.StartOverIntent", "utterances": ["recommencer", "recommence depuis le début"] },
+        { "intent": "AMAZON.StopIntent", "utterances": ["arrêter", "stop", "quitter"] },
+        { "intent": "AMAZON.YesIntent", "utterances": ["oui", "d'accord"] },
+        { "intent": "AMAZON.ScrollUpIntent", "utterances": ["faire défiler vers le haut", "scroll vers le haut"] },
+        { "intent": "AMAZON.ScrollLeftIntent", "utterances": ["faire défiler vers la gauche"] },
+        { "intent": "AMAZON.ScrollDownIntent", "utterances": ["faire défiler vers le bas"] },
+        { "intent": "AMAZON.ScrollRightIntent", "utterances": ["faire défiler vers la droite"] },
+        { "intent": "AMAZON.PageUpIntent", "utterances": ["page précédente", "page vers le haut"] },
+        { "intent": "AMAZON.PageDownIntent", "utterances": ["page suivante", "page vers le bas"] },
+        { "intent": "AMAZON.MoreIntent", "utterances": ["plus", "montre plus"] },
+        { "intent": "AMAZON.NavigateHomeIntent", "utterances": ["aller à l'accueil", "aller à l'écran d'accueil"] },
+        { "intent": "AMAZON.NavigateSettingsIntent", "utterances": ["ouvrir les paramètres", "aller aux paramètres"] }
+      ],
+      "types": []
+    }
+  }
+}
