@@ -668,18 +668,19 @@ class LocalizationInterceptor(AbstractRequestInterceptor):
         # type: (HandlerInput) -> None
         locale = getattr(handler_input.request_envelope.request, 'locale', None)
         if locale:
-            if locale.startswith("fr"):
-                locale_file_name = "fr-FR"
-            elif locale.startswith("it"):
-                locale_file_name = "it-IT"
-            elif locale.startswith("es"):
-                locale_file_name = "es-ES"
-            elif locale.startswith("pt"):
-                locale_file_name = "pt-BR"
-            elif locale.startswith("de"):
-                locale_file_name = "de-DE"
-            else:
-                locale_file_name = locale
+            parts = locale.split("-")
+            lang = parts[0]
+            region = parts[1] if len(parts) > 1 else None
+        
+            mapping = {
+                "fr": "fr-CA" if region == "CA" else "fr-FR",
+                "it": "it-IT",
+                "es": "es-ES",
+                "pt": "pt-BR",
+                "de": "de-DE",
+            }
+        
+            locale_file_name = mapping.get(lang, locale)
 
             i18n = gettext.translation(
                 'data', localedir='locales', languages=[locale_file_name],
