@@ -1,0 +1,68 @@
+# French (France) translations for PROJECT.
+# Copyright (C) 2018 ORGANIZATION
+# This file is distributed under the same license as the PROJECT project.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2018.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: PROJECT VERSION\n"
+"Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
+"POT-Creation-Date: 2018-09-15 23:34-0700\n"
+"PO-Revision-Date: 2018-09-15 23:36-0700\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: fr_FR\n"
+"Language-Team: fr_FR <LL@li.org>\n"
+"Plural-Forms: nplurals=2; plural=(n > 1)\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.6.0\n"
+
+#: alexa/data.py:6
+msgid "Welcome to {}"
+msgstr "Bienvenue sur {}"
+
+#: alexa/data.py:7
+msgid ""
+"Welcome to {}. You can play, stop, resume listening.  How can I help you"
+" ?"
+msgstr ""
+"Bienvenue sur {}. Vous pouvez démarrer, arrêter ou reprendre.  Que "
+"souhaitez-vous faire ?"
+
+#: alexa/data.py:8
+msgid "Sorry, I could not understand what you've just said."
+msgstr "Désolé, je n'ai pas compris ce que vous avez dit."
+
+#: alexa/data.py:9
+msgid "This is radio, you have to wait for previous or next track to play."
+msgstr "C'est de la radio, vous devez attendre le titre précédent ou suivant."
+
+#: alexa/data.py:10
+msgid "Resuming {}"
+msgstr "Je redémarre {}"
+
+#: alexa/data.py:11
+msgid ""
+"This is radio, you can not do that.  You can ask me to stop or pause to "
+"stop listening."
+msgstr ""
+"C'est de la radio, vous ne pouvez pas faire ca.  Vous pouvez me demander "
+"d'arrêter ou de metre en pause pour arrêter la musique."
+
+#: alexa/data.py:12
+msgid "Goodbye."
+msgstr "au revoir !"
+
+#: alexa/data.py:13
+msgid "Sorry, this skill is not supported on this device"
+msgstr "Désolé, cette skill ne peut être utilisée sur cet appareil."
+
+#: alexa/data.py:15
+msgid "test english"
+msgstr "test français"
+
+#: alexa/data.py:16
+msgid "test with parameters {} and {}"
+msgstr "test avec paramètres {} et {}"
+
