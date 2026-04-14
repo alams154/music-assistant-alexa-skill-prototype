@@ -16,6 +16,7 @@ TMP_DIR="$REPO_ROOT/tmp"
 PROFILE="default"
 STAGE="development"
 ENDPOINT=""
+VENDOR_ID="${VENDOR_ID:-}"
 UPLOAD_MODELS=true
 # Default to en-US to avoid uploading/managing all locales by default
 # Allow overriding via environment variable `LOCALE` when running in container
@@ -23,10 +24,11 @@ LOCALE="${LOCALE:-en-US}"
 
 usage(){
   cat <<EOF
-Usage: $(basename "$0") [--profile NAME] [--endpoint https://host] [--upload-models] [--stage development|live] [--locale LOCALE]
+Usage: $(basename "$0") [--profile NAME] [--vendor-id ID] [--endpoint https://host] [--upload-models] [--stage development|live] [--locale LOCALE]
 
 Options:
   --profile NAME       ASK CLI profile to use (default: default)
+  --vendor-id ID       Optional Amazon vendor id for accounts with multiple vendors
   --endpoint URL       HTTPS endpoint to set for the skill (optional)
   --upload-models      Upload interaction models from the repo's models/ directory after creating the skill
   --stage STAGE        Skill stage to target for interaction model uploads (default: development)
@@ -38,6 +40,7 @@ EOF
 while [[ ${#} -gt 0 ]]; do
   case "$1" in
     --profile) PROFILE="$2"; shift 2;;
+    --vendor-id) VENDOR_ID="$2"; shift 2;;
     --endpoint) ENDPOINT="$2"; shift 2;;
     --upload-models) UPLOAD_MODELS=true; shift 1;;
     --stage) STAGE="$2"; shift 2;;
@@ -46,6 +49,12 @@ while [[ ${#} -gt 0 ]]; do
     *) echo "Unknown arg: $1"; usage; exit 1;;
   esac
 done
+
+VENDOR_ARGS=()
+if [ -n "$VENDOR_ID" ]; then
+  VENDOR_ARGS=(--vendor-id "$VENDOR_ID")
+  echo "Using vendor id: $VENDOR_ID"
+fi
 
 # Require endpoint: user requested endpoint must be provided to publish a valid manifest
 if [ -z "${ENDPOINT:-}" ]; then
@@ -143,7 +152,7 @@ fi
 
 # Query existing skill(s) named "Music Assistant" for this vendor/profile
 LIST_FILE="$TMP_DIR/list_skills.json"
-ask smapi list-skills-for-vendor --profile "$PROFILE" > "$LIST_FILE" 2>&1 || true
+ask smapi list-skills-for-vendor --profile "$PROFILE" "${VENDOR_ARGS[@]}" > "$LIST_FILE" 2>&1 || true
 TO_DELETE=$(python3 "$REPO_ROOT/scripts/find_skills_to_delete.py" "$LIST_FILE" 2>/dev/null || true)
 
 # Default: we will create a new skill unless we find and reuse an existing one
@@ -179,7 +188,7 @@ echo "WROTE $OUT_MANIFEST"
 if [ "$SKIP_CREATE" -eq 0 ]; then
   echo "Creating skill using ASK CLI (profile=$PROFILE)..."
   CREATE_OUT_FILE="$TMP_DIR/create_skill_out.txt"
-  ask smapi create-skill-for-vendor --manifest file://$OUT_MANIFEST --profile $PROFILE > "$CREATE_OUT_FILE" 2>&1 || true
+  ask smapi create-skill-for-vendor --manifest file://$OUT_MANIFEST --profile "$PROFILE" "${VENDOR_ARGS[@]}" > "$CREATE_OUT_FILE" 2>&1 || true
   CREATE_OUT="$(cat "$CREATE_OUT_FILE")"
   echo "WROTE $CREATE_OUT_FILE"
   echo "$CREATE_OUT"
