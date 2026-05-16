@@ -1,0 +1,197 @@
+# Music Assistant Alexa Skill — Docker Compose (with Cloudflare Tunnel)
+#
+# This configuration is designed for users behind CGNAT / Starlink / Double-NAT
+# who cannot expose their server directly. It includes Cloudflare Tunnel
+# for secure HTTPS access without port forwarding.
+#
+# For users with a public IP and port forwarding, the original docker-compose.yml
+# from the repository works without modifications.
+#
+# See README.md for full setup instructions.
+
+services:
+  music-assistant-skill:
+    image: ghcr.io/alams154/music-assistant-skill:latest
+    container_name: ma_alexa_api
+    environment:
+      # ------------------------------------------------------------------
+      # SKILL_HOSTNAME — Public domain for the Alexa skill endpoint
+      # ------------------------------------------------------------------
+      # This domain must point to your Cloudflare Tunnel (or reverse proxy).
+      # Alexa will call this URL to invoke your skill.
+      # Use ONLY the domain name, no https:// prefix.
+      #
+      # Examples:
+      #   ma-api.mydomain.de, alexa-skill.home-net.com
+      #
+      - SKILL_HOSTNAME=<YOUR_SKILL_DOMAIN>
+
+      # ------------------------------------------------------------------
+      # MA_HOSTNAME — Public domain for Music Assistant streaming
+      # ------------------------------------------------------------------
+      # This domain must point to your Music Assistant instance (via Cloudflare
+      # Tunnel or reverse proxy). The skill rewrites internal MA URLs to this
+      # public hostname so Echo devices can reach the audio stream.
+      # Use ONLY the domain name, no https:// prefix.
+      #
+      # Examples:
+      #   Europe:  mass-stream.mydomain.de, music.myhome.com
+      #
+      - MA_HOSTNAME=<YOUR_MA_DOMAIN>
+
+      # ------------------------------------------------------------------
+      # PORT — Internal port the Flask app listens on
+      # ------------------------------------------------------------------
+      # Default is 5000. Only change if you have a port conflict.
+      - PORT=5000
+
+      # ------------------------------------------------------------------
+      # LOCALE — Language / region for the Alexa skill
+      # ------------------------------------------------------------------
+      # This determines the interaction model, voice responses, and built-in
+      # intents. Must match the locale you selected during skill setup.
+      #
+      # Europe:
+      #   de-DE  = German (Germany)
+      #   de-AT  = German (Austria)
+      #   en-GB  = English (UK)
+      #   fr-FR  = French (France)
+      #   es-ES  = Spanish (Spain)
+      #   it-IT  = Italian (Italy)
+      #   nl-NL  = Dutch (Netherlands)
+      #
+      # Americas:
+      #   en-US  = English (United States)
+      #   en-CA  = English (Canada)
+      #   es-MX  = Spanish (Mexico)
+      #   pt-BR  = Portuguese (Brazil)
+      #
+      # Asia-Pacific:
+      #   en-AU  = English (Australia)
+      #   en-IN  = English (India)
+      #   ja-JP  = Japanese (Japan)
+      #
+      - LOCALE=en-US
+
+      # ------------------------------------------------------------------
+      # AWS_DEFAULT_REGION — Amazon region for ASK CLI / skill deployment
+      # ------------------------------------------------------------------
+      # Must match the region where your Alexa developer account is registered.
+      #
+      # Europe:   eu-west-1  (Ireland)
+      # Americas: us-east-1  (N. Virginia) — default for US/CA accounts
+      # Asia:     ap-northeast-1 (Tokyo)
+      #
+      # If you are in Europe but created your Alexa account on amazon.com,
+      # you may need us-east-1. Check your Alexa Developer Console URL.
+      - AWS_DEFAULT_REGION=us-east-1
+
+      # ------------------------------------------------------------------
+      # SKIP_URL_VALIDATION — Bypass internal URL reachability check
+      # ------------------------------------------------------------------
+      # REQUIRED for CGNAT / Starlink / mobile ISP / DS-Lite / Double-NAT.
+      # When set to "true", the skill skips the HEAD/GET check against the
+      # stream URL. The container cannot reach its own public URL via the
+      # internet because hairpin NAT is blocked by CGNAT.
+      #
+      # Set to "false" (or remove) ONLY if:
+      #   - You have a public IP with port forwarding
+      #   - Your router supports hairpin NAT / NAT loopback
+      #   - The skill container can reach its own public domains
+      #
+      - SKIP_URL_VALIDATION=true
+
+      # ------------------------------------------------------------------
+      # TZ — Timezone for container logs and scheduling
+      # ------------------------------------------------------------------
+      # Set to your local timezone so logs show correct timestamps.
+      #
+      # Europe:    Europe/Berlin, Europe/Vienna, Europe/London, Europe/Paris
+      # Americas:  America/New_York, America/Los_Angeles, America/Chicago
+      # Asia:      Asia/Tokyo, Asia/Singapore, Asia/Dubai
+      # Australia: Australia/Sydney, Australia/Melbourne
+      #
+      - TZ=UTC
+
+      # ------------------------------------------------------------------
+      # APP_USERNAME / APP_PASSWORD — Basic Auth for internal API
+      # ------------------------------------------------------------------
+      # These are mounted as Docker Secrets (file paths), not plain text.
+      # The actual values live in ./secrets/app_username.txt and
+      # ./secrets/app_password.txt on your host.
+      #
+      # Default username from the original project: adminHA
+      # Choose a strong password for the password file.
+      #
+      - APP_USERNAME=/run/secrets/APP_USERNAME
+      - APP_PASSWORD=/run/secrets/APP_PASSWORD
+
+    secrets:
+      - APP_USERNAME
+      - APP_PASSWORD
+
+    ports:
+      - "5000:5000"
+
+    volumes:
+      # ASK CLI credentials and skill state (persisted across restarts)
+      - ./ask_data:/root/.ask
+
+    extra_hosts:
+      # ------------------------------------------------------------------
+      # extra_hosts — Force public domains to resolve to local IPs
+      # ------------------------------------------------------------------
+      # CRITICAL for CGNAT setups. The container cannot reach the public
+      # internet to resolve its own domains, so we tell it the local IP.
+      #
+      # Format: "public-domain:local-ip"
+      #
+      # <YOUR_MA_DOMAIN>  → IP of your Music Assistant server (e.g. 10.0.0.10)
+      # <YOUR_SKILL_DOMAIN> → IP of this skill container (e.g. 10.0.0.9)
+      #
+      # Examples:
+      #   - "mass-stream.home.local:192.168.1.50"
+      #   - "ma-api.home.local:192.168.1.51"
+      #
+      - "<YOUR_MA_DOMAIN>:<MA_LOCAL_IP>"
+      - "<YOUR_SKILL_DOMAIN>:<SKILL_LOCAL_IP>"
+
+    restart: unless-stopped
+
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:5000/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ------------------------------------------------------------------
+  # cloudflared — Cloudflare Tunnel for HTTPS without port forwarding
+  # ------------------------------------------------------------------
+  # This container creates an outbound tunnel to Cloudflare's edge network.
+  # No inbound ports need to be opened on your router or firewall.
+  #
+  # To get a token:
+  #   1. Go to https://one.dash.cloudflare.com
+  #   2. Networks → Tunnels → Create a tunnel
+  #   3. Choose "Cloudflared" → Select Docker
+  #   4. Copy the token from the command: cloudflared tunnel run --token <TOKEN>
+  #   5. Create DNS records for both SKILL_HOSTNAME and MA_HOSTNAME
+      #
+  # The tunnel must route both domains to this Docker host (or separate
+  # tunnels if MA runs on a different host).
+  #
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflare_tunnel
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token <YOUR_CLOUDFLARE_TOKEN>
+    depends_on:
+      music-assistant-skill:
+        condition: service_started
+
+secrets:
+  APP_USERNAME:
+    file: ./secrets/app_username.txt
+  APP_PASSWORD:
+    file: ./secrets/app_password.txt
