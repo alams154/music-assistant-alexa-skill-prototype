@@ -174,12 +174,25 @@ class LaunchRequestOrPlayAudioHandler(AbstractRequestHandler):
         _ = handler_input.attributes_manager.request_attributes["_"]
         request = handler_input.request_envelope.request
         url, _audio = _get_stream_url(request)
+        logger.info("URL from util.audio_data: %s", url)
+
+        # FIX: Fallback to shared_store directly if util.audio_data is empty
+        if not url:
+            try:
+                import shared_store
+                if shared_store._store and shared_store._store.get('streamUrl'):
+                    url = shared_store._store['streamUrl']
+                    logger.info("URL from shared_store fallback: %s", url)
+            except Exception as e:
+                logger.warning("shared_store fallback failed: %s", e)
+
         if not url:
             logger.warning("No streamUrl available for Launch/Play request")
             handler_input.response_builder.speak(
                 "Sorry, I could not retrieve the latest music stream from the API. Please check your setup.").set_should_end_session(True)
             return handler_input.response_builder.response
 
+        logger.info("Playing URL: %s", url)
         return util.play(
             url=url,
             offset=0,
@@ -453,7 +466,7 @@ class ExceptionEncounteredHandler(AbstractRequestHandler):
 
 class APLUserEventHandler(AbstractRequestHandler):
     """Handler for APL UserEvent requests.
-    
+
     This handles periodic metadata refresh events sent from the APL document.
     When the APL display sends a UserEvent with eventType='MetadataRefresh',
     this handler fetches the latest metadata from Music Assistant and sends
@@ -463,7 +476,7 @@ class APLUserEventHandler(AbstractRequestHandler):
         # type: (HandlerInput) -> bool
         if not is_request_type("Alexa.Presentation.APL.UserEvent")(handler_input):
             return False
-        
+
         # Check if this is a metadata refresh event
         request = handler_input.request_envelope.request
         try:
@@ -477,7 +490,7 @@ class APLUserEventHandler(AbstractRequestHandler):
 
     def handle(self, handler_input):
         # type: (HandlerInput) -> Response
-        
+
         # Fetch latest metadata from Music Assistant
         changed = False
         try:
@@ -489,7 +502,7 @@ class APLUserEventHandler(AbstractRequestHandler):
                 logger.debug("Metadata unchanged, skipping update")
         except Exception:
             logger.exception("Failed to fetch latest metadata")
-        
+
         # Check if we have valid metadata
         if not data.info.get('audioSources'):
             logger.warning("No audio sources available for metadata refresh")
@@ -501,13 +514,13 @@ class APLUserEventHandler(AbstractRequestHandler):
                     logger.info("APL metadata update directive added to response")
                 except Exception:
                     logger.exception("Failed to update APL metadata")
-        
+
         # Always schedule the next refresh so polling continues.
         try:
             util.schedule_apl_refresh(handler_input.response_builder)
         except Exception:
             logger.exception("Failed to schedule APL refresh")
-        
+
         # Explicitly keep session open to allow continued UserEvents
         return handler_input.response_builder.set_should_end_session(False).response
 
@@ -671,7 +684,7 @@ class LocalizationInterceptor(AbstractRequestInterceptor):
             parts = locale.split("-")
             lang = parts[0]
             region = parts[1] if len(parts) > 1 else None
-        
+
             mapping = {
                 "fr": "fr-CA" if region == "CA" else "fr-FR",
                 "it": "it-IT",
@@ -679,7 +692,7 @@ class LocalizationInterceptor(AbstractRequestInterceptor):
                 "pt": "pt-BR",
                 "de": "de-DE",
             }
-        
+
             locale_file_name = mapping.get(lang, locale)
 
             i18n = gettext.translation(
