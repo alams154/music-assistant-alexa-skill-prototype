@@ -6,6 +6,8 @@ services:
       - MA_HOSTNAME=<hostname> #optional, if only using APL devices
       - APP_USERNAME=/run/secrets/APP_USERNAME #optional
       - APP_PASSWORD=/run/secrets/APP_PASSWORD #optional
+      - MA_USERNAME=/run/secrets/MA_USERNAME #optional, basic auth username for Music Assistant URL
+      - MA_PASSWORD=/run/secrets/MA_PASSWORD #optional, basic auth password for Music Assistant URL
       - PORT=5000 #optional
       - DEBUG_PORT=5678 #optional
       - LOCALE=en-US # optional: skill locale (e.g. en-US, en-GB, de-DE)
@@ -14,6 +16,8 @@ services:
     secrets:
       - APP_USERNAME
       - APP_PASSWORD
+      - MA_USERNAME
+      - MA_PASSWORD
     ports:
       - 5000:5000 # Must match PORT
       - 5678:5678 # Must match DEBUG_PORT #optional
@@ -26,3 +30,7 @@ secrets:
     file: ./secrets/app_username.txt
   APP_PASSWORD:
     file: ./secrets/app_password.txt
+  MA_USERNAME:
+    file: ./secrets/ma_username.txt
+  MA_PASSWORD:
+    file: ./secrets/ma_password.txt

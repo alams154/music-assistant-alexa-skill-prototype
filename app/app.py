@@ -49,7 +49,7 @@ def _load_addon_options_into_env():
 
 def _safe_options_for_log(options):
     redacted = {}
-    secret_keys = {'APP_USERNAME', 'APP_PASSWORD'}
+    secret_keys = {'APP_USERNAME', 'APP_PASSWORD', 'MA_USERNAME', 'MA_PASSWORD'}
     for key, value in options.items():
         if key in secret_keys:
             redacted[key] = 'set' if value else ''
