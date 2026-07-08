@@ -131,6 +131,23 @@ def get_latest(api_hostname: Optional[str] = None,
                 except Exception:
                     logging.exception('Failed rewriting stream URL extension for %s', stream_url)
 
+            # Rewrite local Music Assistant stream host -> public MA_HOSTNAME.
+            # The non-APL branch already does this via replace_ip_in_url(); the APL
+            # path (audioSources) did not, so screen Echos received a private
+            # 192.168 URL and played silence while image fields were rewritten. (#35)
+            # MA_HOSTNAME is read inline here to avoid a data <-> util circular import.
+            if stream_url and isinstance(stream_url, str):
+                try:
+                    ma_hostname = os.environ.get('MA_HOSTNAME', '').strip().strip('"\' ')
+                    if ma_hostname:
+                        if not ma_hostname.startswith(('http://', 'https://')):
+                            ma_hostname = f'https://{ma_hostname}'
+                        ma_hostname = ma_hostname.rstrip('/')
+                        stream_url = re.sub(r'^https?://[^/]+', ma_hostname, stream_url)
+                        stream_url = stream_url.replace(' ', '%20')
+                except Exception:
+                    logging.exception('Failed rewriting stream URL host for %s', stream_url)
+
             info.update({
                 'audioSources': stream_url,
                 'backgroundImageSource': image,
