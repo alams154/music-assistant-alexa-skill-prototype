@@ -1,0 +1,67 @@
+# Dutch (Netherlands) translations for PROJECT.
+# Copyright (C) 2018 ORGANIZATION
+# This file is distributed under the same license as the PROJECT project.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2018.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: PROJECT VERSION\n"
+"Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
+"POT-Creation-Date: 2018-09-15 23:34-0700\n"
+"PO-Revision-Date: 2018-09-15 23:36-0700\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: nl_NL\n"
+"Language-Team: nl_NL <LL@li.org>\n"
+"Plural-Forms: nplurals=2; plural=(n != 1)\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.6.0\n"
+
+#: alexa/data.py:6
+msgid "Welcome to {}"
+msgstr "Welkom bij {}"
+
+#: alexa/data.py:7
+msgid ""
+"Welcome to {}. You can play, stop, resume listening.  How can I help you"
+" ?"
+msgstr ""
+"Welkom bij {}. Je kunt afspelen, stoppen of hervatten.  Waarmee kan ik je "
+"helpen?"
+
+#: alexa/data.py:8
+msgid "Sorry, I could not understand what you've just said."
+msgstr "Sorry, ik heb niet begrepen wat je zei."
+
+#: alexa/data.py:9
+msgid "This is radio, you have to wait for previous or next track to play."
+msgstr "Dit is radio, je moet wachten op het vorige of volgende nummer."
+
+#: alexa/data.py:10
+msgid "Resuming {}"
+msgstr "{} hervatten"
+
+#: alexa/data.py:11
+msgid ""
+"This is radio, you can not do that.  You can ask me to stop or pause to "
+"stop listening."
+msgstr ""
+"Dit is radio, dat kan niet.  Je kunt me vragen te stoppen of te pauzeren "
+"om te stoppen met luisteren."
+
+#: alexa/data.py:12
+msgid "Goodbye."
+msgstr "Tot ziens!"
+
+#: alexa/data.py:13
+msgid "Sorry, this skill is not supported on this device"
+msgstr "Sorry, deze skill wordt niet ondersteund op dit apparaat."
+
+#: alexa/data.py:15
+msgid "test english"
+msgstr "test nederlands"
+
+#: alexa/data.py:16
+msgid "test with parameters {} and {}"
+msgstr "test met parameters {} en {}"
