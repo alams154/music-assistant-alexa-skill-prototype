@@ -17,6 +17,11 @@ from ask_sdk_core.response_helper import ResponseFactory
 from ask_sdk_core.handler_input import HandlerInput
 from ask_sdk_model.interfaces.alexa.presentation.apl import ExecuteCommandsDirective, ControlMediaCommand, MediaCommandType
 from . import data
+from .apl import add_apl
+
+
+def apl_enabled():
+    return os.environ.get('ENABLE_APL', 'false').lower() in ('true', '1', 'yes')
 
 
 def get_ma_hostname(raise_on_http_scheme=True):
@@ -44,7 +49,7 @@ def replace_ip_in_url(url, hostname):
     if not url:
         return url
     try:
-        new_url = re.sub(r'^https?://[^/]+', hostname, url)
+        new_url = re.sub(r'^https?://\d+\.\d+\.\d+\.\d+(?::\d+)?', hostname, url)
     except re.error:
         return url.replace(' ', '%20')
     return new_url.replace(' ', '%20')
@@ -84,62 +89,64 @@ def push_alexa_metadata(url):
 
 
 def play(url, offset, text, response_builder, supports_apl=False):
-    try:
-        hostname = get_ma_hostname(raise_on_http_scheme=True)
-    except ValueError:
-        response_builder.speak(
-            "The domain uses an unsupported scheme (http). Please check your environment variable MA_HOSTNAME.").set_should_end_session(True)
-        return response_builder.response
-
-    if not hostname:
-        response_builder.speak(
-            "You did not specify a valid hostname. Please check your environment variable MA_HOSTNAME.").set_should_end_session(True)
-        return response_builder.response
-
-    url = replace_ip_in_url(url, hostname)
-
-    skip_validation = os.environ.get('SKIP_URL_VALIDATION', 'false').lower() in ('true', '1', 'yes')
-
-    if skip_validation:
-        logging.info('Stream URL (validation skipped via SKIP_URL_VALIDATION): %s', url)
+    if supports_apl and apl_enabled():
+        add_apl(response_builder)
     else:
         try:
-            head_resp = requests.head(url, allow_redirects=True, timeout=5)
-            resp = head_resp
-            if head_resp.status_code >= 400:
-                resp = requests.get(url, stream=True, allow_redirects=True, timeout=5)
+            hostname = get_ma_hostname(raise_on_http_scheme=True)
+        except ValueError:
+            response_builder.speak(
+                "The domain uses an unsupported scheme (http). Please check your environment variable MA_HOSTNAME.").set_should_end_session(True)
+            return response_builder.response
 
-            if resp.status_code >= 400:
-                logging.error('Audio URL returned HTTP %s: %s', resp.status_code, url)
+        if not hostname:
+            response_builder.speak(
+                "You did not specify a valid hostname. Please check your environment variable MA_HOSTNAME.").set_should_end_session(True)
+            return response_builder.response
+
+        url = replace_ip_in_url(url, hostname)
+
+        skip_validation = os.environ.get('SKIP_URL_VALIDATION', 'false').lower() in ('true', '1', 'yes')
+
+        if skip_validation:
+            logging.info('Stream URL (validation skipped via SKIP_URL_VALIDATION): %s', url)
+        else:
+            try:
+                head_resp = requests.head(url, allow_redirects=True, timeout=5)
+                resp = head_resp
+                if head_resp.status_code >= 400:
+                    resp = requests.get(url, stream=True, allow_redirects=True, timeout=5)
+
+                if resp.status_code >= 400:
+                    logging.error('Audio URL returned HTTP %s: %s', resp.status_code, url)
+                    response_builder.speak(
+                        "Sorry, I can't reach the audio file. Please check that your stream URL is internet accessible via HTTPS at the MA_HOSTNAME variable you provided.")
+                    response_builder.set_should_end_session(True)
+                    return response_builder.response
+            except requests.RequestException:
+                logging.exception('Play Function URL: %s', url)
                 response_builder.speak(
                     "Sorry, I can't reach the audio file. Please check that your stream URL is internet accessible via HTTPS at the MA_HOSTNAME variable you provided.")
                 response_builder.set_should_end_session(True)
                 return response_builder.response
-        except requests.RequestException:
-            logging.exception('Play Function URL: %s', url)
-            response_builder.speak(
-                "Sorry, I can't reach the audio file. Please check that your stream URL is internet accessible via HTTPS at the MA_HOSTNAME variable you provided.")
-            response_builder.set_should_end_session(True)
-            return response_builder.response
 
-    response_builder.add_directive(
-        PlayDirective(
-            play_behavior=PlayBehavior.REPLACE_ALL,
-            audio_item=AudioItem(
-                stream=Stream(
-                    token=url,
-                    url=url,
-                    offset_in_milliseconds=offset,
-                    expected_previous_token=None
+        response_builder.add_directive(
+            PlayDirective(
+                play_behavior=PlayBehavior.REPLACE_ALL,
+                audio_item=AudioItem(
+                    stream=Stream(
+                        token=url,
+                        url=url,
+                        offset_in_milliseconds=offset,
+                        expected_previous_token=None
+                    )
                 )
             )
         )
-    )
+        response_builder.set_should_end_session(True)
 
     if text:
         response_builder.speak(text)
-
-    response_builder.set_should_end_session(True)
 
     try:
         push_alexa_metadata(url)
@@ -193,8 +200,29 @@ def stop(text, response_builder, supports_apl=False):
 
 
 def pause(text, response_builder, supports_apl=False, session_new=False):
-    response_builder.add_directive(StopDirective())
-    response_builder.set_should_end_session(True)
+    if supports_apl and apl_enabled():
+        try:
+            if session_new:
+                try:
+                    add_apl(response_builder, start_paused=True)
+                except Exception:
+                    logging.exception('Failed to re-render APL on session new')
+                response_builder.set_should_end_session(False)
+            else:
+                cmd = ControlMediaCommand(command=MediaCommandType.pause, component_id="videoPlayer")
+                response_builder.add_directive(
+                    ExecuteCommandsDirective(
+                        commands=[cmd],
+                        token="playbackToken"
+                    )
+                ).set_should_end_session(False)
+        except Exception:
+            logging.exception('Failed to add APL pause command; falling back to Stop')
+            response_builder.add_directive(StopDirective())
+            response_builder.set_should_end_session(True)
+    else:
+        response_builder.add_directive(StopDirective())
+        response_builder.set_should_end_session(True)
 
     if text:
         response_builder.speak(text)
@@ -208,8 +236,121 @@ def clear(response_builder):
 
 
 def update_apl_metadata(response_builder):
-    pass
+    """Update the APL document with the latest metadata without interrupting playback.
+
+    This function sends ExecuteCommands directives to update only the text and image
+    components, avoiding a full document re-render that would restart audio playback.
+    This is called in response to UserEvent requests from the APL document.
+    """
+    if not apl_enabled():
+        return
+    try:
+        # Replace MA-hosted image sources if MA_HOSTNAME is set
+        try:
+            hostname = get_ma_hostname(raise_on_http_scheme=False)
+        except ValueError:
+            hostname = ''
+
+        cover_image = data.info.get("coverImageSource", "")
+        background_image = data.info.get("backgroundImageSource", "")
+
+        if hostname:
+            cover_image = replace_ip_in_url(cover_image, hostname)
+            background_image = replace_ip_in_url(background_image, hostname)
+
+        # Build SetValue commands to update individual components
+        commands = []
+
+        # Update primary text (song title)
+        if data.info.get("primaryText"):
+            commands.append({
+                "type": "SetValue",
+                "componentId": "Audio_PrimaryText",
+                "property": "text",
+                "value": data.info["primaryText"]
+            })
+
+        # Update secondary text (artist/album)
+        if data.info.get("secondaryText"):
+            commands.append({
+                "type": "SetValue",
+                "componentId": "Audio_SecondaryText",
+                "property": "text",
+                "value": data.info["secondaryText"]
+            })
+
+        # Update cover image and bound data so conditional rendering refreshes.
+        if cover_image:
+            commands.append({
+                "type": "SetValue",
+                "componentId": "AudioPlayerRoot",
+                "property": "coverImageSource",
+                "value": cover_image
+            })
+            commands.append({
+                "type": "SetValue",
+                "componentId": "Audio_CoverArt",
+                "property": "imageSource",
+                "value": cover_image
+            })
+
+        # Update background image and bound data so layouts recompute.
+        if background_image:
+            commands.append({
+                "type": "SetValue",
+                "componentId": "AudioPlayerRoot",
+                "property": "backgroundImageSource",
+                "value": background_image
+            })
+            commands.append({
+                "type": "SetValue",
+                "componentId": "AlexaBackground",
+                "property": "backgroundImageSource",
+                "value": background_image
+            })
+
+        # Send ExecuteCommands directive if we have any commands
+        if commands:
+            response_builder.add_directive(
+                ExecuteCommandsDirective(
+                    commands=commands,
+                    token="playbackToken"
+                )
+            )
+        else:
+            logging.warning("No SetValue commands generated - no metadata to update")
+
+    except Exception:
+        logging.exception('Error while updating APL metadata')
 
 
 def schedule_apl_refresh(response_builder, delay_ms=1000):
-    pass
+    """Schedule the next APL metadata refresh via a UserEvent.
+
+    This keeps refreshes alive even if the onMount loop does not repeat.
+    """
+    if not apl_enabled():
+        return
+    try:
+        commands = [
+            {
+                "type": "Idle",
+                "delay": int(delay_ms)
+            },
+            {
+                "type": "SendEvent",
+                "arguments": [
+                    "MetadataRefresh",
+                    "${refreshTick}"
+                ]
+            }
+        ]
+
+        response_builder.add_directive(
+            ExecuteCommandsDirective(
+                commands=commands,
+                token="playbackToken"
+            )
+        )
+    except Exception:
+        logging.exception('Error while scheduling APL refresh')
