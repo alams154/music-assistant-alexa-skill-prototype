@@ -367,9 +367,11 @@ class ResumeIntentHandler(AbstractRequestHandler):
                 "Sorry, I couldn't reach the stream right now.").set_should_end_session(True)
             return handler_input.response_builder.response
 
+        offset = util.get_resume_offset(_device_id_from(handler_input), url)
+
         return util.play(
-            url=url, 
-            offset=0,
+            url=url,
+            offset=offset,
             text=data.WELCOME_MSG,
             response_builder=handler_input.response_builder,
             supports_apl=supports_apl
@@ -477,6 +479,14 @@ class PlaybackStoppedHandler(AbstractRequestHandler):
         # type: (HandlerInput) -> Response
         logger.info("In PlaybackStoppedHandler")
         logger.info("Playback stopped")
+        try:
+            request = handler_input.request_envelope.request
+            util.record_stopped_position(
+                _device_id_from(handler_input),
+                getattr(request, 'token', None),
+                getattr(request, 'offset_in_milliseconds', None))
+        except Exception:
+            logger.exception("Failed to record stopped playback position")
         return handler_input.response_builder.response
 
 

@@ -4,6 +4,7 @@ import datetime
 import os
 import re
 import logging
+import threading
 import requests
 from env_secrets import get_env_secret
 from typing import Dict, Optional
@@ -22,6 +23,32 @@ from .apl import add_apl
 
 def apl_enabled():
     return os.environ.get('ENABLE_APL', 'false').lower() in ('true', '1', 'yes')
+
+
+# Last known playback-stopped position per device, so Resume can continue
+# from where it left off instead of always restarting at 0. MA's players/cmd/play
+# (used for AMAZON.ResumeIntent) doesn't push a fresh stream URL, so on resume
+# we're replaying the same stream - the offset only makes sense for that same URL.
+_last_stopped = {}
+_last_stopped_lock = threading.Lock()
+
+
+def record_stopped_position(device_id, url, offset_ms):
+    if not device_id or not url:
+        return
+    with _last_stopped_lock:
+        _last_stopped[device_id] = {"url": url, "offset": offset_ms or 0}
+
+
+def get_resume_offset(device_id, url):
+    """Return the offset (ms) to resume at for this device+url, or 0 if unknown/stale."""
+    if not device_id:
+        return 0
+    with _last_stopped_lock:
+        entry = _last_stopped.get(device_id)
+    if entry and entry.get("url") == url:
+        return entry.get("offset", 0)
+    return 0
 
 
 def get_ma_hostname(raise_on_http_scheme=True):
