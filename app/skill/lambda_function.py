@@ -11,7 +11,7 @@ from ask_sdk_core.utils import is_request_type, is_intent_name
 from ask_sdk_core.handler_input import HandlerInput
 from ask_sdk_model import Response
 
-from . import data, util
+from . import data, util, device_mapping, ma_control
 
 sb = StandardSkillBuilder()
 # sb = StandardSkillBuilder(
@@ -242,8 +242,20 @@ class UnhandledIntentHandler(AbstractRequestHandler):
         return handler_input.response_builder.response
 
 
+def _device_id_from(handler_input):
+    try:
+        return handler_input.request_envelope.context.system.device.device_id
+    except Exception:
+        return None
+
+
 class NextOrPreviousIntentHandler(AbstractRequestHandler):
-    """Handler for next or previous intents."""
+    """Handler for next or previous intents.
+
+    Routed to Music Assistant (not Alexa's own AudioPlayer) since MA is
+    the source of truth for what plays next in flow/radio mode. Requires
+    the requesting device to be paired with an MA player_id via /devices.
+    """
     def can_handle(self, handler_input):
         # type: (HandlerInput) -> bool
         return (is_intent_name("AMAZON.NextIntent")(handler_input) or
@@ -253,8 +265,24 @@ class NextOrPreviousIntentHandler(AbstractRequestHandler):
         # type: (HandlerInput) -> Response
         logger.info("In NextOrPreviousIntentHandler")
         _ = handler_input.attributes_manager.request_attributes["_"]
-        handler_input.response_builder.speak(
-            _(data.CANNOT_SKIP_MSG)).set_should_end_session(True)
+
+        intent_name = handler_input.request_envelope.request.intent.name
+        command = "next" if intent_name == "AMAZON.NextIntent" else "previous"
+
+        device_id = _device_id_from(handler_input)
+        player_id = device_mapping.get_player_for_device(device_id)
+        if not player_id:
+            logger.warning("No MA player mapped for device_id=%s", device_id)
+            handler_input.response_builder.speak(
+                _(data.DEVICE_NOT_MAPPED_MSG)).set_should_end_session(True)
+            return handler_input.response_builder.response
+
+        if not ma_control.send_player_command(player_id, command):
+            handler_input.response_builder.speak(
+                _(data.MA_COMMAND_FAILED_MSG)).set_should_end_session(True)
+            return handler_input.response_builder.response
+
+        handler_input.response_builder.set_should_end_session(True)
         return handler_input.response_builder.response
 
 
@@ -320,18 +348,49 @@ class ResumeIntentHandler(AbstractRequestHandler):
 
 
 class StartOverIntentHandler(AbstractRequestHandler):
-    """Handler for start over, loop on/off, shuffle on/off intent."""
+    """Handler for AMAZON.StartOverIntent: restart the current track.
+
+    Routed to Music Assistant, same as Next/Previous. Distinct from
+    Previous, which skips to the prior track.
+    """
     def can_handle(self, handler_input):
         # type: (HandlerInput) -> bool
-        return (is_intent_name("AMAZON.StartOverIntent")(handler_input) or
-                is_intent_name("AMAZON.LoopOnIntent")(handler_input) or
+        return is_intent_name("AMAZON.StartOverIntent")(handler_input)
+
+    def handle(self, handler_input):
+        # type: (HandlerInput) -> Response
+        logger.info("In StartOverIntentHandler")
+        _ = handler_input.attributes_manager.request_attributes["_"]
+
+        device_id = _device_id_from(handler_input)
+        player_id = device_mapping.get_player_for_device(device_id)
+        if not player_id:
+            logger.warning("No MA player mapped for device_id=%s", device_id)
+            handler_input.response_builder.speak(
+                _(data.DEVICE_NOT_MAPPED_MSG)).set_should_end_session(True)
+            return handler_input.response_builder.response
+
+        if not ma_control.send_player_command(player_id, "start_over"):
+            handler_input.response_builder.speak(
+                _(data.MA_COMMAND_FAILED_MSG)).set_should_end_session(True)
+            return handler_input.response_builder.response
+
+        handler_input.response_builder.set_should_end_session(True)
+        return handler_input.response_builder.response
+
+
+class LoopOrShuffleIntentHandler(AbstractRequestHandler):
+    """Handler for loop on/off, shuffle on/off intent."""
+    def can_handle(self, handler_input):
+        # type: (HandlerInput) -> bool
+        return (is_intent_name("AMAZON.LoopOnIntent")(handler_input) or
                 is_intent_name("AMAZON.LoopOffIntent")(handler_input) or
                 is_intent_name("AMAZON.ShuffleOnIntent")(handler_input) or
                 is_intent_name("AMAZON.ShuffleOffIntent")(handler_input))
 
     def handle(self, handler_input):
         # type: (HandlerInput) -> Response
-        logger.info("In StartOverIntentHandler")
+        logger.info("In LoopOrShuffleIntentHandler")
 
         _ = handler_input.attributes_manager.request_attributes["_"]
         speech = _(data.NOT_POSSIBLE_MSG)
@@ -580,6 +639,16 @@ class NextOrPreviousCommandHandler(AbstractRequestHandler):
     def handle(self, handler_input):
         # type: (HandlerInput) -> Response
         logger.info("In NextOrPreviousCommandHandler")
+        req_type = handler_input.request_envelope.request.object_type
+        command = "next" if "Next" in req_type else "previous"
+
+        device_id = _device_id_from(handler_input)
+        player_id = device_mapping.get_player_for_device(device_id)
+        if player_id:
+            ma_control.send_player_command(player_id, command)
+        else:
+            logger.warning("No MA player mapped for device_id=%s (hardware command)", device_id)
+
         return handler_input.response_builder.response
 
 
@@ -731,6 +800,7 @@ sb.add_request_handler(CancelOrStopIntentHandler())
 sb.add_request_handler(PauseCommandHandler())
 sb.add_request_handler(ResumeIntentHandler())
 sb.add_request_handler(StartOverIntentHandler())
+sb.add_request_handler(LoopOrShuffleIntentHandler())
 sb.add_request_handler(PlaybackStartedHandler())
 sb.add_request_handler(PlaybackFinishedHandler())
 sb.add_request_handler(PlaybackStoppedHandler())

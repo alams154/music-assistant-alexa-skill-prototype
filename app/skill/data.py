@@ -26,6 +26,8 @@ RESUME_MSG = _("Resuming {}")
 NOT_POSSIBLE_MSG = _("This is radio, you can not do that.  You can ask me to stop or pause to stop listening.")
 STOP_MSG = _("")
 DEVICE_NOT_SUPPORTED = _("Sorry, this skill is not supported on this device")
+DEVICE_NOT_MAPPED_MSG = _("This device is not paired with a Music Assistant player yet. Please configure it on the status page.")
+MA_COMMAND_FAILED_MSG = _("Sorry, I could not reach Music Assistant to skip the track.")
 
 info = {
     "audioSources": "",

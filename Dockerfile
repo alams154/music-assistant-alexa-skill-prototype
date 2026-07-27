@@ -3,8 +3,13 @@ FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Install Python and system dependencies
+# Python 3.12 via deadsnakes: Ubuntu 22.04 only ships 3.10 by default, but
+# music-assistant-client (used for MA voice-control commands) requires >=3.11.
 RUN apt-get update && \
-    apt-get install -y python3.10 python3.10-venv python3-pip libssl-dev curl gnupg ca-certificates && \
+    apt-get install -y software-properties-common && \
+    add-apt-repository -y ppa:deadsnakes/ppa && \
+    apt-get update && \
+    apt-get install -y python3.12 python3.12-venv python3-pip libssl-dev curl gnupg ca-certificates && \
     # Install Node.js 18 from NodeSource (ASK CLI requires a modern Node version)
     curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
     apt-get install -y nodejs && \
@@ -14,7 +19,7 @@ WORKDIR /app
 
 # Copy only requirements first, then install dependencies
 COPY app/requirements.txt /app/requirements.txt
-RUN python3.10 -m venv venv && \
+RUN python3.12 -m venv venv && \
     . venv/bin/activate && \
     pip install --upgrade pip && \
     pip install -r requirements.txt && \
