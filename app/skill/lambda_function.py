@@ -249,6 +249,29 @@ def _device_id_from(handler_input):
         return None
 
 
+def _sync_to_ma_unless_echo(handler_input, command):
+    """Best-effort: forward pause/stop/resume to MA, unless this request is
+    the echo of a command we ourselves just triggered on MA (see ma_control
+    docstring for why that echo happens and must be suppressed once).
+
+    Always lets the caller's normal Alexa-side action proceed regardless of
+    outcome here - this is a secondary sync, not the primary response.
+    """
+    device_id = _device_id_from(handler_input)
+
+    if ma_control.is_echo_of_ma_command(device_id, command):
+        logger.info("Suppressing MA %s: echo of our own MA-triggered command for device_id=%s", command, device_id)
+        return
+
+    player_id = device_mapping.get_player_for_device(device_id)
+    if not player_id:
+        return
+
+    ma_control.mark_ma_triggered(device_id, command)
+    if not ma_control.send_player_command(player_id, command):
+        logger.warning("Failed to sync %s to MA player %s", command, player_id)
+
+
 class NextOrPreviousIntentHandler(AbstractRequestHandler):
     """Handler for next or previous intents.
 
@@ -297,6 +320,7 @@ class CancelOrStopIntentHandler(AbstractRequestHandler):
         # type: (HandlerInput) -> Response
         logger.info("In CancelOrStopIntentHandler")
         _ = handler_input.attributes_manager.request_attributes["_"]
+        _sync_to_ma_unless_echo(handler_input, "stop")
         return util.stop(_(data.STOP_MSG), handler_input.response_builder, supports_apl=supports_apl)
 
 
@@ -313,6 +337,8 @@ class PauseIntentHandler(AbstractRequestHandler):
         session_new = False
         if getattr(handler_input.request_envelope, 'session', None):
             session_new = bool(handler_input.request_envelope.session.new)
+
+        _sync_to_ma_unless_echo(handler_input, "pause")
 
         return util.pause(text=None,
                   response_builder=handler_input.response_builder,
@@ -331,6 +357,9 @@ class ResumeIntentHandler(AbstractRequestHandler):
         logger.info("In ResumeIntentHandler")
         request = handler_input.request_envelope.request
         _ = handler_input.attributes_manager.request_attributes["_"]
+
+        _sync_to_ma_unless_echo(handler_input, "resume")
+
         url, _audio = _get_stream_url(request)
         if not url:
             logger.warning("No stream url available for Resume request")
