@@ -182,6 +182,75 @@ def play(url, offset, text, response_builder, supports_apl=False):
     return response_builder.response
 
 
+def play_later(url, response_builder, expected_previous_token=None):
+    """Enqueue the next stream without interrupting the one now playing.
+
+    Called from AudioPlayer.PlaybackNearlyFinished.
+
+    https://developer.amazon.com/docs/custom-skills/audioplayer-interface-reference.html#play
+    ENQUEUE: Add the specified stream to the end of the current queue. This
+    does not impact the currently playing stream.
+
+    Two constraints make this different from play():
+
+    1. Alexa rejects a PlaybackNearlyFinished response that carries
+       outputSpeech, a reprompt, or shouldEndSession, answering with
+       System.ExceptionEncountered / INVALID_RESPONSE. So this only ever adds
+       a directive, and never speaks or ends the session.
+    2. ENQUEUE requires expectedPreviousToken to match the token of the stream
+       that is currently playing. Without it the directive is discarded.
+    """
+    # type: (str, ResponseFactory, Optional[str]) -> Response
+
+    try:
+        hostname = get_ma_hostname(raise_on_http_scheme=True)
+    except ValueError:
+        logging.error(
+            'MA_HOSTNAME uses an unsupported scheme (http); cannot enqueue next stream.')
+        return response_builder.response
+
+    if not hostname:
+        logging.error('MA_HOSTNAME is not set; cannot enqueue next stream.')
+        return response_builder.response
+
+    url = replace_ip_in_url(url, hostname)
+
+    if not expected_previous_token:
+        # Nothing to chain from. Enqueueing anyway would be dropped by Alexa.
+        logging.warning(
+            'No current playback token available; skipping enqueue of next stream.')
+        return response_builder.response
+
+    if url == expected_previous_token:
+        # The API is still serving the stream that is playing. In flow mode the
+        # queue is a single continuous stream, so re-enqueueing it would restart
+        # playback in a loop rather than advance. Let it finish instead.
+        logging.info(
+            'Next stream URL matches the current one; nothing to enqueue.')
+        return response_builder.response
+
+    response_builder.add_directive(
+        PlayDirective(
+            play_behavior=PlayBehavior.ENQUEUE,
+            audio_item=AudioItem(
+                stream=Stream(
+                    token=url,
+                    url=url,
+                    offset_in_milliseconds=0,
+                    expected_previous_token=expected_previous_token
+                )
+            )
+        )
+    )
+
+    try:
+        push_alexa_metadata(url)
+    except Exception:
+        logging.exception('Error while preparing Alexa API push payload')
+
+    return response_builder.response
+
+
 def stop(text, response_builder, supports_apl=False):
     """Issue stop directive to stop the audio.
 
