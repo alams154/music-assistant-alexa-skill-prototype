@@ -398,9 +398,19 @@ class PlaybackNearlyFinishedHandler(AbstractRequestHandler):
             logger.warning("No stream url available for PlaybackNearlyFinished")
             return handler_input.response_builder.response
 
+        # ENQUEUE must chain from the stream that is currently playing.
+        current_token = None
+        try:
+            context = handler_input.request_envelope.context
+            if context and context.audio_player:
+                current_token = context.audio_player.token
+        except AttributeError:
+            current_token = None
+
         return util.play_later(
             url=url,
-            response_builder=handler_input.response_builder
+            response_builder=handler_input.response_builder,
+            expected_previous_token=current_token
         )
 
 
