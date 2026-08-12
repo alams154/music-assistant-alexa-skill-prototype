@@ -34,18 +34,16 @@ The easiest way to run the project is with Docker Compose. This will build and s
 
 Note: manual creation of the skill in the Alexa Developer Console is no longer required — the `/setup` flow automates creation and enablement when possible.
 
-### 2. Home Assistant add-on (NOT WORKING)
+### 2. Home Assistant add-on
 
-This repository contains an `addons/music-assistant-skill` folder with a simple Home Assistant add-on wrapper. Running it as an add-on in your environment may require additional changes.
+This repository doubles as a Home Assistant Supervisor add-on repository (`config.json` and `Dockerfile` at the repo root, alongside `repository.yaml`) - no separate wrapper folder to browse into.
 
-If you want to test as an add-on locally:
+1. In Home Assistant: Settings > Add-ons > Add-on Store > ⋮ (top right) > Repositories, and add this repository's URL.
+2. Install the "Music Assistant Alexa Skill" add-on that appears and open its configuration.
+3. Set the options described above (`SKILL_HOSTNAME`, `MA_HOSTNAME`, `APP_USERNAME`, `APP_PASSWORD`, `LOCALE`, `AWS_DEFAULT_REGION`) as needed. `PORT`/`DEBUG_PORT` rarely need changing.
+4. Start the add-on. The `/status` and `/setup` pages are reachable both directly (`http://<host>:5000/status`, protected by `APP_USERNAME`/`APP_PASSWORD` if set) and through the add-on's "Open Web UI" button, which uses Home Assistant's ingress proxy (admin-only, no separate login needed there).
 
-1. Add this repository as a custom add-on repository in Home Assistant Supervisor (Supervisor > Add-on Store > Repositories).
-2. Install the "Music Assistant Alexa Skill" add-on and open the add-on configuration.
-3. In the add-on configuration, set the options described above (`MA_HOSTNAME`, `APP_USERNAME`, `APP_PASSWORD`, `PORT`, `DEBUG_PORT`, `AWS_DEFAULT_REGION`) as needed.
-4. Start the add-on and check the add-on logs for startup and any missing dependencies or configuration issues.
-
-**Warning**: Treat this add-on as a user convenience and validate thoroughly as this method has not been tested in a Home Assistant environment and may require adjustments to work properly as an add-on.
+ASK CLI credentials persist under `/data` (Supervisor's guaranteed-persistent add-on storage), so re-running `/setup` after an add-on update reuses the existing skill registration instead of starting over.
 
 ### 3. Using `docker run`
 

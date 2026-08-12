@@ -28,7 +28,7 @@ def _build_status_json():
             if not has_functional_cli_config(profile='default'):
                 skill_ask_html = '<span class="led yellow"></span> ASK CLI credentials are not configured for profile default'
                 try:
-                    skill_ask_html += ' <button onclick="window.location=\'/setup\'" style="margin-left:8px">Open Setup</button>'
+                    skill_ask_html += ' <button onclick="window.location=\'setup\'" style="margin-left:8px">Open Setup</button>'
                 except Exception:
                     pass
             else:
@@ -109,7 +109,7 @@ def _build_status_json():
 
                     try:
                         if not is_green:
-                            skill_ask_html += ' <button onclick="window.location=\'/setup\'" style="margin-left:8px">Open Setup</button>'
+                            skill_ask_html += ' <button onclick="window.location=\'setup\'" style="margin-left:8px">Open Setup</button>'
                     except Exception:
                         pass
         else:
@@ -206,7 +206,7 @@ def _build_status_json():
     intent_logs = current_app.config.get('INTENT_LOGS', [])
     count = len(intent_logs) if intent_logs else 0
     if count:
-        invocations_html = f'<a href="/invocations" target="_blank" rel="noopener noreferrer">View {count} invocations</a>'
+        invocations_html = f'<a href="invocations" target="_blank" rel="noopener noreferrer">View {count} invocations</a>'
     else:
         invocations_html = '<span class="muted">No recent invocations</span>'
 
@@ -350,7 +350,7 @@ def status():
         intent_logs = current_app.config.get('INTENT_LOGS', [])
         count = len(intent_logs) if intent_logs else 0
         if count:
-            invocations_html = f'<a href="/invocations" target="_blank" rel="noopener noreferrer">View {count} invocations</a>'
+            invocations_html = f'<a href="invocations" target="_blank" rel="noopener noreferrer">View {count} invocations</a>'
         else:
             invocations_html = '<span class="muted">No recent invocations</span>'
         tpl = tpl.replace('__INVOCATIONS_HTML__', invocations_html)
@@ -388,7 +388,7 @@ def status_invocations():
     intent_logs = current_app.config.get('INTENT_LOGS', [])
     count = len(intent_logs) if intent_logs else 0
     if count:
-        invocations_html = f'<a href="/invocations" target="_blank" rel="noopener noreferrer">View {count} invocations</a>'
+        invocations_html = f'<a href="invocations" target="_blank" rel="noopener noreferrer">View {count} invocations</a>'
     else:
         invocations_html = '<span class="muted">No recent invocations</span>'
     return jsonify({'count': count, 'invocations_html': invocations_html})

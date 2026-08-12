@@ -40,7 +40,7 @@
                     btn.id = 'goto-status';
                     btn.textContent = 'Open Status Page';
                     btn.style.marginLeft = '8px';
-                    btn.addEventListener('click', function(){ window.location = '/status'; });
+                    btn.addEventListener('click', function(){ window.location = 'status'; });
                     startBtn.parentNode.insertBefore(btn, startBtn.nextSibling);
                 }
             }catch(e){/* ignore */}
@@ -78,7 +78,7 @@
         });
 
         function pollLogs(){
-            fetch('/setup?format=json').then(r=>r.json()).then(j=>{
+            fetch('?format=json').then(r=>r.json()).then(j=>{
                 try{ logsEl.textContent = JSON.stringify(j.logs || [], null, 2); logsEl.scrollTop = logsEl.scrollHeight; }catch(e){ logsEl.textContent = ''; }
                 if(j.created){
                     // Show a button the user can click to go to the status page
@@ -98,7 +98,7 @@
         }
 
         startBtn.addEventListener('click', function(){
-            fetch('/setup/start', {method:'POST'}).then(async (r)=>{
+            fetch('setup/start', {method:'POST'}).then(async (r)=>{
                 let j = {};
                 try{ j = await r.json(); }catch(e){}
                 if(!r.ok){ logsEl.textContent = (j.error || JSON.stringify(j) || 'Error starting setup'); }
@@ -108,7 +108,7 @@
 
         downloadBtn.addEventListener('click', function(){
             // Navigate to download endpoint to trigger browser download
-            window.location = '/setup/logs/download';
+            window.location = 'setup/logs/download';
         });
         codeForm.addEventListener('submit', function(ev){
             ev.preventDefault();
@@ -122,7 +122,7 @@
                 const resultEl = document.getElementById('code-result');
                 if(resultEl && resultEl.parentNode){ resultEl.parentNode.removeChild(resultEl); }
             }catch(e){}
-            fetch('/setup/code', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({code})}).then(r=>r.json()).then(j=>{
+            fetch('setup/code', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({code})}).then(r=>r.json()).then(j=>{
                 // Do not persist the server response in the UI; hide inputs if creation started
                 if(j.status === 'started'){ codeEntry.style.display='none'; }
                 // kick the poll loop once immediately to refresh logs

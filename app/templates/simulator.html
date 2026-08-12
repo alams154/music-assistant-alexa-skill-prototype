@@ -54,7 +54,7 @@
       if(hl) hl.textContent = (skillHostname || 'SKILL_HOSTNAME') + ' (SKILL_HOSTNAME)';
     }catch(e){}
     async function loadIntents(){
-      const res = await fetch('/simulator/api');
+      const res = await fetch('simulator/api');
       const j = await res.json();
       const sel = document.getElementById('intent');
       sel.innerHTML = '';
@@ -74,7 +74,7 @@
 
     async function loadPayload(intentName){
       try{
-        const r = await fetch('/simulator/payload?intent=' + encodeURIComponent(intentName));
+        const r = await fetch('simulator/payload?intent=' + encodeURIComponent(intentName));
         const j = await r.json();
         const ta = document.getElementById('payload');
         ta.value = JSON.stringify(j, null, 2);
@@ -122,7 +122,7 @@
       const respEl = document.getElementById('response');
       respEl.textContent = 'Sending...';
       try{
-        const r = await fetch('/simulator/send', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+        const r = await fetch('simulator/send', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
           const j = await r.json();
           // Render response into the single response box. Do not clear it after rendering.
           function renderResponse(obj){

@@ -2,7 +2,6 @@
   "name": "Music Assistant Alexa Skill",
   "version": "0.0.39-beta",
   "slug": "music_assistant_skill",
-  "image": "ghcr.io/alams154/music-assistant-skill:latest",
   "description": "Expose the Music Assistant Alexa skill as a Home Assistant add-on (development/edge use).",
   "arch": [
     "aarch64",
@@ -40,8 +39,9 @@
     "AWS_DEFAULT_REGION": "str",
     "TZ": "str"
   },
-  "webui": "http://[HOST]:[PORT:5000]",
+  "webui": "http://[HOST]:[PORT:5000]/status",
   "map": [],
-  "ingress": false,
+  "ingress": true,
+  "ingress_port": 5000,
   "host_network": false
 }

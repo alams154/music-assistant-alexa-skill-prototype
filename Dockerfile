@@ -151,6 +151,12 @@ COPY assets /app/assets
 COPY scripts /app/scripts
 RUN chmod +x /app/scripts/ask_create_skill.sh || true
 
+# Home Assistant Supervisor guarantees /data persists across container
+# recreates/updates (it's where /data/options.json comes from); /root/.ask
+# does not survive a rebuild. Point ASK CLI credential storage at /data so
+# the /setup OAuth flow doesn't need to be redone on every add-on update.
+ENV ASK_CREDENTIALS_DIR=/data/.ask
+
 # Amazon Skill & Host Configuration
 ENV AWS_DEFAULT_REGION=us-east-1
 
