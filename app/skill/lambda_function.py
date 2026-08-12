@@ -11,7 +11,7 @@ from ask_sdk_core.utils import is_request_type, is_intent_name
 from ask_sdk_core.handler_input import HandlerInput
 from ask_sdk_model import Response
 
-from . import data, util
+from . import data, util, device_mapping, ma_control
 
 sb = StandardSkillBuilder()
 # sb = StandardSkillBuilder(
@@ -174,12 +174,25 @@ class LaunchRequestOrPlayAudioHandler(AbstractRequestHandler):
         _ = handler_input.attributes_manager.request_attributes["_"]
         request = handler_input.request_envelope.request
         url, _audio = _get_stream_url(request)
+        logger.info("URL from util.audio_data: %s", url)
+
+        # FIX: Fallback to shared_store directly if util.audio_data is empty
+        if not url:
+            try:
+                import shared_store
+                if shared_store._store and shared_store._store.get('streamUrl'):
+                    url = shared_store._store['streamUrl']
+                    logger.info("URL from shared_store fallback: %s", url)
+            except Exception as e:
+                logger.warning("shared_store fallback failed: %s", e)
+
         if not url:
             logger.warning("No streamUrl available for Launch/Play request")
             handler_input.response_builder.speak(
                 "Sorry, I could not retrieve the latest music stream from the API. Please check your setup.").set_should_end_session(True)
             return handler_input.response_builder.response
 
+        logger.info("Playing URL: %s", url)
         return util.play(
             url=url,
             offset=0,
@@ -229,8 +242,43 @@ class UnhandledIntentHandler(AbstractRequestHandler):
         return handler_input.response_builder.response
 
 
+def _device_id_from(handler_input):
+    try:
+        return handler_input.request_envelope.context.system.device.device_id
+    except Exception:
+        return None
+
+
+def _sync_to_ma_unless_echo(handler_input, command):
+    """Best-effort: forward pause/stop/resume to MA, unless this request is
+    the echo of a command we ourselves just triggered on MA (see ma_control
+    docstring for why that echo happens and must be suppressed once).
+
+    Always lets the caller's normal Alexa-side action proceed regardless of
+    outcome here - this is a secondary sync, not the primary response.
+    """
+    device_id = _device_id_from(handler_input)
+
+    if ma_control.is_echo_of_ma_command(device_id, command):
+        logger.info("Suppressing MA %s: echo of our own MA-triggered command for device_id=%s", command, device_id)
+        return
+
+    player_id = device_mapping.get_player_for_device(device_id)
+    if not player_id:
+        return
+
+    ma_control.mark_ma_triggered(device_id, command)
+    if not ma_control.send_player_command(player_id, command):
+        logger.warning("Failed to sync %s to MA player %s", command, player_id)
+
+
 class NextOrPreviousIntentHandler(AbstractRequestHandler):
-    """Handler for next or previous intents."""
+    """Handler for next or previous intents.
+
+    Routed to Music Assistant (not Alexa's own AudioPlayer) since MA is
+    the source of truth for what plays next in flow/radio mode. Requires
+    the requesting device to be paired with an MA player_id via /devices.
+    """
     def can_handle(self, handler_input):
         # type: (HandlerInput) -> bool
         return (is_intent_name("AMAZON.NextIntent")(handler_input) or
@@ -240,8 +288,24 @@ class NextOrPreviousIntentHandler(AbstractRequestHandler):
         # type: (HandlerInput) -> Response
         logger.info("In NextOrPreviousIntentHandler")
         _ = handler_input.attributes_manager.request_attributes["_"]
-        handler_input.response_builder.speak(
-            _(data.CANNOT_SKIP_MSG)).set_should_end_session(True)
+
+        intent_name = handler_input.request_envelope.request.intent.name
+        command = "next" if intent_name == "AMAZON.NextIntent" else "previous"
+
+        device_id = _device_id_from(handler_input)
+        player_id = device_mapping.get_player_for_device(device_id)
+        if not player_id:
+            logger.warning("No MA player mapped for device_id=%s", device_id)
+            handler_input.response_builder.speak(
+                _(data.DEVICE_NOT_MAPPED_MSG)).set_should_end_session(True)
+            return handler_input.response_builder.response
+
+        if not ma_control.send_player_command(player_id, command):
+            handler_input.response_builder.speak(
+                _(data.MA_COMMAND_FAILED_MSG)).set_should_end_session(True)
+            return handler_input.response_builder.response
+
+        handler_input.response_builder.set_should_end_session(True)
         return handler_input.response_builder.response
 
 
@@ -256,6 +320,7 @@ class CancelOrStopIntentHandler(AbstractRequestHandler):
         # type: (HandlerInput) -> Response
         logger.info("In CancelOrStopIntentHandler")
         _ = handler_input.attributes_manager.request_attributes["_"]
+        _sync_to_ma_unless_echo(handler_input, "stop")
         return util.stop(_(data.STOP_MSG), handler_input.response_builder, supports_apl=supports_apl)
 
 
@@ -272,6 +337,8 @@ class PauseIntentHandler(AbstractRequestHandler):
         session_new = False
         if getattr(handler_input.request_envelope, 'session', None):
             session_new = bool(handler_input.request_envelope.session.new)
+
+        _sync_to_ma_unless_echo(handler_input, "pause")
 
         return util.pause(text=None,
                   response_builder=handler_input.response_builder,
@@ -290,6 +357,9 @@ class ResumeIntentHandler(AbstractRequestHandler):
         logger.info("In ResumeIntentHandler")
         request = handler_input.request_envelope.request
         _ = handler_input.attributes_manager.request_attributes["_"]
+
+        _sync_to_ma_unless_echo(handler_input, "resume")
+
         url, _audio = _get_stream_url(request)
         if not url:
             logger.warning("No stream url available for Resume request")
@@ -297,9 +367,11 @@ class ResumeIntentHandler(AbstractRequestHandler):
                 "Sorry, I couldn't reach the stream right now.").set_should_end_session(True)
             return handler_input.response_builder.response
 
+        offset = util.get_resume_offset(_device_id_from(handler_input), url)
+
         return util.play(
-            url=url, 
-            offset=0,
+            url=url,
+            offset=offset,
             text=data.WELCOME_MSG,
             response_builder=handler_input.response_builder,
             supports_apl=supports_apl
@@ -307,18 +379,49 @@ class ResumeIntentHandler(AbstractRequestHandler):
 
 
 class StartOverIntentHandler(AbstractRequestHandler):
-    """Handler for start over, loop on/off, shuffle on/off intent."""
+    """Handler for AMAZON.StartOverIntent: restart the current track.
+
+    Routed to Music Assistant, same as Next/Previous. Distinct from
+    Previous, which skips to the prior track.
+    """
     def can_handle(self, handler_input):
         # type: (HandlerInput) -> bool
-        return (is_intent_name("AMAZON.StartOverIntent")(handler_input) or
-                is_intent_name("AMAZON.LoopOnIntent")(handler_input) or
+        return is_intent_name("AMAZON.StartOverIntent")(handler_input)
+
+    def handle(self, handler_input):
+        # type: (HandlerInput) -> Response
+        logger.info("In StartOverIntentHandler")
+        _ = handler_input.attributes_manager.request_attributes["_"]
+
+        device_id = _device_id_from(handler_input)
+        player_id = device_mapping.get_player_for_device(device_id)
+        if not player_id:
+            logger.warning("No MA player mapped for device_id=%s", device_id)
+            handler_input.response_builder.speak(
+                _(data.DEVICE_NOT_MAPPED_MSG)).set_should_end_session(True)
+            return handler_input.response_builder.response
+
+        if not ma_control.send_player_command(player_id, "start_over"):
+            handler_input.response_builder.speak(
+                _(data.MA_COMMAND_FAILED_MSG)).set_should_end_session(True)
+            return handler_input.response_builder.response
+
+        handler_input.response_builder.set_should_end_session(True)
+        return handler_input.response_builder.response
+
+
+class LoopOrShuffleIntentHandler(AbstractRequestHandler):
+    """Handler for loop on/off, shuffle on/off intent."""
+    def can_handle(self, handler_input):
+        # type: (HandlerInput) -> bool
+        return (is_intent_name("AMAZON.LoopOnIntent")(handler_input) or
                 is_intent_name("AMAZON.LoopOffIntent")(handler_input) or
                 is_intent_name("AMAZON.ShuffleOnIntent")(handler_input) or
                 is_intent_name("AMAZON.ShuffleOffIntent")(handler_input))
 
     def handle(self, handler_input):
         # type: (HandlerInput) -> Response
-        logger.info("In StartOverIntentHandler")
+        logger.info("In LoopOrShuffleIntentHandler")
 
         _ = handler_input.attributes_manager.request_attributes["_"]
         speech = _(data.NOT_POSSIBLE_MSG)
@@ -376,6 +479,14 @@ class PlaybackStoppedHandler(AbstractRequestHandler):
         # type: (HandlerInput) -> Response
         logger.info("In PlaybackStoppedHandler")
         logger.info("Playback stopped")
+        try:
+            request = handler_input.request_envelope.request
+            util.record_stopped_position(
+                _device_id_from(handler_input),
+                getattr(request, 'token', None),
+                getattr(request, 'offset_in_milliseconds', None))
+        except Exception:
+            logger.exception("Failed to record stopped playback position")
         return handler_input.response_builder.response
 
 
@@ -453,7 +564,7 @@ class ExceptionEncounteredHandler(AbstractRequestHandler):
 
 class APLUserEventHandler(AbstractRequestHandler):
     """Handler for APL UserEvent requests.
-    
+
     This handles periodic metadata refresh events sent from the APL document.
     When the APL display sends a UserEvent with eventType='MetadataRefresh',
     this handler fetches the latest metadata from Music Assistant and sends
@@ -463,7 +574,7 @@ class APLUserEventHandler(AbstractRequestHandler):
         # type: (HandlerInput) -> bool
         if not is_request_type("Alexa.Presentation.APL.UserEvent")(handler_input):
             return False
-        
+
         # Check if this is a metadata refresh event
         request = handler_input.request_envelope.request
         try:
@@ -477,7 +588,7 @@ class APLUserEventHandler(AbstractRequestHandler):
 
     def handle(self, handler_input):
         # type: (HandlerInput) -> Response
-        
+
         # Fetch latest metadata from Music Assistant
         changed = False
         try:
@@ -489,7 +600,7 @@ class APLUserEventHandler(AbstractRequestHandler):
                 logger.debug("Metadata unchanged, skipping update")
         except Exception:
             logger.exception("Failed to fetch latest metadata")
-        
+
         # Check if we have valid metadata
         if not data.info.get('audioSources'):
             logger.warning("No audio sources available for metadata refresh")
@@ -501,13 +612,13 @@ class APLUserEventHandler(AbstractRequestHandler):
                     logger.info("APL metadata update directive added to response")
                 except Exception:
                     logger.exception("Failed to update APL metadata")
-        
+
         # Always schedule the next refresh so polling continues.
         try:
             util.schedule_apl_refresh(handler_input.response_builder)
         except Exception:
             logger.exception("Failed to schedule APL refresh")
-        
+
         # Explicitly keep session open to allow continued UserEvents
         return handler_input.response_builder.set_should_end_session(False).response
 
@@ -567,6 +678,16 @@ class NextOrPreviousCommandHandler(AbstractRequestHandler):
     def handle(self, handler_input):
         # type: (HandlerInput) -> Response
         logger.info("In NextOrPreviousCommandHandler")
+        req_type = handler_input.request_envelope.request.object_type
+        command = "next" if "Next" in req_type else "previous"
+
+        device_id = _device_id_from(handler_input)
+        player_id = device_mapping.get_player_for_device(device_id)
+        if player_id:
+            ma_control.send_player_command(player_id, command)
+        else:
+            logger.warning("No MA player mapped for device_id=%s (hardware command)", device_id)
+
         return handler_input.response_builder.response
 
 
@@ -671,7 +792,7 @@ class LocalizationInterceptor(AbstractRequestInterceptor):
             parts = locale.split("-")
             lang = parts[0]
             region = parts[1] if len(parts) > 1 else None
-        
+
             mapping = {
                 "fr": "fr-CA" if region == "CA" else "fr-FR",
                 "it": "it-IT",
@@ -679,7 +800,7 @@ class LocalizationInterceptor(AbstractRequestInterceptor):
                 "pt": "pt-BR",
                 "de": "de-DE",
             }
-        
+
             locale_file_name = mapping.get(lang, locale)
 
             i18n = gettext.translation(
@@ -718,6 +839,7 @@ sb.add_request_handler(CancelOrStopIntentHandler())
 sb.add_request_handler(PauseCommandHandler())
 sb.add_request_handler(ResumeIntentHandler())
 sb.add_request_handler(StartOverIntentHandler())
+sb.add_request_handler(LoopOrShuffleIntentHandler())
 sb.add_request_handler(PlaybackStartedHandler())
 sb.add_request_handler(PlaybackFinishedHandler())
 sb.add_request_handler(PlaybackStoppedHandler())

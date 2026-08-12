@@ -84,6 +84,9 @@ Notes:
 | `AWS_DEFAULT_REGION` | No | `us-east-1` | AWS region used by ASK CLI operations when applicable. |
 | `TZ` | No | `UTC` | Container timezone (example: `America/Chicago`) to make logs/timestamps match your locale. |
 | `SKIP_URL_VALIDATION` | No | `false` | Skip server-side HEAD/GET validation of the rewritten stream URL before sending it to the Echo. Useful when the skill container cannot reach the external stream URL due to Docker network routing (e.g., macvlan isolation, custom outbound firewall rules). |
+| `ENABLE_APL` | No | `false` | Enable rich APL rendering (cover art, title, on-screen playback controls) on Echo Show and other APL-capable devices, instead of the plain AudioPlayer-only flow. Disabled by default for playback stability; set to `true` to opt back into screen rendering and live metadata refresh on supported devices. |
+| `MA_API_URL` | *No | — | ***REQUIRED** for voice-controlled Next/Previous. Base URL of the Music Assistant WebSocket API (e.g. `https://music.example.com`), used to send `next_track`/`previous_track` commands to the MA player paired with the requesting Echo (see [Device Mapping](#device-mapping) below). |
+| `MA_API_TOKEN` | *No | — | ***REQUIRED** alongside `MA_API_URL` if your MA server enforces auth (schema >= 28). A long-lived token created via MA's own auth flow (`auth/token/create`). Can be provided as a Docker secret the same way as `APP_PASSWORD`. |
 
 **Secrets and persistence**
 
@@ -100,6 +103,13 @@ Notes:
 `/status`
 
 Returns a simple status page showing the local API health and an ASK CLI driven check for whether the Music Assistant skill exists, whether its endpoint matches `SKILL_HOSTNAME`, and whether testing is enabled. When the check is not green, the status page provides a quick link to `/setup`.
+
+### Device Mapping
+`/devices`
+
+Alexa's Custom Skill API only exposes an opaque, per-skill device id in each request — there is no way to resolve it to a friendly device name or to a Music Assistant player. This page lets you pair each Echo's device id with the corresponding MA `player_id` so voice-controlled Next/Previous can be routed to the right player. To pair a new device: trigger any voice command from it (e.g. "next"), reload this page (it lists every device id seen in the current session), then enter the matching MA player_id.
+
+Only Next/Previous are routed to MA this way. Pause/Stop/Resume intentionally still control Alexa's own AudioPlayer directly rather than the MA player: for the `alexa` MA player provider, those commands are implemented by speaking the phrase back into the device via `alexapy`, which would re-trigger the same Alexa intent on this skill and loop.
 
 ### TLS Support
 TLS 1.3 is not supported

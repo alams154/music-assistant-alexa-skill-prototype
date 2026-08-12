@@ -260,10 +260,11 @@ app.config['INTENT_LOGS_MAXLEN'] = 500
 
 # Register endpoint blueprints moved out of app.py (status, invocations, simulator)
 try:
-    from endpoints import status_bp, invocations_bp, simulator_bp
+    from endpoints import status_bp, invocations_bp, simulator_bp, devices_bp
     app.register_blueprint(status_bp)
     app.register_blueprint(invocations_bp)
     app.register_blueprint(simulator_bp)
+    app.register_blueprint(devices_bp)
 except Exception:
     app.logger.exception('Could not register endpoints blueprints (may be running in partial state)')
 

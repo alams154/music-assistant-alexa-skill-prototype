@@ -6,9 +6,11 @@ Import and export blueprint objects so `app.app` can register them.
 from .status import status_bp
 from .invocations import invocations_bp
 from .simulator import simulator_bp
+from .devices import devices_bp
 
 __all__ = [
     'status_bp',
     'invocations_bp',
     'simulator_bp',
+    'devices_bp',
 ]
