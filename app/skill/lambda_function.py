@@ -626,7 +626,9 @@ class APLUserEventHandler(AbstractRequestHandler):
             logger.exception("Failed to schedule APL refresh")
 
         # Explicitly keep session open to allow continued UserEvents
-        return handler_input.response_builder.set_should_end_session(False).response
+        # Unset, not False: False opens the mic on every refresh and ducks the music;
+        # the APL page keeps the session alive by itself.
+        return handler_input.response_builder.set_should_end_session(None).response
 
 # ###################################################################
 

@@ -6,6 +6,7 @@ import re
 import logging
 import threading
 import requests
+from urllib.parse import quote
 from env_secrets import get_env_secret
 from typing import Dict, Optional
 from ask_sdk_model import Request, Response
@@ -78,8 +79,8 @@ def replace_ip_in_url(url, hostname):
     try:
         new_url = re.sub(r'^https?://\d+\.\d+\.\d+\.\d+(?::\d+)?', hostname, url)
     except re.error:
-        return url.replace(' ', '%20')
-    return new_url.replace(' ', '%20')
+        return quote(url, safe=':/%?=&')
+    return quote(new_url, safe=':/%?=&')
 
 def audio_data(request):
     try:
