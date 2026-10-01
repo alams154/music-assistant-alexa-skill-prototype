@@ -3,8 +3,7 @@ from pathlib import Path
 import json
 import os
 from copy import deepcopy
-import requests
-import urllib.parse
+from ask_sdk_model import RequestEnvelope
 
 simulator_bp = Blueprint('simulator_bp', __name__)
 
@@ -40,10 +39,7 @@ SAMPLE_PAYLOAD = {
 @simulator_bp.route('/simulator', methods=['GET'])
 def simulator_index():
     tpl_path = Path(__file__).parent.parent / 'templates' / 'simulator.html'
-    page = tpl_path.read_text()
-    # expose configured SKILL_HOSTNAME to the client for convenience
-    page = page.replace('__SKILL_HOSTNAME__', json.dumps(os.environ.get('SKILL_HOSTNAME', '')))
-    return Response(page, mimetype='text/html')
+    return Response(tpl_path.read_text(), mimetype='text/html')
 
 
 def _load_model_intents():
@@ -87,36 +83,16 @@ def simulator_payload():
     return jsonify(payload)
 
 
-def _resolve_doh(hostname):
-    """Resolve hostname using DNS-over-HTTPS (Cloudflare) to bypass local /etc/hosts."""
-    try:
-        # Use Cloudflare DoH JSON endpoint
-        resp = requests.get('https://cloudflare-dns.com/dns-query', params={'name': hostname, 'type': 'A'}, headers={'Accept': 'application/dns-json'}, timeout=5)
-        if resp.ok:
-            j = resp.json()
-            answers = j.get('Answer') or []
-            for a in answers:
-                # Answer entries may contain 'data' with IP or CNAMEs
-                ip = a.get('data')
-                if ip and isinstance(ip, str):
-                    return ip
-    except Exception:
-        pass
-    return None
-
-
 @simulator_bp.route('/simulator/send', methods=['POST'])
 def simulator_send():
     """Send a constructed Alexa IntentRequest to the skill and return response.
 
     Request JSON fields:
     - intent: intent name (required)
-    - use: 'local' or 'hostname' (default 'local')
     - sample: optional sample utterance (unused, kept for future)
     """
     data = request.get_json(silent=True) or {}
     intent = data.get('intent')
-    use = data.get('use', 'local')
     sample = data.get('sample')
     if not intent:
         return jsonify({'error': 'missing intent'}), 400
@@ -150,90 +126,18 @@ def simulator_send():
             }
         }
 
-    # Determine target URL
-    target_url = None
-    headers = {'Content-Type': 'application/json'}
-    auth = None
+    # Run it in the app: the skill endpoint only takes requests signed by
+    # Amazon. This page is behind the web UI's password, like setup and /ma.
+    skill = current_app.config['ALEXA_SKILL']
+    # ask-sdk checks the skill ID against the request's context.
+    system = payload.setdefault('context', {}).setdefault('System', {})
+    for where in (payload.get('session'), system):
+        if isinstance(where, dict):
+            where.setdefault('application', {})['applicationId'] = skill.skill_id or ''
     try:
-        from env_secrets import get_env_secret
-        app_user = get_env_secret('APP_USERNAME')
-        app_pass = get_env_secret('APP_PASSWORD')
-        if app_user and app_pass:
-            auth = (app_user, app_pass)
-    except Exception:
-        auth = None
-
-    if use == 'hostname':
-        raw = os.environ.get('SKILL_HOSTNAME', '').strip()
-        if not raw:
-            return jsonify({'error': 'SKILL_HOSTNAME not configured'}), 400
-        # normalize scheme
-        if raw.startswith('http://') or raw.startswith('https://'):
-            parsed = urllib.parse.urlparse(raw)
-            scheme = parsed.scheme
-            host = parsed.hostname
-            port = parsed.port
-        else:
-            scheme = 'https'
-            host = raw
-            port = None
-
-        ip = _resolve_doh(host)
-        if not ip:
-            return jsonify({'error': 'DNS resolution failed for host: ' + host}), 500
-
-        # build URL using resolved IP; include port if present
-        netloc = ip
-        if port:
-            netloc = f"{ip}:{port}"
-        target_url = f"{scheme}://{netloc}/"
-        # set Host header to original hostname so virtual hosts work
-        headers['Host'] = host
-        # we will disable certificate verification because IP won't match cert
-        verify = False
-    else:
-        # local: post to this server's root
-        target_url = request.host_url.rstrip('/') + '/'
-        verify = True
-
-    # Provide minimal Alexa signature headers so the ask-sdk verifier doesn't
-    # immediately raise "Missing Signature/Certificate for the skill request".
-    # These are dummy values intended for local testing only; the verifier may
-    # still perform full signature validation depending on configuration.
-    headers.setdefault('Signature', 'dummy-signature')
-    headers.setdefault('SignatureCertChainUrl', 'https://s3.amazonaws.com/echo.api/echo-api-cert.pem')
-    # Also send simulator-specific shadow headers which the app will copy into
-    # the WSGI environ if the real headers are absent (helps when proxies or
-    # local networking strip uncommon header names).
-    headers.setdefault('X-Simulator-Signature', 'dummy-signature')
-    headers.setdefault('X-Simulator-CertUrl', 'https://s3.amazonaws.com/echo.api/echo-api-cert.pem')
-
-    try:
-        resp = requests.post(target_url, json=payload, headers=headers, auth=auth, timeout=10, verify=verify)
-        # return response status + body (text)
-        try:
-            body = resp.content.decode('utf-8', errors='replace')
-        except Exception:
-            body = str(resp.content)
-        return jsonify({'status_code': resp.status_code, 'body': body})
-    except requests.exceptions.SSLError as e:
-        # SSL handshake failed when connecting to resolved IP. Retry by
-        # posting to the original hostname (this sets correct SNI). This
-        # is a best-effort fallback for local testing.
-        try:
-            if use == 'hostname' and 'host' in locals():
-                alt_url = f"{scheme}://{host}/"
-                try:
-                    resp = requests.post(alt_url, json=payload, headers=headers, auth=auth, timeout=10, verify=True)
-                    try:
-                        body = resp.content.decode('utf-8', errors='replace')
-                    except Exception:
-                        body = str(resp.content)
-                    return jsonify({'status_code': resp.status_code, 'body': body, 'note': 'retried using hostname for SNI'})
-                except Exception:
-                    pass
-        except Exception:
-            pass
-        return jsonify({'error': str(e)}), 500
+        envelope = skill.serializer.deserialize(json.dumps(payload), RequestEnvelope)
+        response = skill.invoke(request_envelope=envelope, context=None)
+        return jsonify({'status_code': 200, 'body': json.dumps(skill.serializer.serialize(response))})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        current_app.logger.exception('Simulator request failed')
+        return jsonify({'status_code': 500, 'body': str(e)})

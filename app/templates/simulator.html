@@ -20,11 +20,6 @@
     <strong>Selected intent:</strong> <span id="selected-intent" class="muted">(none)</span>
   </div>
   <div style="margin-top:8px">
-    <label>Target:</label>
-    <label><input type="radio" name="target" value="local" checked>local</label>
-    <label style="margin-left:12px"><input type="radio" name="target" value="hostname"> <span id="hostname-label">SKILL_HOSTNAME</span></label>
-  </div>
-  <div style="margin-top:8px">
     <button id="send">Send Intent</button>
   </div>
 
@@ -47,12 +42,6 @@
   <audio id="sim-audio" style="display:none"></audio>
 
   <script>
-    const skillHostname = __SKILL_HOSTNAME__ || '';
-    // Show configured hostname in the toggle label (or fallback text)
-    try{
-      const hl = document.getElementById('hostname-label');
-      if(hl) hl.textContent = (skillHostname || 'SKILL_HOSTNAME') + ' (SKILL_HOSTNAME)';
-    }catch(e){}
     async function loadIntents(){
       const res = await fetch('/simulator/api');
       const j = await res.json();
@@ -102,11 +91,6 @@
     document.getElementById('send').addEventListener('click', async ()=>{
       const intent = document.getElementById('intent').value;
       updateSelected();
-      const use = document.querySelector('input[name="target"]:checked').value;
-      if(use === 'hostname' && !skillHostname){
-        alert('SKILL_HOSTNAME not configured on server');
-        return;
-      }
       const ta = document.getElementById('payload');
       let override = null;
       try{
@@ -117,7 +101,7 @@
         }
         override = null;
       }
-      const body = { intent: intent, use: use };
+      const body = { intent: intent };
       if(override) body.override_payload = override;
       const respEl = document.getElementById('response');
       respEl.textContent = 'Sending...';

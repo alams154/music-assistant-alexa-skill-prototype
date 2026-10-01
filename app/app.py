@@ -90,9 +90,15 @@ try:
         app.logger.info('Using ASK credentials under HOME=%s', ask_home)
 except Exception:
     pass
+# Without a skill ID ask-sdk skips the check that a request is meant for this skill.
+sb.skill_id = os.environ.get('SKILL_ID', '')
+if not sb.skill_id:
+    # The setup page creates the skill, so a first run has no ID yet.
+    app.logger.warning('SKILL_ID is not set: accepting signed requests for any skill')
+app.config['ALEXA_SKILL'] = sb.create()   # the simulator page runs requests on it
 skill_adapter = SkillAdapter(
-    skill=sb.create(),
-    skill_id="", # pyright: ignore[reportArgumentType]
+    skill=app.config['ALEXA_SKILL'],
+    skill_id=sb.skill_id,
     app=app)
 
 # Mount the Music Assistant API (only ma routes will be mounted at /ma)
@@ -131,28 +137,6 @@ class BasicAuthMiddleware:
         start_response('401 Unauthorized', [('Content-Type', 'text/plain'), ('WWW-Authenticate', 'Basic realm="music-assistant-skill"')])
         return [b'Access denied']
 
-
-@app.before_request
-def _inject_simulator_signature_headers():
-    """If the incoming request is from the simulator and lacks Alexa
-    signature headers, allow simulator-provided fallbacks to be injected so
-    the ask-sdk verifier sees them. This is intended for local development
-    only.
-    """
-    try:
-        if request.path == '/' and request.method == 'POST':
-            # If real Signature headers are missing, accept simulator fallbacks
-            env = request.environ
-            if not request.headers.get('Signature'):
-                sim_sig = request.headers.get('X-Simulator-Signature') or request.args.get('sim_signature')
-                if sim_sig:
-                    env['HTTP_SIGNATURE'] = sim_sig
-            if not request.headers.get('SignatureCertChainUrl'):
-                sim_cert = request.headers.get('X-Simulator-CertUrl') or request.args.get('sim_cert')
-                if sim_cert:
-                    env['HTTP_SIGNATURECERTCHAINURL'] = sim_cert
-    except Exception:
-        pass
 
 # Respect X-Forwarded-* headers when running behind a reverse proxy so
 # `request.host_url` and `request.scheme` reflect the external client URL.
@@ -302,26 +286,6 @@ def _read_master_loop(master_fd, prefix=None):
 
 @app.route("/", methods=["POST"])
 def invoke_skill():
-    # Allow simulator-originated requests to bypass signature/timestamp
-    # verification for local testing when the simulator provides a
-    # simulator-specific header. This creates a temporary handler with
-    # verification disabled and dispatches the request through it. For
-    # normal requests we keep the existing behavior.
-    try:
-        if request.headers.get('X-Simulator-Bypass') or request.headers.get('X-Simulator-Signature'):
-            try:
-                from ask_sdk_webservice_support.webservice_handler import WebserviceSkillHandler
-                from ask_sdk_webservice_support import verifier_constants
-                content = request.data.decode(verifier_constants.CHARACTER_ENCODING)
-                handler = WebserviceSkillHandler(skill_adapter._skill, verify_signature=False, verify_timestamp=False, verifiers=[])
-                response = handler.verify_request_and_dispatch(http_request_headers=request.headers, http_request_body=content)
-                return jsonify(response)
-            except Exception:
-                app.logger.exception('Simulator dispatch without verification failed')
-                # fallthrough to normal dispatch
-                pass
-    except Exception:
-        pass
     return skill_adapter.dispatch_request()
 
 # Expose OpenAPI spec and Swagger UI from the main app so docs are available
