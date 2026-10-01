@@ -703,7 +703,7 @@ if __name__ == "__main__":
     flask_debug = os.environ.get('FLASK_DEBUG', '0') == '1'
     if flask_debug:
         use_reloader = os.environ.get('FLASK_RELOADER', '0') == '1'
-        app.run(debug=True, use_reloader=use_reloader, host="0.0.0.0", port=port)
+        app.run(debug=True, use_reloader=use_reloader, host=os.environ.get('HOST', '0.0.0.0'), port=port)
     else:
         # Production/dev host mode: don't use the reloader to avoid transient restarts
-        app.run(debug=False, host="0.0.0.0", port=port)
+        app.run(debug=False, host=os.environ.get('HOST', '0.0.0.0'), port=port)

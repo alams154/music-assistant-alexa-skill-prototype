@@ -102,7 +102,7 @@ def push_alexa_metadata(url):
         alexa_routes._store = payload
     except Exception:
         try:
-            push_endpoint = 'http://localhost:5000/alexa/push-url'
+            push_endpoint = f"http://{os.environ.get('HOST', 'localhost')}:{os.environ.get('PORT', '5000')}/alexa/push-url"
             user = get_env_secret('APP_USERNAME')
             pwd = get_env_secret('APP_PASSWORD')
             if user and pwd:

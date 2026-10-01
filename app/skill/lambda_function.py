@@ -157,6 +157,12 @@ class SkillEventHandler(AbstractRequestHandler):
     def handle(self, handler_input):
         # type: (HandlerInput) -> Response
         logger.info("In SkillEventHandler")
+        # A response Alexa rejects (e.g. an invalid Play URL) only shows up here:
+        # the Echo just says there was a problem with the skill's response.
+        req = handler_input.request_envelope.request
+        if getattr(req, 'reason', None) or getattr(req, 'error', None):
+            logger.warning("Session ended: reason=%s error=%s",
+                           getattr(req, 'reason', None), getattr(req, 'error', None))
         return handler_input.response_builder.response
 
 
