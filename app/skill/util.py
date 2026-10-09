@@ -25,6 +25,15 @@ def apl_enabled():
     return os.environ.get('ENABLE_APL', 'false').lower() in ('true', '1', 'yes')
 
 
+def get_ma_auth():
+    """Return a (username, password) tuple for Music Assistant basic auth, or None."""
+    user = get_env_secret('MA_USERNAME')
+    pwd = get_env_secret('MA_PASSWORD')
+    if user and pwd:
+        return (user, pwd)
+    return None
+
+
 # Last known playback-stopped position per device, so Resume can continue
 # from where it left off instead of always restarting at 0. MA's players/cmd/play
 # (used for AMAZON.ResumeIntent) doesn't push a fresh stream URL, so on resume
@@ -139,10 +148,11 @@ def play(url, offset, text, response_builder, supports_apl=False):
             logging.info('Stream URL (validation skipped via SKIP_URL_VALIDATION): %s', url)
         else:
             try:
-                head_resp = requests.head(url, allow_redirects=True, timeout=5)
+                ma_auth = get_ma_auth()
+                head_resp = requests.head(url, allow_redirects=True, timeout=5, auth=ma_auth)
                 resp = head_resp
                 if head_resp.status_code >= 400:
-                    resp = requests.get(url, stream=True, allow_redirects=True, timeout=5)
+                    resp = requests.get(url, stream=True, allow_redirects=True, timeout=5, auth=ma_auth)
 
                 if resp.status_code >= 400:
                     logging.error('Audio URL returned HTTP %s: %s', resp.status_code, url)

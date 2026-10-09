@@ -49,7 +49,7 @@ def _load_addon_options_into_env():
 
 def _safe_options_for_log(options):
     redacted = {}
-    secret_keys = {'APP_USERNAME', 'APP_PASSWORD'}
+    secret_keys = {'APP_USERNAME', 'APP_PASSWORD', 'MA_USERNAME', 'MA_PASSWORD'}
     for key, value in options.items():
         if key in secret_keys:
             redacted[key] = 'set' if value else ''
@@ -303,25 +303,25 @@ def _read_master_loop(master_fd, prefix=None):
 @app.route("/", methods=["POST"])
 def invoke_skill():
     # Allow simulator-originated requests to bypass signature/timestamp
-    # verification for local testing when the simulator provides a
-    # simulator-specific header. This creates a temporary handler with
-    # verification disabled and dispatches the request through it. For
-    # normal requests we keep the existing behavior.
-    try:
-        if request.headers.get('X-Simulator-Bypass') or request.headers.get('X-Simulator-Signature'):
-            try:
-                from ask_sdk_webservice_support.webservice_handler import WebserviceSkillHandler
-                from ask_sdk_webservice_support import verifier_constants
-                content = request.data.decode(verifier_constants.CHARACTER_ENCODING)
-                handler = WebserviceSkillHandler(skill_adapter._skill, verify_signature=False, verify_timestamp=False, verifiers=[])
-                response = handler.verify_request_and_dispatch(http_request_headers=request.headers, http_request_body=content)
-                return jsonify(response)
-            except Exception:
-                app.logger.exception('Simulator dispatch without verification failed')
-                # fallthrough to normal dispatch
-                pass
-    except Exception:
-        pass
+    # verification only when ENABLE_SIMULATOR is explicitly set, to prevent
+    # unauthenticated callers from exploiting the bypass in production.
+    simulator_enabled = os.environ.get('ENABLE_SIMULATOR', 'false').lower() in ('true', '1', 'yes')
+    if simulator_enabled:
+        try:
+            if request.headers.get('X-Simulator-Bypass') or request.headers.get('X-Simulator-Signature'):
+                try:
+                    from ask_sdk_webservice_support.webservice_handler import WebserviceSkillHandler
+                    from ask_sdk_webservice_support import verifier_constants
+                    content = request.data.decode(verifier_constants.CHARACTER_ENCODING)
+                    handler = WebserviceSkillHandler(skill_adapter._skill, verify_signature=False, verify_timestamp=False, verifiers=[])
+                    response = handler.verify_request_and_dispatch(http_request_headers=request.headers, http_request_body=content)
+                    return jsonify(response)
+                except Exception:
+                    app.logger.exception('Simulator dispatch without verification failed')
+                    # fallthrough to normal dispatch
+                    pass
+        except Exception:
+            pass
     return skill_adapter.dispatch_request()
 
 # Expose OpenAPI spec and Swagger UI from the main app so docs are available
