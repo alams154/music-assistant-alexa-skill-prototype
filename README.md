@@ -80,7 +80,8 @@ Notes:
 | `APP_PASSWORD` | No | — | Password for the web UI and API basic authentication. Can be supplied as a Docker secret file or plain env var. |
 | `PORT` | No | `5000` | Port the app lives at. Ensure the `ports` mapping in [docker-compose.yml](docker-compose.yml) matches this value. |
 | `DEBUG_PORT` | No | `5678` | Remote debug port (if you enable remote debugging). |
-| `LOCALE` | *No | `en-US` | ***REQUIRED** if your device is not configured for en-US. Skill locale used by the setup and interaction model operations (examples: `en-US`, `en-GB`, `de-DE`). |
+| `LOCALE` | *No | `en-US` | ***REQUIRED** if your device is not configured for en-US. Skill locale used by the setup and interaction model operations (examples: `en-US`, `en-GB`, `de-DE`). Re-running `/setup` after changing it keeps any locales the existing skill already advertises and adds the new one. |
+| `INVOCATION_NAME` | No | `music assistant` | Skill invocation name used when generating the interaction model and reported by `/alexa/intents` (examples: `music assistant`, `assistant musical`). Keep it consistent with the Music Assistant Alexa player provider. |
 | `AWS_DEFAULT_REGION` | No | `us-east-1` | AWS region used by ASK CLI operations when applicable. |
 | `TZ` | No | `UTC` | Container timezone (example: `America/Chicago`) to make logs/timestamps match your locale. |
 | `SKIP_URL_VALIDATION` | No | `false` | Skip server-side HEAD/GET validation of the rewritten stream URL before sending it to the Echo. Useful when the skill container cannot reach the external stream URL due to Docker network routing (e.g., macvlan isolation, custom outbound firewall rules). |

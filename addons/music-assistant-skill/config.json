@@ -26,6 +26,7 @@
     "PORT": 5000,
     "DEBUG_PORT": 5678,
     "LOCALE": "en-US",
+    "INVOCATION_NAME": "music assistant",
     "AWS_DEFAULT_REGION": "us-east-1",
     "TZ": "America/Chicago"
   },
@@ -37,6 +38,7 @@
     "PORT": "int",
     "DEBUG_PORT": "int",
     "LOCALE": "str",
+    "INVOCATION_NAME": "str",
     "AWS_DEFAULT_REGION": "str",
     "TZ": "str"
   },

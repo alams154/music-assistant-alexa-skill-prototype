@@ -2,13 +2,20 @@
 import sys,json,os
 
 if len(sys.argv) < 3:
-    print('usage: build_skill_manifest.py <infile> <outfile> [endpoint] [locale]')
+    print('usage: build_skill_manifest.py <infile> <outfile> [endpoint] [locale] [extra_locales]')
     sys.exit(2)
 
 infile = sys.argv[1]
 outfile = sys.argv[2]
 endpoint = sys.argv[3] if len(sys.argv) > 3 else ''
 target_locale = sys.argv[4] if len(sys.argv) > 4 else ''
+# Comma-separated locales that must be kept alongside the target locale. This is
+# used when reusing an existing skill: a skill's default locale cannot be
+# dropped from its manifest, so we keep the locales it already advertises and
+# just add the requested one.
+extra_locales = [x for x in (sys.argv[5] if len(sys.argv) > 5 else '').split(',') if x]
+
+invocation_name = (os.environ.get('INVOCATION_NAME') or 'music assistant').strip()
 
 with open(infile,'r') as f:
     data = json.load(f)
@@ -16,22 +23,28 @@ with open(infile,'r') as f:
 pub = data.setdefault('manifest',{}).setdefault('publishingInformation',{})
 locales = pub.setdefault('locales',{})
 
-# If a target locale is specified, ensure only that locale is present in the
-# publishing information. Otherwise default to en-US as before.
-if target_locale:
-    # ensure target locale exists and only include it
-    loc = locales.setdefault(target_locale, {})
-    target = target_locale
-else:
-    loc = locales.setdefault('en-US', {})
-    target = 'en-US'
+# Resolve the target locale (defaults to en-US when none is requested).
+target = target_locale or 'en-US'
+loc = locales.setdefault(target, {})
 
 loc['name'] = 'Music Assistant'
-loc['examplePhrases'] = ["Alexa, open music assistant", "Alexa, ask music assistant to play", "Alexa, play music assistant"]
+loc['examplePhrases'] = [
+    f"Alexa, open {invocation_name}",
+    f"Alexa, ask {invocation_name} to play",
+    f"Alexa, play {invocation_name}",
+]
 
+# When a locale is requested, restrict the manifest to that locale plus any
+# locales that must be preserved. Without a requested locale, keep every locale
+# as before.
 if target_locale:
-    # keep only the requested locale in the locales map
-    pub['locales'] = { target: locales[target] }
+    keep = []
+    for l in [target] + extra_locales:
+        if l and l not in keep:
+            keep.append(l)
+    for l in keep:
+        locales.setdefault(l, {})
+    pub['locales'] = { l: locales[l] for l in keep }
     locales = pub['locales']
 
 # Normalize icons: ensure all locales use the same small/large icon URIs as the target locale
@@ -69,4 +82,3 @@ if isinstance(ifs, list):
 with open(outfile,'w') as f:
     json.dump(data, f, indent=2)
 print('WROTE', outfile)
-
