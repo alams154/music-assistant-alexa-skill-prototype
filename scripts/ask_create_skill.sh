@@ -3,9 +3,12 @@
 set -euo pipefail
 
 # Create an Alexa skill using ASK CLI based on the README instructions
-# - adjusts the `en-US` locale invocation name to "Music Assistant"
+# - sets the invocation name (default "music assistant", override with
+#   INVOCATION_NAME or --invocation-name)
 # - optionally sets the HTTPS endpoint
 # - optionally uploads interaction models from `models/`
+# - when reusing an existing skill, keeps the locales it already advertises and
+#   adds the requested one, so switching locale (e.g. en-US -> en-GB) works
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MANIFEST_SRC="$REPO_ROOT/app/skill.json"
@@ -20,18 +23,22 @@ UPLOAD_MODELS=true
 # Default to en-US to avoid uploading/managing all locales by default
 # Allow overriding via environment variable `LOCALE` when running in container
 LOCALE="${LOCALE:-en-US}"
+# Invocation name used when generating the interaction models and example
+# phrases. Kept in sync with the value reported by /alexa/intents.
+INVOCATION_NAME="${INVOCATION_NAME:-music assistant}"
 
 usage(){
   cat <<EOF
-Usage: $(basename "$0") [--profile NAME] [--endpoint https://host] [--upload-models] [--stage development|live] [--locale LOCALE]
+Usage: $(basename "$0") [--profile NAME] [--endpoint https://host] [--upload-models] [--stage development|live] [--locale LOCALE] [--invocation-name NAME]
 
 Options:
-  --profile NAME       ASK CLI profile to use (default: default)
-  --endpoint URL       HTTPS endpoint to set for the skill (optional)
-  --upload-models      Upload interaction models from the repo's models/ directory after creating the skill
-  --stage STAGE        Skill stage to target for interaction model uploads (default: development)
-  --locale LOCALE      Locale to include in the manifest and upload (default: en-US)
-  -h, --help           Show this help
+  --profile NAME         ASK CLI profile to use (default: default)
+  --endpoint URL         HTTPS endpoint to set for the skill (optional)
+  --upload-models        Upload interaction models from the repo's models/ directory after creating the skill
+  --stage STAGE          Skill stage to target for interaction model uploads (default: development)
+  --locale LOCALE        Locale to include in the manifest and upload (default: en-US)
+  --invocation-name NAME Skill invocation name (default: "music assistant")
+  -h, --help             Show this help
 EOF
 }
 
@@ -42,10 +49,14 @@ while [[ ${#} -gt 0 ]]; do
     --upload-models) UPLOAD_MODELS=true; shift 1;;
     --stage) STAGE="$2"; shift 2;;
     --locale) LOCALE="$2"; shift 2;;
+    --invocation-name) INVOCATION_NAME="$2"; shift 2;;
     -h|--help) usage; exit 0;;
     *) echo "Unknown arg: $1"; usage; exit 1;;
   esac
 done
+
+# Make the invocation name visible to the Python helpers invoked below.
+export INVOCATION_NAME
 
 # Require endpoint: user requested endpoint must be provided to publish a valid manifest
 if [ -z "${ENDPOINT:-}" ]; then
@@ -149,6 +160,7 @@ TO_DELETE=$(python3 "$REPO_ROOT/scripts/find_skills_to_delete.py" "$LIST_FILE" 2
 # Default: we will create a new skill unless we find and reuse an existing one
 SKIP_CREATE=0
 SKILL_ID=""
+EXISTING_LOCALES=""
 if [ -n "$TO_DELETE" ]; then
   echo "Found existing Music Assistant skill(s): $TO_DELETE"
   # Convert to array
@@ -167,9 +179,38 @@ if [ -n "$TO_DELETE" ]; then
   SKILL_ID=${existing_arr[0]}
   echo "Reusing existing skill: $SKILL_ID"
   SKIP_CREATE=1
+
+  # A skill's default locale cannot be removed from its manifest, so keep every
+  # locale the existing skill already advertises and add the requested one.
+  EXISTING_MANIFEST_FILE="$TMP_DIR/existing_manifest_${SKILL_ID}.json"
+  ask smapi get-skill-manifest --skill-id "$SKILL_ID" --stage "$STAGE" --profile "$PROFILE" > "$EXISTING_MANIFEST_FILE" 2>/dev/null || true
+  EXISTING_LOCALES="$(python3 - "$EXISTING_MANIFEST_FILE" <<'PY'
+import json, sys
+try:
+    text = open(sys.argv[1], encoding='utf-8').read()
+except Exception:
+    print('')
+    raise SystemExit(0)
+idx = text.find('{')
+if idx == -1:
+    print('')
+    raise SystemExit(0)
+try:
+    data = json.loads(text[idx:])
+except Exception:
+    print('')
+    raise SystemExit(0)
+locales = data.get('manifest', {}).get('publishingInformation', {}).get('locales', {})
+if isinstance(locales, dict):
+    print(','.join(locales.keys()))
+PY
+)"
+  if [ -n "$EXISTING_LOCALES" ]; then
+    echo "Existing skill locales: $EXISTING_LOCALES (will be preserved alongside $LOCALE)"
+  fi
 fi
 
-if ! python3 "$REPO_ROOT/scripts/build_skill_manifest.py" "$MANIFEST_SRC" "$OUT_MANIFEST" "${ENDPOINT}" "${LOCALE}"; then
+if ! python3 "$REPO_ROOT/scripts/build_skill_manifest.py" "$MANIFEST_SRC" "$OUT_MANIFEST" "${ENDPOINT}" "${LOCALE}" "${EXISTING_LOCALES}"; then
   echo "Failed to build manifest (see error above). Pass --endpoint or add a valid endpoint.uri to $MANIFEST_SRC." >&2
   exit 4
 fi
@@ -179,7 +220,11 @@ echo "WROTE $OUT_MANIFEST"
 if [ "$SKIP_CREATE" -eq 0 ]; then
   echo "Creating skill using ASK CLI (profile=$PROFILE)..."
   CREATE_OUT_FILE="$TMP_DIR/create_skill_out.txt"
-  ask smapi create-skill-for-vendor --manifest file://$OUT_MANIFEST --profile $PROFILE > "$CREATE_OUT_FILE" 2>&1 || true
+  if ! ask smapi create-skill-for-vendor --manifest file://$OUT_MANIFEST --profile $PROFILE > "$CREATE_OUT_FILE" 2>&1; then
+    echo "Error: create-skill-for-vendor failed:" >&2
+    cat "$CREATE_OUT_FILE" >&2
+    exit 3
+  fi
   CREATE_OUT="$(cat "$CREATE_OUT_FILE")"
   echo "WROTE $CREATE_OUT_FILE"
   echo "$CREATE_OUT"
@@ -207,7 +252,11 @@ else
   # We are reusing an existing skill; update its manifest to match the desired manifest
   echo "Updating manifest for existing skill: $SKILL_ID"
   UPDATE_OUT_FILE="$TMP_DIR/update_manifest_${SKILL_ID}.txt"
-  ask smapi update-skill-manifest --skill-id "$SKILL_ID" --manifest file://$OUT_MANIFEST --profile $PROFILE > "$UPDATE_OUT_FILE" 2>&1 || true
+  if ! ask smapi update-skill-manifest --skill-id "$SKILL_ID" --manifest file://$OUT_MANIFEST --profile $PROFILE > "$UPDATE_OUT_FILE" 2>&1; then
+    echo "Error: update-skill-manifest failed (the existing skill rejected the locale change; see $UPDATE_OUT_FILE):" >&2
+    cat "$UPDATE_OUT_FILE" >&2
+    exit 5
+  fi
   echo "WROTE $UPDATE_OUT_FILE"
   echo "Rebuilt existing skill: $SKILL_ID"
 fi
@@ -222,12 +271,13 @@ if [ "$UPLOAD_MODELS" = true ]; then
   # Ensure a minimal invocation-only interaction model exists for the target locale so the invocationName is set
   MIN_INV="$TMP_DIR/invocation_${INV_LOCALE}.json"
   python3 - <<PY
-import json
+import json, os
 dst='''$MIN_INV'''
+inv = (os.environ.get('INVOCATION_NAME') or 'music assistant').strip()
 data = {
   "interactionModel": {
     "languageModel": {
-      "invocationName": "music assistant",
+      "invocationName": inv,
       "intents": [
         {"name": "AMAZON.FallbackIntent"},
         {"name": "AMAZON.PauseIntent"},
@@ -244,7 +294,13 @@ with open(dst, 'w') as f:
 print('WROTE', dst)
 PY
   echo "Uploading minimal invocation model for $INV_LOCALE"
-  ask smapi set-interaction-model --skill-id "$SKILL_ID" --stage "$STAGE" --locale "$INV_LOCALE" --interaction-model file://"$MIN_INV" --profile "$PROFILE" > "$TMP_DIR/set_interaction_${INV_LOCALE}_min.txt" 2>&1 || true
+  if ! ask smapi set-interaction-model --skill-id "$SKILL_ID" --stage "$STAGE" --locale "$INV_LOCALE" --interaction-model file://"$MIN_INV" --profile "$PROFILE" > "$TMP_DIR/set_interaction_${INV_LOCALE}_min.txt" 2>&1; then
+    echo "ERROR: failed to upload minimal invocation model for $INV_LOCALE ($TMP_DIR/set_interaction_${INV_LOCALE}_min.txt):" >&2
+    cat "$TMP_DIR/set_interaction_${INV_LOCALE}_min.txt" >&2
+    if [ -n "$LOCALE" ]; then
+      exit 7
+    fi
+  fi
   echo "WROTE $TMP_DIR/set_interaction_${INV_LOCALE}_min.txt"
 
   # Build list of locales to upload: single `$LOCALE` if provided, else all models
@@ -260,9 +316,10 @@ PY
     echo "Preparing $model -> locale $locale"
     MOD_MODEL="$TMP_DIR/modified_model_${locale}.json"
     python3 - <<PY
-import json,sys
+import json,os,sys
 src='''$model'''
 dst='''$MOD_MODEL'''
+inv = (os.environ.get('INVOCATION_NAME') or 'music assistant').strip()
 try:
     with open(src,'r') as f:
         data = json.load(f)
@@ -272,13 +329,19 @@ except Exception as e:
 im = data.setdefault('interactionModel', {})
 lm = im.setdefault('languageModel', {})
 # set invocationName to desired phrase
-lm['invocationName'] = 'music assistant'
+lm['invocationName'] = inv
 with open(dst,'w') as f:
     json.dump(data, f, indent=2)
 print('WROTE', dst)
 PY
     echo "Uploading $MOD_MODEL -> locale $locale"
-    ask smapi set-interaction-model --skill-id "$SKILL_ID" --stage "$STAGE" --locale "$locale" --interaction-model file://"$MOD_MODEL" --profile "$PROFILE" > "$TMP_DIR/set_interaction_${locale}.txt" 2>&1 || true
+    if ! ask smapi set-interaction-model --skill-id "$SKILL_ID" --stage "$STAGE" --locale "$locale" --interaction-model file://"$MOD_MODEL" --profile "$PROFILE" > "$TMP_DIR/set_interaction_${locale}.txt" 2>&1; then
+      echo "ERROR: failed to upload interaction model for $locale ($TMP_DIR/set_interaction_${locale}.txt):" >&2
+      cat "$TMP_DIR/set_interaction_${locale}.txt" >&2
+      if [ -n "$LOCALE" ]; then
+        exit 7
+      fi
+    fi
     echo "WROTE $TMP_DIR/set_interaction_${locale}.txt"
   done
 fi
