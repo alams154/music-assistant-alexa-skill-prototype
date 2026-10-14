@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-import sys,json,os
+import sys,json
+from urllib.parse import urlparse
 
 if len(sys.argv) < 3:
     print('usage: build_skill_manifest.py <infile> <outfile> [endpoint] [locale]')
@@ -49,7 +50,11 @@ if target_small or target_large:
 apis = data.setdefault('manifest',{}).setdefault('apis', {})
 custom = apis.setdefault('custom', {})
 if endpoint:
-    custom['endpoint'] = { 'uri': endpoint, 'sslCertificateType': 'Wildcard' }
+    host = (urlparse(endpoint).hostname or "").lower()
+    # Nabu Casa remote UI uses a normal trusted certificate. User domains in
+    # this project are usually covered by a wildcard certificate.
+    cert_type = "Trusted" if host.endswith(".ui.nabu.casa") else "Wildcard"
+    custom['endpoint'] = { 'uri': endpoint, 'sslCertificateType': cert_type }
 else:
     ep = custom.get('endpoint') if isinstance(custom.get('endpoint'), dict) else None
     if ep and 'uri' in ep and ep.get('uri'):

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Sync addons/music-assistant-skill/config.json version with the top-level VERSION file.
+"""Sync config.json version with the top-level VERSION file.
 
 Usage: ./scripts/sync_version.py
 """
@@ -9,7 +9,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 VERSION_FILE = ROOT / 'VERSION'
-CONFIG = ROOT / 'addons' / 'music-assistant-skill' / 'config.json'
+CONFIG = ROOT / 'config.json'
 
 
 def read_version():

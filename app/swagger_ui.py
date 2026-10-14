@@ -1,4 +1,4 @@
-from flask import Response, request, jsonify, render_template_string
+from flask import Response, jsonify, render_template_string
 from typing import Dict, Any
 
 
@@ -154,6 +154,6 @@ def render() -> Response:
 
     Uses a small template so the HTML remains easy to read and modify.
     """
-    openapi_url = request.url_root.rstrip('/') + '/openapi.json'
+    openapi_url = 'openapi.json'
     rendered = render_template_string(_HTML_TEMPLATE, openapi_url=openapi_url)
     return Response(rendered, mimetype='text/html')

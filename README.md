@@ -34,18 +34,38 @@ The easiest way to run the project is with Docker Compose. This will build and s
 
 Note: manual creation of the skill in the Alexa Developer Console is no longer required — the `/setup` flow automates creation and enablement when possible.
 
-### 2. Home Assistant add-on (NOT WORKING)
+### 2. Home Assistant add-on
 
-This repository contains an `addons/music-assistant-skill` folder with a simple Home Assistant add-on wrapper. Running it as an add-on in your environment may require additional changes.
+This repository is a Home Assistant add-on repository. `config.json` sits next to the `Dockerfile`, which is the build context Supervisor uses.
 
-If you want to test as an add-on locally:
+Use it as the skill service in the [Music Assistant Alexa player provider](https://www.music-assistant.io/player-support/alexa/) setup. Amazon account URL, email, password, and OTP secret stay in Music Assistant. This add-on is the service Music Assistant calls.
 
-1. Add this repository as a custom add-on repository in Home Assistant Supervisor (Supervisor > Add-on Store > Repositories).
-2. Install the "Music Assistant Alexa Skill" add-on and open the add-on configuration.
-3. In the add-on configuration, set the options described above (`MA_HOSTNAME`, `APP_USERNAME`, `APP_PASSWORD`, `PORT`, `DEBUG_PORT`, `AWS_DEFAULT_REGION`) as needed.
-4. Start the add-on and check the add-on logs for startup and any missing dependencies or configuration issues.
+1. In Home Assistant: Settings → Add-ons → Add-on Store → ⋮ → Repositories. Add this repository's URL.
+2. Install **Music Assistant Alexa Skill**, set `USE_NABU_CASA` (or your own `SKILL_HOSTNAME` / `MA_HOSTNAME`), then start it once. The add-on copies a small integration into Home Assistant config.
+3. Restart Home Assistant so it loads that integration.
+4. Settings → Devices & services → Add integration → **Music Assistant Alexa Skill**. (Skip if it already appears after the restart.) This step is required for Nabu Casa skill and stream forwarding.
+5. Sign in to Home Assistant Cloud and turn on **remote access**.
+6. Start the add-on again. With `USE_NABU_CASA` on, it sets the public skill and stream URLs from your `*.ui.nabu.casa` address and ignores `SKILL_HOSTNAME` / `MA_HOSTNAME`. Confirm the logs show both a skill URL and a stream URL under `/api/music_assistant_alexa_skill`.
+7. Open the add-on UI → Setup so ASK points the Alexa skill at that skill URL.
+8. In Music Assistant's Alexa provider, set **API URL** to `http://<Home Assistant host>:5000`. Set **API Basic Auth Username** and **API Basic Auth Password** to this add-on's `APP_USERNAME` and `APP_PASSWORD`. Set **Alexa Language** to the same value as `LOCALE`.
 
-**Warning**: Treat this add-on as a user convenience and validate thoroughly as this method has not been tested in a Home Assistant environment and may require adjustments to work properly as an add-on.
+Without Nabu Casa, set `SKILL_HOSTNAME` and (for Echo devices without a screen) `MA_HOSTNAME` to your own public HTTPS hosts, skip step 4–6's remote-access requirements, and still complete Setup.
+
+| Add-on option | Music Assistant Alexa page |
+|---|---|
+| `USE_NABU_CASA` | Uses your Nabu Casa remote URL for both the Alexa skill endpoint and the audio stream. When on, `SKILL_HOSTNAME` and `MA_HOSTNAME` are ignored. |
+| `SKILL_HOSTNAME` | Public HTTPS host Amazon uses to reach this add-on. Ignored when `USE_NABU_CASA` is on. |
+| `MA_HOSTNAME` | Public stream address for an Echo without a screen, and for album art. Ignored when `USE_NABU_CASA` is on. |
+| `APP_USERNAME` / `APP_PASSWORD` | The API basic-auth username and password you enter in Music Assistant. |
+| `LOCALE` | Skill locale. Match the provider's Alexa Language (`en-US`, `en-GB`, `de-DE`, …). |
+| `ENABLE_APL` | Screen layout on Echo Show. Leave off unless you want that layout. |
+| `SKIP_URL_VALIDATION` | Skip the stream-URL check when the add-on cannot reach its own public hostname. |
+| `MA_API_URL` / `MA_API_TOKEN` | Optional. Used only for voice Next/Previous back into Music Assistant. |
+| `AWS_DEFAULT_REGION` / `TZ` | ASK CLI region and container timezone. |
+
+ASK CLI credentials and device mappings are stored under `/data`, so an add-on update keeps the skill registration.
+
+Port 5000 is the local skill API used by Music Assistant. With `USE_NABU_CASA`, Amazon and the Echo both use your `*.ui.nabu.casa` address: the skill at `/api/music_assistant_alexa_skill` and audio at `/api/music_assistant_alexa_skill/stream`. The whole track travels through the Nabu Casa relay.
 
 ### 3. Using `docker run`
 

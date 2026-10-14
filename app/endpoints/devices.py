@@ -1,9 +1,10 @@
-from flask import Blueprint, Response, current_app, request, redirect, url_for
+from flask import Blueprint, Response, current_app, request, redirect
 from markupsafe import escape
 from pathlib import Path
 from datetime import datetime
 
 from skill import device_mapping
+from ha_ingress import browser_path
 
 devices_bp = Blueprint('devices_bp', __name__)
 
@@ -77,7 +78,7 @@ def devices_page():
             <td>{escape(_format_ts(info.get('last_seen')))}</td>
             <td>{escape(info.get('last_request') or '(not seen this session)')}</td>
             <td>
-                <form method="POST" action="/devices" class="mapping-form">
+                <form method="POST" class="mapping-form">
                     <input type="hidden" name="device_id" value="{escape(device_id)}">
                     <input type="text" name="player_id" value="{escape(current_player)}"
                            placeholder="MA player_id (e.g. Studio)">
@@ -89,6 +90,7 @@ def devices_page():
     rows_html = '\n'.join(rows) or '<tr><td colspan="4" class="muted">No devices seen yet. Trigger an intent from each Echo, then reload this page.</td></tr>'
 
     body = f"""
+    <p><a href="status">Back to status</a></p>
     <p class="muted">Alexa does not expose a friendly device name to Custom Skills, only an opaque per-device id.
     Trigger any voice command (e.g. "next") from each Echo you want to control MA from, reload this page,
     then pair each device id with its Music Assistant player_id (the name shown in MA, e.g. "Studio").
@@ -117,4 +119,4 @@ def devices_save():
     player_id = (request.form.get('player_id') or '').strip()
     if device_id:
         device_mapping.set_player_for_device(device_id, player_id or None)
-    return redirect(url_for('devices_bp.devices_page'))
+    return redirect(browser_path(request.headers.get('X-Ingress-Path'), '/devices'))

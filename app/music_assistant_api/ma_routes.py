@@ -1,28 +1,20 @@
 """Route definitions for music_assistant_api (ma_routes)."""
 
 from flask import jsonify, request
-import os
 import time
-from urllib.parse import urlparse, urlunparse
 import shared_store
 
 
 def _rewrite_url(url: str) -> str:
-    """Rewrite internal Music Assistant URLs to public hostname."""
+    """Rewrite local Music Assistant stream URLs to the public MA_HOSTNAME prefix."""
     if not url:
         return url
-    ma_hostname = os.environ.get('MA_HOSTNAME', '').strip()
-    if not ma_hostname:
-        return url
     try:
-        parsed = urlparse(url)
-        if not parsed.hostname:
+        from skill.util import get_ma_hostname, replace_ip_in_url
+        hostname = get_ma_hostname()
+        if not hostname:
             return url
-        rewritten = urlunparse((
-            'https', ma_hostname, parsed.path,
-            parsed.params, parsed.query, parsed.fragment
-        ))
-        return rewritten
+        return replace_ip_in_url(url, hostname)
     except Exception:
         return url
 

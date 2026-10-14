@@ -5,6 +5,7 @@ import os
 import re
 import logging
 import threading
+import urllib.parse
 import requests
 from env_secrets import get_env_secret
 from typing import Dict, Optional
@@ -72,12 +73,35 @@ def get_ma_hostname(raise_on_http_scheme=True):
     return f'https://{hostname_clean}'
 
 
+def _private_stream_origin(url):
+    """True when this URL points at a Music Assistant stream on the local network."""
+    parsed = urllib.parse.urlsplit(url)
+    host = parsed.hostname or ''
+    if not host:
+        return False
+    if re.match(r'^\d+\.\d+\.\d+\.\d+$', host):
+        return True
+    if parsed.port == 8097:
+        return True
+    if '.' not in host or host.endswith('.local'):
+        return True
+    return False
+
+
 def replace_ip_in_url(url, hostname):
     if not url:
         return url
     try:
-        new_url = re.sub(r'^https?://\d+\.\d+\.\d+\.\d+(?::\d+)?', hostname, url)
-    except re.error:
+        if hostname and _private_stream_origin(url):
+            parsed = urllib.parse.urlsplit(url)
+            new_url = hostname.rstrip('/') + parsed.path
+            if parsed.query:
+                new_url += '?' + parsed.query
+            if parsed.fragment:
+                new_url += '#' + parsed.fragment
+        else:
+            new_url = url
+    except (re.error, ValueError):
         return url.replace(' ', '%20')
     return new_url.replace(' ', '%20')
 

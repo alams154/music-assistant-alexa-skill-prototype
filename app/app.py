@@ -1,5 +1,5 @@
 import os
-from flask import Flask, request, jsonify, Response, g
+from flask import Flask, request, jsonify, Response, redirect, g
 from flask_ask_sdk.skill_adapter import SkillAdapter
 from skill.lambda_function import sb  # sb is the SkillBuilder from skill/lambda_function.py
 import json
@@ -23,6 +23,7 @@ import logging
 from setup_helpers import sanitize_log, enqueue_setup_log, setup_reader_thread as _helpers_setup_reader_thread, read_master_loop as _helpers_read_master_loop
 from setup_helpers import ask_home_from_credentials_dir, has_functional_cli_config, prepare_cli_config_for_configure
 from signal_helpers import register_signal_handlers
+from ha_ingress import browser_path, ingress_prefix
 
 
 def _load_addon_options_into_env():
@@ -31,6 +32,9 @@ def _load_addon_options_into_env():
     try:
         if not os.path.exists(options_path):
             return {}
+        # /data survives add-on updates. Keep ASK login and device mapping there.
+        os.environ.setdefault('ASK_CREDENTIALS_DIR', '/data/.ask')
+        os.environ.setdefault('DEVICE_MAPPING_PATH', '/data/device_players.json')
         with open(options_path, 'r', encoding='utf-8') as f:
             options = json.load(f)
         if not isinstance(options, dict):
@@ -38,10 +42,14 @@ def _load_addon_options_into_env():
 
         loaded = {}
         for key, value in options.items():
-            if value is None:
+            if value is None or value == '':
                 continue
-            os.environ[str(key)] = str(value)
-            loaded[str(key)] = str(value)
+            if isinstance(value, bool):
+                text = 'true' if value else 'false'
+            else:
+                text = str(value)
+            os.environ[str(key)] = text
+            loaded[str(key)] = text
         return loaded
     except Exception:
         return {}
@@ -49,7 +57,7 @@ def _load_addon_options_into_env():
 
 def _safe_options_for_log(options):
     redacted = {}
-    secret_keys = {'APP_USERNAME', 'APP_PASSWORD'}
+    secret_keys = {'APP_USERNAME', 'APP_PASSWORD', 'MA_API_TOKEN'}
     for key, value in options.items():
         if key in secret_keys:
             redacted[key] = 'set' if value else ''
@@ -160,6 +168,11 @@ except Exception:
 def _check_app_basic_auth():
     # Allow the Alexa skill POST endpoint to be called without app-level auth
     if request.path == '/' and request.method == 'POST':
+        return None
+    # Home Assistant embeds the web UI in an iframe, which cannot show a
+    # Basic Auth prompt. Ingress is already limited to Home Assistant admins.
+    # /ma and /alexa keep requiring APP_USERNAME and APP_PASSWORD.
+    if ingress_prefix(request.headers.get('X-Ingress-Path')):
         return None
     # Read credentials from secrets (APP_USERNAME/APP_PASSWORD)
     app_user = get_env_secret('APP_USERNAME')
@@ -282,6 +295,12 @@ def _setup_reader_thread(proc, prefix=None):
 def _read_master_loop(master_fd, prefix=None):
     # Delegate implementation to helpers while binding enqueue function
     return _helpers_read_master_loop(master_fd, _enqueue_setup_log, prefix=prefix)
+
+
+@app.route("/", methods=["GET"])
+def root_redirect():
+    """Ingress opens the add-on root. Send browsers to the status page."""
+    return redirect(browser_path(request.headers.get('X-Ingress-Path'), '/status'), code=302)
 
 
 @app.route("/", methods=["POST"])

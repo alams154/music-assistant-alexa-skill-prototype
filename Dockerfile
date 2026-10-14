@@ -1,5 +1,12 @@
 FROM ubuntu:22.04
 
+# Supervisor passes these when building the add-on. Plain docker build keeps the defaults.
+ARG BUILD_VERSION=dev
+ARG BUILD_ARCH=amd64
+LABEL io.hass.version="${BUILD_VERSION}" \
+      io.hass.type="addon" \
+      io.hass.arch="${BUILD_ARCH}"
+
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Install Python and system dependencies
@@ -9,7 +16,7 @@ RUN apt-get update && \
     apt-get install -y software-properties-common && \
     add-apt-repository -y ppa:deadsnakes/ppa && \
     apt-get update && \
-    apt-get install -y python3.12 python3.12-venv python3-pip libssl-dev curl gnupg ca-certificates && \
+    apt-get install -y python3.12 python3.12-venv python3-pip libssl-dev curl gnupg ca-certificates tzdata && \
     # Install Node.js 18 from NodeSource (ASK CLI requires a modern Node version)
     curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
     apt-get install -y nodejs && \
@@ -149,7 +156,8 @@ COPY app /app/app
 COPY assets /app/assets
 # Copy top-level helper scripts so runtime can execute them (ask_create_skill.sh)
 COPY scripts /app/scripts
-RUN chmod +x /app/scripts/ask_create_skill.sh || true
+COPY custom_components /app/custom_components
+RUN chmod +x /app/scripts/ask_create_skill.sh /app/scripts/run.sh /app/scripts/export_addon_options.py /app/scripts/resolve_nabu_casa.py || true
 
 # Amazon Skill & Host Configuration
 ENV AWS_DEFAULT_REGION=us-east-1
@@ -175,5 +183,6 @@ ENV DEBUG_PORT=${DEBUG_PORT}
 # Expose the port the app runs on
 EXPOSE ${PORT}
 
-# If DEBUG_PORT is empty or set to 0, run without debugpy. Otherwise start debugpy.
-CMD ["/bin/sh", "-lc", "if [ -n \"${DEBUG_PORT}\" ] && [ \"${DEBUG_PORT}\" != \"0\" ]; then exec /app/venv/bin/python -m debugpy --listen 0.0.0.0:${DEBUG_PORT} src/app.py; else exec /app/venv/bin/python src/app.py; fi"]
+# Home Assistant add-on options are applied in run.sh when /data/options.json exists.
+# Docker Compose keeps using the process environment and /root/.ask.
+CMD ["/app/scripts/run.sh"]

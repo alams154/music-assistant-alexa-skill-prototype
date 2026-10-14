@@ -1,0 +1,13 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Music Assistant Alexa Skill",
+        "description": "Exposes the Alexa skill and Music Assistant stream on your Nabu Casa remote URL."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "This integration is already configured."
+    }
+  }
+}

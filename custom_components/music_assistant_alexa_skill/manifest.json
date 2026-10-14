@@ -1,0 +1,13 @@
+{
+  "domain": "music_assistant_alexa_skill",
+  "name": "Music Assistant Alexa Skill",
+  "codeowners": [],
+  "config_flow": true,
+  "dependencies": ["http"],
+  "after_dependencies": ["cloud"],
+  "documentation": "https://www.music-assistant.io/player-support/alexa/",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "requirements": [],
+  "version": "1.1.0"
+}

@@ -4,7 +4,7 @@
 Behavior:
 - Parse VERSION as MAJOR.MINOR.PATCH plus optional suffix (e.g. -beta) and increment PATCH.
 - Preserve any suffix when bumping (e.g. 0.0.2-beta -> 0.0.3-beta).
-- Run `scripts/sync_version.py` to keep `addons/.../config.json` in sync.
+- Run `scripts/sync_version.py` to keep `config.json` in sync.
 - Stage updated files (`git add`) so the commit includes the change.
 
 This script is intended to be run from a repo-local pre-commit hook so version
@@ -88,7 +88,7 @@ def main():
     # Determine if any staged file should trigger an image bump
     need_bump = False
     for f in staged:
-        if f == 'Dockerfile' or f.startswith('app/') or f.startswith('addons/') or f.startswith('.github/workflows/'):
+        if f in ('Dockerfile', 'config.json') or f.startswith(('app/', 'scripts/', '.github/workflows/')):
             need_bump = True
             break
 
@@ -111,7 +111,7 @@ def main():
     run_sync()
 
     # Stage the updated files so the user's commit includes them automatically
-    addon_cfg = ROOT / 'addons' / 'music-assistant-skill' / 'config.json'
+    addon_cfg = ROOT / 'config.json'
     to_stage = [VERSION_FILE]
     if addon_cfg.exists():
         to_stage.append(addon_cfg)
