@@ -19,6 +19,7 @@
             </head>
             <body>
                 <h1>Service Status</h1>
+                <p class="row"><a href="setup">Open Setup</a></p>
                 <div class="row">__SKILL_HTML__</div>
                 <div class="row" id="skill-ask-row">__SKILL_ASK_HTML__</div>
                 <div class="row" id="api-row">__MA_API_HTML__</div>
@@ -28,28 +29,28 @@
                 <script>
                 // Fetch MA and Alexa checks independently so each row updates when ready
                 (function pollMa(){
-                    fetch('/status/ma').then(r=>r.json()).then(j=>{
+                    fetch('status/ma').then(r=>r.json()).then(j=>{
                         try{ const maEl = document.getElementById('api-row'); if(maEl && j.ma_api_html){ maEl.innerHTML = j.ma_api_html; } }catch(e){}
                         setTimeout(pollMa, 3000);
                     }).catch(()=>{ setTimeout(pollMa, 5000); });
                 })();
 
                 (function pollAlexa(){
-                    fetch('/status/alexa').then(r=>r.json()).then(j=>{
+                    fetch('status/alexa').then(r=>r.json()).then(j=>{
                         try{ const alexaEl = document.getElementById('alexa-row'); if(alexaEl && j.alexa_api_html){ alexaEl.innerHTML = j.alexa_api_html; } }catch(e){}
                         setTimeout(pollAlexa, 3000);
                     }).catch(()=>{ setTimeout(pollAlexa, 5000); });
                 })();
 
                 (function pollMetadata(){
-                    fetch('/status/metadata').then(r=>r.json()).then(j=>{
+                    fetch('status/metadata').then(r=>r.json()).then(j=>{
                         try{ const metadataEl = document.getElementById('metadata-row'); if(metadataEl && j.metadata_html){ metadataEl.innerHTML = j.metadata_html; } }catch(e){}
                         setTimeout(pollMetadata, 3000);
                     }).catch(()=>{ setTimeout(pollMetadata, 5000); });
                 })();
 
                 (function pollAsk(){
-                    fetch('/status/ask').then(r=>r.json()).then(j=>{
+                    fetch('status/ask').then(r=>r.json()).then(j=>{
                         try{ const askEl = document.getElementById('skill-ask-row'); if(askEl && j.skill_ask_html){ askEl.innerHTML = j.skill_ask_html; } }catch(e){}
                         // Ask checks are slower; poll less frequently
                         setTimeout(pollAsk, 5000);
@@ -58,7 +59,7 @@
 
                 // Poll invocations count so the invocation row updates live
                 (function pollInvocations(){
-                    fetch('/status/invocations').then(r=>r.json()).then(j=>{
+                    fetch('status/invocations').then(r=>r.json()).then(j=>{
                         try{ const invEl = document.getElementById('invocations-row'); if(invEl && j.invocations_html){ invEl.innerHTML = j.invocations_html; } }catch(e){}
                         setTimeout(pollInvocations, 3000);
                     }).catch(()=>{ setTimeout(pollInvocations, 5000); });
