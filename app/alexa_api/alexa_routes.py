@@ -37,7 +37,12 @@ def register_routes(bp):
             with open(intents_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
                 language_model = data.get('interactionModel', {}).get('languageModel', {})
-                invocation_name = language_model.get('invocationName')
+                # Prefer the configured invocation name so it stays consistent
+                # with the interaction model generated during setup.
+                invocation_name = (
+                    os.environ.get('INVOCATION_NAME', '').strip()
+                    or language_model.get('invocationName')
+                )
                 intent_list = language_model.get('intents', [])
                 intents_with_utterances = [
                     {

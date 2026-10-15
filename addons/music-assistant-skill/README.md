@@ -36,6 +36,7 @@ Set these in the Supervisor add-on configuration:
 | `PORT`               |    No    | `5000`            | Port the service listens on inside the container.                                                       |
 | `DEBUG_PORT`         |    No    | `5678`            | Remote debug port for `debugpy`.                                                                        |
 | `LOCALE`             |    No    | `en-US`           | Skill locale used by setup and interaction model operations.                                            |
+| `INVOCATION_NAME`    |    No    | `music assistant` | Skill invocation name used when generating the interaction model and reported by `/alexa/intents`.      |
 | `AWS_DEFAULT_REGION` |    No    | `us-east-1`       | AWS region used by ASK CLI operations when needed.                                                      |
 | `TZ`                 |    No    | `America/Chicago` | Container timezone used for logs and timestamps.                                                        |
 
