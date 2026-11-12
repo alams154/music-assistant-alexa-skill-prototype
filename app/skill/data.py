@@ -6,10 +6,12 @@ import json
 import os
 import sys
 import logging
+import threading
 from typing import Optional
 from env_secrets import get_env_secret
 import urllib.request
 import urllib.error
+from urllib.parse import quote
 import base64
 import re
 
@@ -40,48 +42,90 @@ info = {
     "secondaryText": ""
 }
 
-def get_latest(api_hostname=None, path='/ma/latest-url', scheme='http', timeout=5, username=None, password=None):
+def _build_info_dict(payload):
+    """Normalize stream/artwork URLs and format APL metadata from a store payload."""
+    stream_url = payload.get('streamUrl') or ''
+    title = payload.get('title', '') or ''
+    artist = payload.get('artist', '') or ''
+    album = payload.get('album', '') or ''
+    image = payload.get('imageUrl') or ''
+
+    secondary = ''
+    if artist and album:
+        secondary = f"{artist} - {album}"
+    elif artist:
+        secondary = artist
+    elif album:
+        secondary = album
+
+    if stream_url and isinstance(stream_url, str):
+        try:
+            stream_url = re.sub(r'(?i)\.flac(?=$|\?)', '.mp3', stream_url)
+            stream_url = quote(stream_url, safe=':/%?=&')
+        except Exception:
+            logging.exception('Failed rewriting stream URL extension for %s', stream_url)
+    if image and isinstance(image, str):
+        image = quote(image, safe=':/%?=&')
+
+    return {
+        'audioSources': stream_url,
+        'backgroundImageSource': image,
+        'coverImageSource': image,
+        'headerAttributionImage': '',
+        'headerTitle': '',
+        'headerSubtitle': '',
+        'primaryText': title,
+        'secondaryText': secondary,
+    }
+
+
+_meta_lock = threading.Lock()
+_device_meta_sig = {}
+
+
+def get_latest(
+    api_hostname=None,
+    path='/ma/latest-url',
+    scheme='http',
+    timeout=5,
+    username=None,
+    password=None,
+    device_id=None,
+    prefer_latest=False,
+    track_changes=False,
+):
     global info
 
-    # PRIORITAET 1: Direkt aus shared_store lesen (KEIN CACHE!)
     try:
         import shared_store
-        if shared_store._store and shared_store._store.get('streamUrl'):
-            payload = shared_store._store
+        from . import device_mapping
+        mapped_player = device_mapping.get_player_for_device(device_id) if device_id else None
+        payload = shared_store.get_ma_stream(
+            device_id=device_id,
+            mapped_player=mapped_player,
+            prefer_latest=prefer_latest,
+        )
+        if payload and payload.get('streamUrl'):
+            entry = _build_info_dict(payload)
+            sig = (
+                payload.get('version'),
+                payload.get('playerKey'),
+                entry['audioSources'],
+                entry['primaryText'],
+                entry['secondaryText'],
+                entry['coverImageSource'],
+            )
+            sig_key = device_id or '_default'
+            with _meta_lock:
+                prev_sig = _device_meta_sig.get(sig_key)
+                changed = (prev_sig != sig) if track_changes else True
+                _device_meta_sig[sig_key] = sig
+                if not device_id or payload == shared_store._store or changed:
+                    info.update(entry)
 
-            stream_url = payload.get('streamUrl') or ''
-            title = payload.get('title', '') or ''
-            artist = payload.get('artist', '') or ''
-            album = payload.get('album', '') or ''
-            image = payload.get('imageUrl') or ''
-
-            secondary = ''
-            if artist and album:
-                secondary = f"{artist} - {album}"
-            elif artist:
-                secondary = artist
-            elif album:
-                secondary = album
-
-            if stream_url and isinstance(stream_url, str):
-                try:
-                    stream_url = re.sub(r'(?i)\.flac(?=$|\?)', '.mp3', stream_url)
-                except Exception:
-                    logging.exception('Failed rewriting stream URL extension for %s', stream_url)
-
-            info.update({
-                'audioSources': stream_url,
-                'backgroundImageSource': image,
-                'coverImageSource': image,
-                'headerAttributionImage': '',
-                'headerTitle': '',
-                'headerSubtitle': '',
-                'primaryText': title,
-                'secondaryText': secondary
-            })
-
-            logging.info('Loaded from shared_store: %s - %s', title, stream_url[:60])
-            return {'changed': True}
+            if not track_changes or changed:
+                logging.info('Loaded from shared_store: %s - %s', entry['primaryText'], entry['audioSources'][:80])
+            return {'changed': changed, 'info': entry, 'playerKey': payload.get('playerKey')}
     except Exception as e:
         logging.warning('shared_store read failed: %s', e)
 
@@ -113,37 +157,7 @@ def get_latest(api_hostname=None, path='/ma/latest-url', scheme='http', timeout=
             if not isinstance(payload, dict):
                 return {'changed': False}
 
-            stream_url = payload.get('streamUrl') or ''
-            title = payload.get('title', '') or ''
-            artist = payload.get('artist', '') or ''
-            album = payload.get('album', '') or ''
-            image = payload.get('imageUrl') or ''
-
-            secondary = ''
-            if artist and album:
-                secondary = f"{artist} - {album}"
-            elif artist:
-                secondary = artist
-            elif album:
-                secondary = album
-
-            if stream_url and isinstance(stream_url, str):
-                try:
-                    stream_url = re.sub(r'(?i)\.flac(?=$|\?)', '.mp3', stream_url)
-                except Exception:
-                    pass
-
-            info.update({
-                'audioSources': stream_url,
-                'backgroundImageSource': image,
-                'coverImageSource': image,
-                'headerAttributionImage': '',
-                'headerTitle': '',
-                'headerSubtitle': '',
-                'primaryText': title,
-                'secondaryText': secondary
-            })
-
+            info.update(_build_info_dict(payload))
             return {'changed': True}
     except Exception:
         pass

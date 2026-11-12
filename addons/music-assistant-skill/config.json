@@ -15,33 +15,55 @@
     "5678/tcp": 5678
   },
   "ports_description": {
-    "5000/tcp": "Skill API port",
+    "5000/tcp": "Skill API and setup web UI port",
     "5678/tcp": "Debug port (optional)"
   },
   "options": {
     "SKILL_HOSTNAME": "",
+    "SKILL_ID": "",
     "MA_HOSTNAME": "",
+    "IMAGE_PROXY_VIA_SKILL": false,
+    "MA_IMAGE_BASE_URL": "http://127.0.0.1:8095",
+    "ENABLE_APL": false,
     "APP_USERNAME": "",
     "APP_PASSWORD": "",
+    "ASK_CREDENTIALS_DIR": "/data/.ask",
+    "SKIP_URL_VALIDATION": false,
+    "QUIET_HTTP": "1",
+    "MA_API_URL": "",
+    "MA_API_TOKEN": "",
     "PORT": 5000,
-    "DEBUG_PORT": 5678,
+    "WAITRESS_THREADS": 8,
+    "DEBUG_PORT": 0,
     "LOCALE": "en-US",
     "AWS_DEFAULT_REGION": "us-east-1",
-    "TZ": "America/Chicago"
+    "TZ": "UTC"
   },
   "schema": {
     "SKILL_HOSTNAME": "str",
-    "MA_HOSTNAME": "str",
-    "APP_USERNAME": "str",
-    "APP_PASSWORD": "str",
+    "SKILL_ID": "str?",
+    "MA_HOSTNAME": "str?",
+    "IMAGE_PROXY_VIA_SKILL": "bool?",
+    "MA_IMAGE_BASE_URL": "str?",
+    "ENABLE_APL": "bool?",
+    "APP_USERNAME": "str?",
+    "APP_PASSWORD": "str?",
+    "ASK_CREDENTIALS_DIR": "str?",
+    "SKIP_URL_VALIDATION": "bool?",
+    "QUIET_HTTP": "str?",
+    "MA_API_URL": "str?",
+    "MA_API_TOKEN": "str?",
     "PORT": "int",
-    "DEBUG_PORT": "int",
+    "WAITRESS_THREADS": "int?",
+    "DEBUG_PORT": "int?",
     "LOCALE": "str",
     "AWS_DEFAULT_REGION": "str",
     "TZ": "str"
   },
-  "webui": "http://[HOST]:[PORT:5000]",
-  "map": [],
+  "webui": "http://[HOST]:[PORT:5000]/status",
+  "map": [
+    "share:ro"
+  ],
   "ingress": false,
   "host_network": false
 }

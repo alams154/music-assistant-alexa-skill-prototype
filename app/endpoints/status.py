@@ -293,20 +293,17 @@ def _compute_metadata_html():
     """Compute HTML showing the current APL metadata being sent in refreshes."""
     try:
         from skill import data as skill_data
-        from skill.util import get_ma_hostname, replace_ip_in_url
-        
+        from skill.util import rewrite_apl_image_url
+
         metadata_info = dict(skill_data.info)  # Create a copy
-        
-        # Apply MA_HOSTNAME replacement to image URLs for display
+
         try:
-            hostname = get_ma_hostname(raise_on_http_scheme=False)
-            if hostname:
-                if metadata_info.get('coverImageSource'):
-                    metadata_info['coverImageSource'] = replace_ip_in_url(metadata_info['coverImageSource'], hostname)
-                if metadata_info.get('backgroundImageSource'):
-                    metadata_info['backgroundImageSource'] = replace_ip_in_url(metadata_info['backgroundImageSource'], hostname)
+            if metadata_info.get('coverImageSource'):
+                metadata_info['coverImageSource'] = rewrite_apl_image_url(metadata_info['coverImageSource'])
+            if metadata_info.get('backgroundImageSource'):
+                metadata_info['backgroundImageSource'] = rewrite_apl_image_url(metadata_info['backgroundImageSource'])
         except Exception:
-            pass  # If hostname replacement fails, show original URLs
+            pass  # If replacement fails, show original URLs
         
         pretty_metadata = json.dumps(metadata_info, indent=2, ensure_ascii=False)
         content_preview = escape(pretty_metadata)

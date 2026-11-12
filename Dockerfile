@@ -162,7 +162,10 @@ ENV TZ=UTC
 # SKILL_HOSTNAME: hostname used when creating the Alexa skill manifest and endpoints
 ENV MA_HOSTNAME=""
 ENV SKILL_HOSTNAME=""
+ENV IMAGE_PROXY_VIA_SKILL=false
+ENV MA_IMAGE_BASE_URL="http://127.0.0.1:8095"
 ENV PORT=5000
+ENV WAITRESS_THREADS=8
 ENV LOCALE=en-US
 # When set to 1 (default) we reduce HTTP request log noise (werkzeug/urllib3)
 ENV QUIET_HTTP=1

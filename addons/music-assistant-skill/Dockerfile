@@ -3,8 +3,13 @@ FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Install Python and system dependencies
+# Python 3.12 via deadsnakes: Ubuntu 22.04 only ships 3.10 by default, but
+# music-assistant-client (used for MA voice-control commands) requires >=3.11.
 RUN apt-get update && \
-    apt-get install -y python3.10 python3.10-venv python3-pip libssl-dev curl gnupg ca-certificates && \
+    apt-get install -y software-properties-common && \
+    add-apt-repository -y ppa:deadsnakes/ppa && \
+    apt-get update && \
+    apt-get install -y python3.12 python3.12-venv python3-pip libssl-dev curl gnupg ca-certificates && \
     # Install Node.js 18 from NodeSource (ASK CLI requires a modern Node version)
     curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
     apt-get install -y nodejs && \
@@ -14,7 +19,7 @@ WORKDIR /app
 
 # Copy only requirements first, then install dependencies
 COPY app/requirements.txt /app/requirements.txt
-RUN python3.10 -m venv venv && \
+RUN python3.12 -m venv venv && \
     . venv/bin/activate && \
     pip install --upgrade pip && \
     pip install -r requirements.txt && \
@@ -68,6 +73,64 @@ if needle in src:
 else:
     print('No patch needed for verifier.py')
 PY
+
+# Apply certvalidator registry.py patch so OS trust-root iteration does not crash
+# with asn1crypto >= 1.5.1.
+RUN /app/venv/bin/python - <<'PY'
+import sysconfig, os, sys
+try:
+    site = sysconfig.get_paths()['purelib']
+except Exception:
+    print('Could not determine site-packages path; skipping registry patch')
+    sys.exit(0)
+
+registry_path = os.path.join(site, 'certvalidator', 'registry.py')
+if not os.path.exists(registry_path):
+    print('registry.py not found at', registry_path, '; skipping patch')
+    sys.exit(0)
+
+with open(registry_path, 'r', encoding='utf-8') as f:
+    src = f.read()
+
+needle = (
+    '        for trust_root in trust_roots:\n'
+    '            hashable = trust_root.subject.hashable\n'
+    '            if hashable not in self._subject_map:\n'
+    '                self._subject_map[hashable] = []\n'
+    '            self._subject_map[hashable].append(trust_root)\n'
+    '            if trust_root.key_identifier:\n'
+    '                self._key_identifier_map[trust_root.key_identifier] = trust_root\n'
+    '            self._ca_lookup[trust_root.signature] = True'
+)
+patch = (
+    '        for trust_root in trust_roots:\n'
+    '            try:\n'
+    '                hashable = trust_root.subject.hashable\n'
+    '            except Exception:\n'
+    '                continue\n'
+    '            if hashable not in self._subject_map:\n'
+    '                self._subject_map[hashable] = []\n'
+    '            self._subject_map[hashable].append(trust_root)\n'
+    '            if trust_root.key_identifier:\n'
+    '                self._key_identifier_map[trust_root.key_identifier] = trust_root\n'
+    '            self._ca_lookup[trust_root.signature] = True'
+)
+
+if needle in src:
+    new_src = src.replace(needle, patch)
+    backup = registry_path + '.orig'
+    try:
+        if not os.path.exists(backup):
+            with open(backup, 'w', encoding='utf-8') as b:
+                b.write(src)
+        with open(registry_path, 'w', encoding='utf-8') as f:
+            f.write(new_src)
+        print('Patched', registry_path, '(backup at', backup + ')')
+    except Exception as e:
+        print('Failed to write patch:', e)
+else:
+    print('No patch needed for registry.py (needle not found)')
+PY
 # Install ASK CLI (v2) globally so container can run `ask configure`
 RUN npm install -g ask-cli || true
 
@@ -93,7 +156,10 @@ ENV TZ=UTC
 # SKILL_HOSTNAME: hostname used when creating the Alexa skill manifest and endpoints
 ENV MA_HOSTNAME=""
 ENV SKILL_HOSTNAME=""
+ENV IMAGE_PROXY_VIA_SKILL=false
+ENV MA_IMAGE_BASE_URL="http://127.0.0.1:8095"
 ENV PORT=5000
+ENV WAITRESS_THREADS=8
 ENV LOCALE=en-US
 # When set to 1 (default) we reduce HTTP request log noise (werkzeug/urllib3)
 ENV QUIET_HTTP=1

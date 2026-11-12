@@ -91,7 +91,8 @@ try:
 except Exception:
     pass
 # Without a skill ID ask-sdk skips the check that a request is meant for this skill.
-sb.skill_id = os.environ.get('SKILL_ID', '')
+# ask-sdk checks `if self.skill_id is not None`, so normalize empty strings to None.
+sb.skill_id = os.environ.get('SKILL_ID', '').strip() or None
 if not sb.skill_id:
     # The setup page creates the skill, so a first run has no ID yet.
     app.logger.warning('SKILL_ID is not set: accepting signed requests for any skill')
@@ -134,7 +135,26 @@ class BasicAuthMiddleware:
             except Exception:
                 pass
 
-        start_response('401 Unauthorized', [('Content-Type', 'text/plain'), ('WWW-Authenticate', 'Basic realm="music-assistant-skill"')])
+        try:
+            clen = int(environ.get('CONTENT_LENGTH') or 0)
+            if 0 < clen <= 65536 and environ.get('wsgi.input'):
+                environ['wsgi.input'].read(clen)
+        except Exception:
+            pass
+        app.logger.warning(
+            'BasicAuth rejected %s %s from %s',
+            environ.get('REQUEST_METHOD'),
+            environ.get('PATH_INFO'),
+            environ.get('REMOTE_ADDR'),
+        )
+        start_response(
+            '401 Unauthorized',
+            [
+                ('Content-Type', 'text/plain'),
+                ('Content-Length', '13'),
+                ('WWW-Authenticate', 'Basic realm="music-assistant-skill"'),
+            ],
+        )
         return [b'Access denied']
 
 
@@ -147,6 +167,33 @@ alexa_app.wsgi_app = ProxyFix(alexa_app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 ma_app.wsgi_app = BasicAuthMiddleware(ma_app.wsgi_app)
 alexa_app.wsgi_app = BasicAuthMiddleware(alexa_app.wsgi_app)
 app.wsgi_app = DispatcherMiddleware(app.wsgi_app, {'/ma': ma_app.wsgi_app, '/alexa': alexa_app.wsgi_app})
+
+
+def _attach_api_logging(sub_app, prefix):
+    @sub_app.before_request
+    def _api_log_start():
+        g._api_t0 = time.monotonic()
+
+    @sub_app.after_request
+    def _api_log_end(response):
+        if request.method == 'GET' and request.path == '/latest-url' and response.status_code in (200, 304, 404):
+            return response
+        dt_ms = (time.monotonic() - getattr(g, '_api_t0', time.monotonic())) * 1000.0
+        app.logger.info(
+            'API %s %s%s host=%s remote=%s -> %s (%.1fms)',
+            request.method,
+            prefix,
+            request.path,
+            request.host,
+            request.remote_addr,
+            response.status_code,
+            dt_ms,
+        )
+        return response
+
+
+_attach_api_logging(ma_app, '/ma')
+_attach_api_logging(alexa_app, '/alexa')
 # Log mount information only when running the module as the main program
 try:
     if __name__ == '__main__':
@@ -155,11 +202,25 @@ except Exception:
     # Fallback: do not allow logging failures to crash import
     pass
 
-# Global basic auth for the app (protect everything except the root Alexa skill endpoint)
+_IMAGEPROXY_ID_RE = re.compile(r'^[0-9a-fA-F]{16,128}$')
+_IMAGEPROXY_PATH_RE = re.compile(r'^/imageproxy/[0-9a-fA-F]{16,128}$')
+_IMAGEPROXY_MAX_BYTES = 8 * 1024 * 1024
+_IMAGEPROXY_ALLOWED_FMTS = {'jpg', 'jpeg', 'png', 'webp'}
+_imageproxy_tls = threading.local()
+
+
+def _imageproxy_enabled():
+    return os.environ.get('IMAGE_PROXY_VIA_SKILL', 'false').lower() in ('1', 'true', 'yes', 'on')
+
+
+# Global basic auth for the app (protect everything except the root Alexa skill endpoint
+# and the strictly scoped artwork proxy when enabled)
 @app.before_request
 def _check_app_basic_auth():
     # Allow the Alexa skill POST endpoint to be called without app-level auth
     if request.path == '/' and request.method == 'POST':
+        return None
+    if _imageproxy_enabled() and request.method in ('GET', 'HEAD') and _IMAGEPROXY_PATH_RE.fullmatch(request.path):
         return None
     # Read credentials from secrets (APP_USERNAME/APP_PASSWORD)
     app_user = get_env_secret('APP_USERNAME')
@@ -697,6 +758,73 @@ def setup_stop():
     return jsonify({'status':'stopped'})
 
 
+@app.route('/imageproxy/<image_id>', methods=['GET', 'HEAD'])
+def proxy_ma_artwork(image_id):
+    """Scoped read-only artwork proxy to serve MA /imageproxy/<hex> over SKILL_HOSTNAME."""
+    if not _imageproxy_enabled() or not _IMAGEPROXY_ID_RE.fullmatch(image_id):
+        return Response('Not found', status=404)
+
+    import requests as _requests
+    sess = getattr(_imageproxy_tls, 'session', None)
+    if sess is None:
+        sess = _requests.Session()
+        _imageproxy_tls.session = sess
+
+    ma_base = os.environ.get('MA_IMAGE_BASE_URL', 'http://127.0.0.1:8095').strip().rstrip('/')
+    if not (ma_base.startswith('http://') or ma_base.startswith('https://')):
+        return Response('Image proxy misconfigured', status=502)
+
+    safe_params = {}
+    raw_size = request.args.get('size', '').strip()
+    if raw_size.isdigit():
+        size_val = int(raw_size)
+        if 1 <= size_val <= 2048:
+            safe_params['size'] = str(size_val)
+    raw_fmt = request.args.get('fmt', '').strip().lower()
+    if raw_fmt in _IMAGEPROXY_ALLOWED_FMTS:
+        safe_params['fmt'] = raw_fmt
+
+    upstream_url = f'{ma_base}/imageproxy/{image_id}'
+    try:
+        with sess.get(
+            upstream_url,
+            params=safe_params,
+            timeout=5,
+            allow_redirects=False,
+            stream=True,
+        ) as upstream:
+            if upstream.status_code != 200:
+                app.logger.warning('ImageProxy upstream %s returned %s', upstream_url, upstream.status_code)
+                return Response('Upstream artwork unavailable', status=404 if upstream.status_code == 404 else 502)
+            content_type = upstream.headers.get('Content-Type', '')
+            if not content_type.lower().startswith('image/'):
+                app.logger.warning('ImageProxy blocked non-image Content-Type %r from %s', content_type, upstream_url)
+                return Response('Invalid artwork content type', status=502)
+
+            chunks = []
+            total = 0
+            if request.method != 'HEAD':
+                for chunk in upstream.iter_content(chunk_size=65536):
+                    if not chunk:
+                        continue
+                    total += len(chunk)
+                    if total > _IMAGEPROXY_MAX_BYTES:
+                        app.logger.warning('ImageProxy response exceeded %s bytes for %s', _IMAGEPROXY_MAX_BYTES, upstream_url)
+                        return Response('Artwork too large', status=502)
+                    chunks.append(chunk)
+
+            out_headers = {
+                'Content-Type': content_type,
+                'Cache-Control': 'public, max-age=86400',
+            }
+            if request.method == 'HEAD' and upstream.headers.get('Content-Length'):
+                out_headers['Content-Length'] = upstream.headers['Content-Length']
+            return Response(b''.join(chunks), status=200, headers=out_headers)
+    except Exception as exc:
+        app.logger.warning('ImageProxy error fetching %s: %s', upstream_url, exc)
+        return Response('Upstream artwork fetch failed', status=502)
+
+
 if __name__ == "__main__":
     port = int(os.environ.get('PORT', '5000'))
     # Respect FLASK_DEBUG (1 enables debug mode) and FLASK_RELOADER (1 enables reloader)
@@ -705,5 +833,28 @@ if __name__ == "__main__":
         use_reloader = os.environ.get('FLASK_RELOADER', '0') == '1'
         app.run(debug=True, use_reloader=use_reloader, host=os.environ.get('HOST', '0.0.0.0'), port=port)
     else:
-        # Production/dev host mode: don't use the reloader to avoid transient restarts
-        app.run(debug=False, host=os.environ.get('HOST', '0.0.0.0'), port=port)
+        import socket
+        from waitress import serve
+
+        host = os.environ.get('HOST', '0.0.0.0').strip()
+        threads = max(1, int(os.environ.get('WAITRESS_THREADS', '8')))
+        listen_targets = [f'{host}:{port}']
+        if host in ('0.0.0.0', '*', ''):
+            try:
+                with socket.socket(socket.AF_INET6, socket.SOCK_STREAM) as s6:
+                    if hasattr(socket, 'IPPROTO_IPV6') and hasattr(socket, 'IPV6_V6ONLY'):
+                        s6.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 1)
+                    s6.bind(('::', 0))
+                listen_targets = [f'0.0.0.0:{port}', f'[::]:{port}']
+            except OSError:
+                listen_targets = [f'0.0.0.0:{port}']
+        app.logger.info('Starting Waitress WSGI server on %s (threads=%s)', ' '.join(listen_targets), threads)
+        serve(
+            app.wsgi_app,
+            listen=' '.join(listen_targets),
+            threads=threads,
+            clear_untrusted_proxy_headers=True,
+            trusted_proxy='*',
+            trusted_proxy_count=1,
+            trusted_proxy_headers={'x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto'},
+        )

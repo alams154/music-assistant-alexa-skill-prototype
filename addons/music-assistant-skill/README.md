@@ -27,17 +27,27 @@ This folder contains the Home Assistant add-on wrapper for the `music-assistant-
 
 Set these in the Supervisor add-on configuration:
 
-| Variable             | Required | Default           | Description                                                                                             |
-| -------------------- | :------: | ----------------- | ------------------------------------------------------------------------------------------------------- |
-| `SKILL_HOSTNAME`     |   Yes    | —                 | Public HTTPS hostname used in the Alexa skill manifest and endpoint validation.                         |
-| `MA_HOSTNAME`        |    No    | —                 | Music Assistant server hostname. Required if your device does not support APL or if you want album art. |
-| `APP_USERNAME`       |    No    | —                 | Username for the Music Assistant web UI and API basic authentication.                                   |
-| `APP_PASSWORD`       |    No    | —                 | Password for the Music Assistant web UI and API basic authentication.                                   |
-| `PORT`               |    No    | `5000`            | Port the service listens on inside the container.                                                       |
-| `DEBUG_PORT`         |    No    | `5678`            | Remote debug port for `debugpy`.                                                                        |
-| `LOCALE`             |    No    | `en-US`           | Skill locale used by setup and interaction model operations.                                            |
-| `AWS_DEFAULT_REGION` |    No    | `us-east-1`       | AWS region used by ASK CLI operations when needed.                                                      |
-| `TZ`                 |    No    | `America/Chicago` | Container timezone used for logs and timestamps.                                                        |
+| Variable | Required | Default | Description |
+| --- | :---: | --- | --- |
+| `SKILL_HOSTNAME` | Yes | — | Public HTTPS hostname used in the Alexa skill manifest and endpoint validation. |
+| `SKILL_ID` | No | — | Optional Alexa skill ID (`amzn1.ask.skill.…`) to restrict request verification to your skill. |
+| `MA_HOSTNAME` | No | — | Music Assistant stream hostname. Required for non-APL Echo devices, or for album art if `IMAGE_PROXY_VIA_SKILL` is false. |
+| `IMAGE_PROXY_VIA_SKILL` | No | `false` | Proxy Music Assistant `/imageproxy/<id>` artwork through `https://<SKILL_HOSTNAME>/imageproxy/<id>` for Echo Show APL devices without exposing Music Assistant publicly. |
+| `MA_IMAGE_BASE_URL` | No | `http://127.0.0.1:8095` | Internal Music Assistant web base URL used when `IMAGE_PROXY_VIA_SKILL=true`. |
+| `ENABLE_APL` | No | `false` | Enable rich APL rendering (cover art, track text, controls) on screen Echos. |
+| `APP_USERNAME` | No | — | Username or path to secret file under `/share/...` for web UI and API basic auth. |
+| `APP_PASSWORD` | No | — | Password or path to secret file under `/share/...` for web UI and API basic auth. |
+| `ASK_CREDENTIALS_DIR` | No | `/data/.ask` | Persistent directory for ASK CLI credentials across add-on rebuilds. |
+| `SKIP_URL_VALIDATION` | No | `false` | Skip server-side HEAD/GET validation of rewritten stream URLs before returning `AudioPlayer.Play`. |
+| `QUIET_HTTP` | No | `"1"` | Set `"1"` to suppress noisy library HTTP logs. |
+| `MA_API_URL` | No | — | Music Assistant WebSocket/API URL for Next/Previous voice control. |
+| `MA_API_TOKEN` | No | — | Long-lived Music Assistant token (or `/share/...` file path). |
+| `PORT` | No | `5000` | Port the service listens on inside the container. |
+| `WAITRESS_THREADS` | No | `8` | Worker thread count for Waitress WSGI server. |
+| `DEBUG_PORT` | No | `0` | Optional remote debug port for `debugpy` (`0` disables debugpy). |
+| `LOCALE` | No | `en-US` | Skill locale used by setup and interaction model operations. |
+| `AWS_DEFAULT_REGION` | No | `us-east-1` | AWS region used by ASK CLI operations when needed. |
+| `TZ` | No | `UTC` | Container timezone used for logs and timestamps. |
 
 ### Notes
 
