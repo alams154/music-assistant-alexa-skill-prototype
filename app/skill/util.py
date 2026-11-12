@@ -73,6 +73,32 @@ def get_ma_hostname(raise_on_http_scheme=True):
     return f'https://{hostname_clean}'
 
 
+_IMAGEPROXY_URL_RE = re.compile(r'^https?://[^/]+(/imageproxy/[0-9a-fA-F]{16,128}(?:\?.*)?)$')
+
+
+def rewrite_apl_image_url(url):
+    """Rewrite MA imageproxy URLs to SKILL_HOSTNAME proxy first (when enabled) or MA_HOSTNAME."""
+    if not url or not isinstance(url, str):
+        return url
+    proxy_via_skill = os.environ.get('IMAGE_PROXY_VIA_SKILL', 'false').lower() in ('1', 'true', 'yes', 'on')
+    skill_host_raw = os.environ.get('SKILL_HOSTNAME', '').strip().strip('"\' ').rstrip('/')
+    if proxy_via_skill and skill_host_raw:
+        if skill_host_raw.startswith('https://'):
+            skill_base = skill_host_raw
+        else:
+            skill_base = 'https://' + skill_host_raw.removeprefix('http://')
+        m = _IMAGEPROXY_URL_RE.match(url)
+        if m:
+            return quote(f'{skill_base}{m.group(1)}', safe=':/%?=&')
+    try:
+        ma_host = get_ma_hostname(raise_on_http_scheme=False)
+    except ValueError:
+        ma_host = ''
+    if ma_host:
+        return replace_ip_in_url(url, ma_host)
+    return quote(url, safe=':/%?=&')
+
+
 def replace_ip_in_url(url, hostname):
     if not url:
         return url
@@ -312,18 +338,8 @@ def update_apl_metadata(response_builder):
     if not apl_enabled():
         return
     try:
-        # Replace MA-hosted image sources if MA_HOSTNAME is set
-        try:
-            hostname = get_ma_hostname(raise_on_http_scheme=False)
-        except ValueError:
-            hostname = ''
-
-        cover_image = data.info.get("coverImageSource", "")
-        background_image = data.info.get("backgroundImageSource", "")
-
-        if hostname:
-            cover_image = replace_ip_in_url(cover_image, hostname)
-            background_image = replace_ip_in_url(background_image, hostname)
+        cover_image = rewrite_apl_image_url(data.info.get("coverImageSource", ""))
+        background_image = rewrite_apl_image_url(data.info.get("backgroundImageSource", ""))
 
         # Build SetValue commands to update individual components
         commands = []

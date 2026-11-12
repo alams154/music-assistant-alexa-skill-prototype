@@ -28,7 +28,7 @@ def add_apl(response_builder, start_paused=False):
     # type: (ResponseFactory, bool) -> None
     """Add the RenderDocumentDirective to the response with APL document."""
     # Import here to avoid circular imports
-    from .util import get_ma_hostname, replace_ip_in_url
+    from .util import rewrite_apl_image_url
 
     # Get metadata from shared_store (most reliable) or data.info as fallback
     metadata = _get_metadata()
@@ -36,18 +36,8 @@ def add_apl(response_builder, start_paused=False):
         logging.warning("No metadata available for APL rendering")
         return
 
-    # Replace MA-hosted image sources if MA_HOSTNAME is set
-    try:
-        hostname = get_ma_hostname(raise_on_http_scheme=False)
-    except ValueError:
-        hostname = ''
-
-    cover_image = metadata.get("coverImageSource", "")
-    background_image = metadata.get("backgroundImageSource", "")
-
-    if hostname:
-        cover_image = replace_ip_in_url(cover_image, hostname)
-        background_image = replace_ip_in_url(background_image, hostname)
+    cover_image = rewrite_apl_image_url(metadata.get("coverImageSource", ""))
+    background_image = rewrite_apl_image_url(metadata.get("backgroundImageSource", ""))
 
     # Load the APL document template
     apl_document = _load_apl_template()

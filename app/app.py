@@ -202,11 +202,25 @@ except Exception:
     # Fallback: do not allow logging failures to crash import
     pass
 
-# Global basic auth for the app (protect everything except the root Alexa skill endpoint)
+_IMAGEPROXY_ID_RE = re.compile(r'^[0-9a-fA-F]{16,128}$')
+_IMAGEPROXY_PATH_RE = re.compile(r'^/imageproxy/[0-9a-fA-F]{16,128}$')
+_IMAGEPROXY_MAX_BYTES = 8 * 1024 * 1024
+_IMAGEPROXY_ALLOWED_FMTS = {'jpg', 'jpeg', 'png', 'webp'}
+_imageproxy_tls = threading.local()
+
+
+def _imageproxy_enabled():
+    return os.environ.get('IMAGE_PROXY_VIA_SKILL', 'false').lower() in ('1', 'true', 'yes', 'on')
+
+
+# Global basic auth for the app (protect everything except the root Alexa skill endpoint
+# and the strictly scoped artwork proxy when enabled)
 @app.before_request
 def _check_app_basic_auth():
     # Allow the Alexa skill POST endpoint to be called without app-level auth
     if request.path == '/' and request.method == 'POST':
+        return None
+    if _imageproxy_enabled() and request.method in ('GET', 'HEAD') and _IMAGEPROXY_PATH_RE.fullmatch(request.path):
         return None
     # Read credentials from secrets (APP_USERNAME/APP_PASSWORD)
     app_user = get_env_secret('APP_USERNAME')
@@ -742,6 +756,73 @@ def setup_stop():
             pass
         _setup_proc = None
     return jsonify({'status':'stopped'})
+
+
+@app.route('/imageproxy/<image_id>', methods=['GET', 'HEAD'])
+def proxy_ma_artwork(image_id):
+    """Scoped read-only artwork proxy to serve MA /imageproxy/<hex> over SKILL_HOSTNAME."""
+    if not _imageproxy_enabled() or not _IMAGEPROXY_ID_RE.fullmatch(image_id):
+        return Response('Not found', status=404)
+
+    import requests as _requests
+    sess = getattr(_imageproxy_tls, 'session', None)
+    if sess is None:
+        sess = _requests.Session()
+        _imageproxy_tls.session = sess
+
+    ma_base = os.environ.get('MA_IMAGE_BASE_URL', 'http://127.0.0.1:8095').strip().rstrip('/')
+    if not (ma_base.startswith('http://') or ma_base.startswith('https://')):
+        return Response('Image proxy misconfigured', status=502)
+
+    safe_params = {}
+    raw_size = request.args.get('size', '').strip()
+    if raw_size.isdigit():
+        size_val = int(raw_size)
+        if 1 <= size_val <= 2048:
+            safe_params['size'] = str(size_val)
+    raw_fmt = request.args.get('fmt', '').strip().lower()
+    if raw_fmt in _IMAGEPROXY_ALLOWED_FMTS:
+        safe_params['fmt'] = raw_fmt
+
+    upstream_url = f'{ma_base}/imageproxy/{image_id}'
+    try:
+        with sess.get(
+            upstream_url,
+            params=safe_params,
+            timeout=5,
+            allow_redirects=False,
+            stream=True,
+        ) as upstream:
+            if upstream.status_code != 200:
+                app.logger.warning('ImageProxy upstream %s returned %s', upstream_url, upstream.status_code)
+                return Response('Upstream artwork unavailable', status=404 if upstream.status_code == 404 else 502)
+            content_type = upstream.headers.get('Content-Type', '')
+            if not content_type.lower().startswith('image/'):
+                app.logger.warning('ImageProxy blocked non-image Content-Type %r from %s', content_type, upstream_url)
+                return Response('Invalid artwork content type', status=502)
+
+            chunks = []
+            total = 0
+            if request.method != 'HEAD':
+                for chunk in upstream.iter_content(chunk_size=65536):
+                    if not chunk:
+                        continue
+                    total += len(chunk)
+                    if total > _IMAGEPROXY_MAX_BYTES:
+                        app.logger.warning('ImageProxy response exceeded %s bytes for %s', _IMAGEPROXY_MAX_BYTES, upstream_url)
+                        return Response('Artwork too large', status=502)
+                    chunks.append(chunk)
+
+            out_headers = {
+                'Content-Type': content_type,
+                'Cache-Control': 'public, max-age=86400',
+            }
+            if request.method == 'HEAD' and upstream.headers.get('Content-Length'):
+                out_headers['Content-Length'] = upstream.headers['Content-Length']
+            return Response(b''.join(chunks), status=200, headers=out_headers)
+    except Exception as exc:
+        app.logger.warning('ImageProxy error fetching %s: %s', upstream_url, exc)
+        return Response('Upstream artwork fetch failed', status=502)
 
 
 if __name__ == "__main__":
