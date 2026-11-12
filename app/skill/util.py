@@ -133,6 +133,7 @@ def play(url, offset, text, response_builder, supports_apl=False):
             return response_builder.response
 
         url = replace_ip_in_url(url, hostname)
+        url = re.sub(r'(?i)\.flac(?=$|\?)', '.mp3', url)
 
         skip_validation = os.environ.get('SKIP_URL_VALIDATION', 'false').lower() in ('true', '1', 'yes')
 
@@ -216,6 +217,7 @@ def play_later(url, response_builder, expected_previous_token=None):
         return response_builder.response
 
     url = replace_ip_in_url(url, hostname)
+    url = re.sub(r'(?i)\.flac(?=$|\?)', '.mp3', url)
 
     if not expected_previous_token:
         # Nothing to chain from. Enqueueing anyway would be dropped by Alexa.

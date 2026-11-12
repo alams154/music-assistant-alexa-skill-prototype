@@ -3,7 +3,9 @@
 import json
 import logging
 import os
+import re
 import sys
+from urllib.parse import quote
 from ask_sdk_model.interfaces.alexa.presentation.apl import RenderDocumentDirective
 from ask_sdk_core.response_helper import ResponseFactory
 from . import data
@@ -68,11 +70,14 @@ def add_apl(response_builder, start_paused=False):
 
     # Update mainTemplate with metadata values
     try:
+        audio_sources = metadata.get("audioSources", "")
+        if isinstance(audio_sources, str) and audio_sources:
+            audio_sources = quote(audio_sources, safe=':/%?=&')
         main_template_item = apl_document["mainTemplate"]["items"][0]
         main_template_item.update({
-            "audioSources": metadata.get("audioSources", ""),
-            "backgroundImageSource": background_image,
-            "coverImageSource": cover_image,
+            "audioSources": audio_sources,
+            "backgroundImageSource": quote(background_image, safe=':/%?=&') if isinstance(background_image, str) and background_image else background_image,
+            "coverImageSource": quote(cover_image, safe=':/%?=&') if isinstance(cover_image, str) and cover_image else cover_image,
             "headerAttributionImage": metadata.get("headerAttributionImage", ""),
             "headerTitle": metadata.get("headerTitle", ""),
             "headerSubtitle": metadata.get("headerSubtitle", ""),
@@ -102,8 +107,11 @@ def _get_metadata():
         import shared_store
         if shared_store._store:
             store = shared_store._store
+            stream_url = store.get("streamUrl", "") or ""
+            if isinstance(stream_url, str) and stream_url:
+                stream_url = re.sub(r'(?i)\.flac(?=$|\?)', '.mp3', stream_url)
             return {
-                "audioSources": store.get("streamUrl", ""),
+                "audioSources": stream_url,
                 "backgroundImageSource": store.get("imageUrl", ""),
                 "coverImageSource": store.get("imageUrl", ""),
                 "headerAttributionImage": "",
