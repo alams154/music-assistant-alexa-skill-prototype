@@ -163,6 +163,7 @@ ENV TZ=UTC
 ENV MA_HOSTNAME=""
 ENV SKILL_HOSTNAME=""
 ENV PORT=5000
+ENV WAITRESS_THREADS=8
 ENV LOCALE=en-US
 # When set to 1 (default) we reduce HTTP request log noise (werkzeug/urllib3)
 ENV QUIET_HTTP=1

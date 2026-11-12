@@ -91,7 +91,8 @@ try:
 except Exception:
     pass
 # Without a skill ID ask-sdk skips the check that a request is meant for this skill.
-sb.skill_id = os.environ.get('SKILL_ID', '')
+# ask-sdk checks `if self.skill_id is not None`, so normalize empty strings to None.
+sb.skill_id = os.environ.get('SKILL_ID', '').strip() or None
 if not sb.skill_id:
     # The setup page creates the skill, so a first run has no ID yet.
     app.logger.warning('SKILL_ID is not set: accepting signed requests for any skill')
@@ -134,7 +135,26 @@ class BasicAuthMiddleware:
             except Exception:
                 pass
 
-        start_response('401 Unauthorized', [('Content-Type', 'text/plain'), ('WWW-Authenticate', 'Basic realm="music-assistant-skill"')])
+        try:
+            clen = int(environ.get('CONTENT_LENGTH') or 0)
+            if 0 < clen <= 65536 and environ.get('wsgi.input'):
+                environ['wsgi.input'].read(clen)
+        except Exception:
+            pass
+        app.logger.warning(
+            'BasicAuth rejected %s %s from %s',
+            environ.get('REQUEST_METHOD'),
+            environ.get('PATH_INFO'),
+            environ.get('REMOTE_ADDR'),
+        )
+        start_response(
+            '401 Unauthorized',
+            [
+                ('Content-Type', 'text/plain'),
+                ('Content-Length', '13'),
+                ('WWW-Authenticate', 'Basic realm="music-assistant-skill"'),
+            ],
+        )
         return [b'Access denied']
 
 
@@ -147,6 +167,33 @@ alexa_app.wsgi_app = ProxyFix(alexa_app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 ma_app.wsgi_app = BasicAuthMiddleware(ma_app.wsgi_app)
 alexa_app.wsgi_app = BasicAuthMiddleware(alexa_app.wsgi_app)
 app.wsgi_app = DispatcherMiddleware(app.wsgi_app, {'/ma': ma_app.wsgi_app, '/alexa': alexa_app.wsgi_app})
+
+
+def _attach_api_logging(sub_app, prefix):
+    @sub_app.before_request
+    def _api_log_start():
+        g._api_t0 = time.monotonic()
+
+    @sub_app.after_request
+    def _api_log_end(response):
+        if request.method == 'GET' and request.path == '/latest-url' and response.status_code in (200, 304, 404):
+            return response
+        dt_ms = (time.monotonic() - getattr(g, '_api_t0', time.monotonic())) * 1000.0
+        app.logger.info(
+            'API %s %s%s host=%s remote=%s -> %s (%.1fms)',
+            request.method,
+            prefix,
+            request.path,
+            request.host,
+            request.remote_addr,
+            response.status_code,
+            dt_ms,
+        )
+        return response
+
+
+_attach_api_logging(ma_app, '/ma')
+_attach_api_logging(alexa_app, '/alexa')
 # Log mount information only when running the module as the main program
 try:
     if __name__ == '__main__':
@@ -705,5 +752,28 @@ if __name__ == "__main__":
         use_reloader = os.environ.get('FLASK_RELOADER', '0') == '1'
         app.run(debug=True, use_reloader=use_reloader, host=os.environ.get('HOST', '0.0.0.0'), port=port)
     else:
-        # Production/dev host mode: don't use the reloader to avoid transient restarts
-        app.run(debug=False, host=os.environ.get('HOST', '0.0.0.0'), port=port)
+        import socket
+        from waitress import serve
+
+        host = os.environ.get('HOST', '0.0.0.0').strip()
+        threads = max(1, int(os.environ.get('WAITRESS_THREADS', '8')))
+        listen_targets = [f'{host}:{port}']
+        if host in ('0.0.0.0', '*', ''):
+            try:
+                with socket.socket(socket.AF_INET6, socket.SOCK_STREAM) as s6:
+                    if hasattr(socket, 'IPPROTO_IPV6') and hasattr(socket, 'IPV6_V6ONLY'):
+                        s6.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 1)
+                    s6.bind(('::', 0))
+                listen_targets = [f'0.0.0.0:{port}', f'[::]:{port}']
+            except OSError:
+                listen_targets = [f'0.0.0.0:{port}']
+        app.logger.info('Starting Waitress WSGI server on %s (threads=%s)', ' '.join(listen_targets), threads)
+        serve(
+            app.wsgi_app,
+            listen=' '.join(listen_targets),
+            threads=threads,
+            clear_untrusted_proxy_headers=True,
+            trusted_proxy='*',
+            trusted_proxy_count=1,
+            trusted_proxy_headers={'x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto'},
+        )
