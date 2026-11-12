@@ -108,9 +108,11 @@ def replace_ip_in_url(url, hostname):
         return quote(url, safe=':/%?=&')
     return quote(new_url, safe=':/%?=&')
 
-def audio_data(request):
+def audio_data(request=None, device_id=None, prefer_latest=False):
     try:
-        data.get_latest()
+        res = data.get_latest(device_id=device_id, prefer_latest=prefer_latest)
+        if isinstance(res, dict) and isinstance(res.get('info'), dict):
+            return res['info']
         return data.info
     except Exception:
         return
@@ -142,9 +144,9 @@ def push_alexa_metadata(url):
             logging.exception('Unexpected error while pushing Alexa metadata')
 
 
-def play(url, offset, text, response_builder, supports_apl=False):
+def play(url, offset, text, response_builder, supports_apl=False, device_id=None):
     if supports_apl and apl_enabled():
-        add_apl(response_builder)
+        add_apl(response_builder, device_id=device_id)
     else:
         try:
             hostname = get_ma_hostname(raise_on_http_scheme=True)
@@ -292,12 +294,12 @@ def stop(text, response_builder, supports_apl=False):
     return response_builder.response
 
 
-def pause(text, response_builder, supports_apl=False, session_new=False):
+def pause(text, response_builder, supports_apl=False, session_new=False, device_id=None):
     if supports_apl and apl_enabled():
         try:
             if session_new:
                 try:
-                    add_apl(response_builder, start_paused=True)
+                    add_apl(response_builder, start_paused=True, device_id=device_id)
                 except Exception:
                     logging.exception('Failed to re-render APL on session new')
                 response_builder.set_should_end_session(False)
@@ -328,7 +330,7 @@ def clear(response_builder):
     return response_builder.response
 
 
-def update_apl_metadata(response_builder):
+def update_apl_metadata(response_builder, metadata_info=None):
     """Update the APL document with the latest metadata without interrupting playback.
 
     This function sends ExecuteCommands directives to update only the text and image
@@ -338,28 +340,29 @@ def update_apl_metadata(response_builder):
     if not apl_enabled():
         return
     try:
-        cover_image = rewrite_apl_image_url(data.info.get("coverImageSource", ""))
-        background_image = rewrite_apl_image_url(data.info.get("backgroundImageSource", ""))
+        meta = metadata_info if isinstance(metadata_info, dict) else data.info
+        cover_image = rewrite_apl_image_url(meta.get("coverImageSource", ""))
+        background_image = rewrite_apl_image_url(meta.get("backgroundImageSource", ""))
 
         # Build SetValue commands to update individual components
         commands = []
 
         # Update primary text (song title)
-        if data.info.get("primaryText"):
+        if meta.get("primaryText"):
             commands.append({
                 "type": "SetValue",
                 "componentId": "Audio_PrimaryText",
                 "property": "text",
-                "value": data.info["primaryText"]
+                "value": meta["primaryText"]
             })
 
         # Update secondary text (artist/album)
-        if data.info.get("secondaryText"):
+        if meta.get("secondaryText"):
             commands.append({
                 "type": "SetValue",
                 "componentId": "Audio_SecondaryText",
                 "property": "text",
-                "value": data.info["secondaryText"]
+                "value": meta["secondaryText"]
             })
 
         # Update cover image and bound data so conditional rendering refreshes.

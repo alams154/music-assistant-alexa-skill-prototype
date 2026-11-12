@@ -24,14 +24,21 @@ def _load_apl_template():
         return json.load(f)
 
 
-def add_apl(response_builder, start_paused=False):
-    # type: (ResponseFactory, bool) -> None
+def add_apl(response_builder, start_paused=False, device_id=None, mapped_player=None):
+    # type: (ResponseFactory, bool, object, object) -> None
     """Add the RenderDocumentDirective to the response with APL document."""
     # Import here to avoid circular imports
     from .util import rewrite_apl_image_url
+    from . import device_mapping
+
+    if device_id and mapped_player is None:
+        try:
+            mapped_player = device_mapping.get_player_for_device(device_id)
+        except Exception:
+            mapped_player = None
 
     # Get metadata from shared_store (most reliable) or data.info as fallback
-    metadata = _get_metadata()
+    metadata = _get_metadata(device_id=device_id, mapped_player=mapped_player)
     if not metadata:
         logging.warning("No metadata available for APL rendering")
         return
@@ -86,8 +93,8 @@ def add_apl(response_builder, start_paused=False):
     )
 
 
-def _get_metadata():
-    """Get metadata from shared_store or data.info.
+def _get_metadata(device_id=None, mapped_player=None):
+    """Get metadata from shared_store or fallback metadata dict.
 
     shared_store is the primary source (set by MA push-url).
     data.info is the fallback (set by data.get_latest()).
@@ -95,8 +102,8 @@ def _get_metadata():
     # Priority 1: shared_store (most reliable, set by MA)
     try:
         import shared_store
-        if shared_store._store:
-            store = shared_store._store
+        store = shared_store.get_ma_stream(device_id=device_id, mapped_player=mapped_player)
+        if store:
             stream_url = store.get("streamUrl", "") or ""
             if isinstance(stream_url, str) and stream_url:
                 stream_url = re.sub(r'(?i)\.flac(?=$|\?)', '.mp3', stream_url)

@@ -1,30 +1,8 @@
 """Route definitions for music_assistant_api (ma_routes)."""
 
+import logging
 from flask import jsonify, request
-import os
-import time
-from urllib.parse import urlparse, urlunparse
 import shared_store
-
-
-def _rewrite_url(url: str) -> str:
-    """Rewrite internal Music Assistant URLs to public hostname."""
-    if not url:
-        return url
-    ma_hostname = os.environ.get('MA_HOSTNAME', '').strip()
-    if not ma_hostname:
-        return url
-    try:
-        parsed = urlparse(url)
-        if not parsed.hostname:
-            return url
-        rewritten = urlunparse((
-            'https', ma_hostname, parsed.path,
-            parsed.params, parsed.query, parsed.fragment
-        ))
-        return rewritten
-    except Exception:
-        return url
 
 
 def register_routes(bp):
@@ -35,20 +13,22 @@ def register_routes(bp):
         if not stream_url:
             return jsonify({'error': 'Missing required fields'}), 400
 
-        stream_url = _rewrite_url(stream_url)
-        image_url = _rewrite_url(data.get('imageUrl'))
-
-        shared_store._version += 1
-        shared_store._store = {
-            'streamUrl': stream_url,
-            'title': data.get('title'),
-            'artist': data.get('artist'),
-            'album': data.get('album'),
-            'imageUrl': image_url,
-            'version': shared_store._version,
-            'timestamp': time.time()
-        }
-        return jsonify({'status': 'ok', 'version': shared_store._version})
+        image_url = data.get('imageUrl')
+        version, player_key = shared_store.put_ma_stream(
+            stream_url=stream_url,
+            title=data.get('title'),
+            artist=data.get('artist'),
+            album=data.get('album'),
+            image_url=image_url,
+        )
+        logging.getLogger('app').info(
+            'MA push-url v%s: player=%r title=%r has_image=%s',
+            version,
+            player_key,
+            data.get('title'),
+            bool(image_url),
+        )
+        return jsonify({'status': 'ok', 'version': version, 'playerKey': player_key})
 
     @bp.route('/latest-url', methods=['GET'])
     def latest_url():

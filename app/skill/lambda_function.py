@@ -88,15 +88,35 @@ logging.basicConfig(
     datefmt="%H:%M:%S %Y-%m-%d %z"
 )
 
-supports_apl = False
+def _has_apl_support(handler_input):
+    try:
+        env = getattr(handler_input, 'request_envelope', None)
+        ctx = getattr(env, 'context', None)
+        sys_ctx = getattr(ctx, 'system', None)
+        dev = getattr(sys_ctx, 'device', None)
+        ifaces = getattr(dev, 'supported_interfaces', None)
+        return getattr(ifaces, 'alexa_presentation_apl', None) is not None
+    except Exception:
+        return False
 
-def _get_stream_url(request):
+
+def _supports_apl(handler_input):
+    try:
+        req_attrs = handler_input.attributes_manager.request_attributes
+        if 'supports_apl' in req_attrs:
+            return bool(req_attrs['supports_apl'])
+    except Exception:
+        pass
+    return _has_apl_support(handler_input)
+
+
+def _get_stream_url(request, device_id=None, prefer_latest=False):
     """Return (url, audio_data) where url is resolved from util.audio_data.
 
     Handles multiple shapes returned by util.audio_data and never raises.
     """
     try:
-        audio = util.audio_data(request)
+        audio = util.audio_data(request, device_id=device_id, prefer_latest=prefer_latest)
     except Exception:
         audio = None
 
@@ -179,7 +199,8 @@ class LaunchRequestOrPlayAudioHandler(AbstractRequestHandler):
 
         _ = handler_input.attributes_manager.request_attributes["_"]
         request = handler_input.request_envelope.request
-        url, _audio = _get_stream_url(request)
+        device_id = _device_id_from(handler_input)
+        url, _audio = _get_stream_url(request, device_id=device_id, prefer_latest=True)
         logger.info("URL from util.audio_data: %s", url)
 
         # FIX: Fallback to shared_store directly if util.audio_data is empty
@@ -198,13 +219,20 @@ class LaunchRequestOrPlayAudioHandler(AbstractRequestHandler):
                 "Sorry, I could not retrieve the latest music stream from the API. Please check your setup.").set_should_end_session(True)
             return handler_input.response_builder.response
 
+        try:
+            import shared_store
+            shared_store.bind_device_player(device_id, shared_store.extract_player_key(url))
+        except Exception:
+            pass
+
         logger.info("Playing URL: %s", url)
         return util.play(
             url=url,
             offset=0,
             text=data.WELCOME_MSG,
             response_builder=handler_input.response_builder,
-            supports_apl=supports_apl
+            supports_apl=_supports_apl(handler_input),
+            device_id=device_id,
         )
 
 
@@ -327,7 +355,7 @@ class CancelOrStopIntentHandler(AbstractRequestHandler):
         logger.info("In CancelOrStopIntentHandler")
         _ = handler_input.attributes_manager.request_attributes["_"]
         _sync_to_ma_unless_echo(handler_input, "stop")
-        return util.stop(_(data.STOP_MSG), handler_input.response_builder, supports_apl=supports_apl)
+        return util.stop(_(data.STOP_MSG), handler_input.response_builder, supports_apl=_supports_apl(handler_input))
 
 
 class PauseIntentHandler(AbstractRequestHandler):
@@ -348,8 +376,9 @@ class PauseIntentHandler(AbstractRequestHandler):
 
         return util.pause(text=None,
                   response_builder=handler_input.response_builder,
-                  supports_apl=supports_apl,
-                  session_new=session_new)
+                  supports_apl=_supports_apl(handler_input),
+                  session_new=session_new,
+                  device_id=_device_id_from(handler_input))
 
 
 class ResumeIntentHandler(AbstractRequestHandler):
@@ -366,21 +395,23 @@ class ResumeIntentHandler(AbstractRequestHandler):
 
         _sync_to_ma_unless_echo(handler_input, "resume")
 
-        url, _audio = _get_stream_url(request)
+        device_id = _device_id_from(handler_input)
+        url, _audio = _get_stream_url(request, device_id=device_id, prefer_latest=False)
         if not url:
             logger.warning("No stream url available for Resume request")
             handler_input.response_builder.speak(
                 "Sorry, I couldn't reach the stream right now.").set_should_end_session(True)
             return handler_input.response_builder.response
 
-        offset = util.get_resume_offset(_device_id_from(handler_input), url)
+        offset = util.get_resume_offset(device_id, url)
 
         return util.play(
             url=url,
             offset=offset,
             text=data.WELCOME_MSG,
             response_builder=handler_input.response_builder,
-            supports_apl=supports_apl
+            supports_apl=_supports_apl(handler_input),
+            device_id=device_id,
         )
 
 
@@ -510,7 +541,7 @@ class PlaybackNearlyFinishedHandler(AbstractRequestHandler):
         logger.info("In PlaybackNearlyFinishedHandler")
         logger.info("Playback nearly finished")
         request = handler_input.request_envelope.request
-        url, _audio = _get_stream_url(request)
+        url, _audio = _get_stream_url(request, device_id=_device_id_from(handler_input), prefer_latest=False)
         if not url:
             logger.warning("No stream url available for PlaybackNearlyFinished")
             return handler_input.response_builder.response
@@ -545,17 +576,19 @@ class PlaybackFailedHandler(AbstractRequestHandler):
         logger.info("In PlaybackFailedHandler")
         request = handler_input.request_envelope.request
         logger.info("Playback failed: {}".format(request.error))
-        url, _audio = _get_stream_url(request)
+        device_id = _device_id_from(handler_input)
+        url, _audio = _get_stream_url(request, device_id=device_id, prefer_latest=False)
         if not url:
             logger.warning("No stream url available for PlaybackFailed; skipping restart")
             return handler_input.response_builder.response
 
         return util.play(
-            url=url, 
-            offset=0, 
+            url=url,
+            offset=0,
             text=None,
             response_builder=handler_input.response_builder,
-            supports_apl=supports_apl
+            supports_apl=_supports_apl(handler_input),
+            device_id=device_id,
         )
 
 
@@ -605,11 +638,15 @@ class APLUserEventHandler(AbstractRequestHandler):
     def handle(self, handler_input):
         # type: (HandlerInput) -> Response
 
-        # Fetch latest metadata from Music Assistant
+        # Fetch latest metadata from Music Assistant for this Echo Show
         changed = False
+        meta_info = data.info
+        device_id = _device_id_from(handler_input)
         try:
-            result = data.get_latest()
+            result = data.get_latest(device_id=device_id, track_changes=True)
             changed = bool(result and result.get('changed'))
+            if isinstance(result, dict) and isinstance(result.get('info'), dict):
+                meta_info = result['info']
             if changed:
                 logger.info("Metadata changed")
             else:
@@ -618,13 +655,13 @@ class APLUserEventHandler(AbstractRequestHandler):
             logger.exception("Failed to fetch latest metadata")
 
         # Check if we have valid metadata
-        if not data.info.get('audioSources'):
+        if not meta_info.get('audioSources'):
             logger.warning("No audio sources available for metadata refresh")
         else:
             # Send updated APL document with new metadata
             if changed:
                 try:
-                    util.update_apl_metadata(handler_input.response_builder)
+                    util.update_apl_metadata(handler_input.response_builder, metadata_info=meta_info)
                     logger.info("APL metadata update directive added to response")
                 except Exception:
                     logger.exception("Failed to update APL metadata")
@@ -662,19 +699,27 @@ class PlayCommandHandler(AbstractRequestHandler):
         logger.info("In PlayCommandHandler")
         _ = handler_input.attributes_manager.request_attributes["_"]
         request = handler_input.request_envelope.request
-        url, _audio = _get_stream_url(request)
+        device_id = _device_id_from(handler_input)
+        url, _audio = _get_stream_url(request, device_id=device_id, prefer_latest=True)
         if not url:
             logger.warning("No stream url available for PlayCommand; notifying user")
             handler_input.response_builder.speak(
                 "Sorry, I couldn't reach the stream right now.").set_should_end_session(True)
             return handler_input.response_builder.response
 
+        try:
+            import shared_store
+            shared_store.bind_device_player(device_id, shared_store.extract_player_key(url))
+        except Exception:
+            pass
+
         return util.play(
             url=url,
             offset=0,
             text=None,
             response_builder=handler_input.response_builder,
-            supports_apl=supports_apl
+            supports_apl=_supports_apl(handler_input),
+            device_id=device_id,
         )
 
 
@@ -726,7 +771,7 @@ class PauseCommandHandler(AbstractRequestHandler):
         logger.info("In PauseCommandHandler")
         return util.stop(text=None,
                          response_builder=handler_input.response_builder,
-                         supports_apl=supports_apl)
+                         supports_apl=_supports_apl(handler_input))
 
 # ###################################################################
 
@@ -755,16 +800,12 @@ class CatchAllExceptionHandler(AbstractExceptionHandler):
 # ############# REQUEST / RESPONSE INTERCEPTORS #####################
 
 class APLSupportRequestInterceptor(AbstractRequestInterceptor):
-    """Request Interceptor to check if the device supports APL and update the global supports_apl variable."""
+    """Request Interceptor to record per-request APL support on request_attributes."""
     def process(self, handler_input):
-        global supports_apl
-        if hasattr(handler_input, 'request_envelope'):
-            supported_interfaces = getattr(
-                handler_input.request_envelope.context.system.device.supported_interfaces,
-                'alexa_presentation_apl', None)
-            supports_apl = supported_interfaces is not None
-        else:
-            supports_apl = False
+        try:
+            handler_input.attributes_manager.request_attributes['supports_apl'] = _has_apl_support(handler_input)
+        except Exception:
+            pass
 
 class RequestLogger(AbstractRequestInterceptor):
     """Log the alexa requests."""
