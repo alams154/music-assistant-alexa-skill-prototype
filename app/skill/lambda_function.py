@@ -157,6 +157,12 @@ class SkillEventHandler(AbstractRequestHandler):
     def handle(self, handler_input):
         # type: (HandlerInput) -> Response
         logger.info("In SkillEventHandler")
+        # A response Alexa rejects (e.g. an invalid Play URL) only shows up here:
+        # the Echo just says there was a problem with the skill's response.
+        req = handler_input.request_envelope.request
+        if getattr(req, 'reason', None) or getattr(req, 'error', None):
+            logger.warning("Session ended: reason=%s error=%s",
+                           getattr(req, 'reason', None), getattr(req, 'error', None))
         return handler_input.response_builder.response
 
 
@@ -509,9 +515,19 @@ class PlaybackNearlyFinishedHandler(AbstractRequestHandler):
             logger.warning("No stream url available for PlaybackNearlyFinished")
             return handler_input.response_builder.response
 
+        # ENQUEUE must chain from the stream that is currently playing.
+        current_token = None
+        try:
+            context = handler_input.request_envelope.context
+            if context and context.audio_player:
+                current_token = context.audio_player.token
+        except AttributeError:
+            current_token = None
+
         return util.play_later(
             url=url,
-            response_builder=handler_input.response_builder
+            response_builder=handler_input.response_builder,
+            expected_previous_token=current_token
         )
 
 
@@ -620,7 +636,9 @@ class APLUserEventHandler(AbstractRequestHandler):
             logger.exception("Failed to schedule APL refresh")
 
         # Explicitly keep session open to allow continued UserEvents
-        return handler_input.response_builder.set_should_end_session(False).response
+        # Unset, not False: False opens the mic on every refresh and ducks the music;
+        # the APL page keeps the session alive by itself.
+        return handler_input.response_builder.set_should_end_session(None).response
 
 # ###################################################################
 

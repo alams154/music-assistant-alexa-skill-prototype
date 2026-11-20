@@ -58,10 +58,23 @@ def _shutdown_children(get_procs, signum, frame):
         pass
 
 
+def _shutdown(get_procs, signum, frame):
+    """Stop the children, then die of the signal as if no handler were set.
+
+    Returning from the handler would leave the server running: SIGTERM
+    (systemd's stop) was ignored until the unit's stop timeout killed it.
+    Re-raising with the default action also skips waiting for non-daemon
+    timer threads.
+    """
+    _shutdown_children(get_procs, signum, frame)
+    signal.signal(signum, signal.SIG_DFL)
+    os.kill(os.getpid(), signum)
+
+
 def register_signal_handlers(get_procs_callable):
     try:
-        signal.signal(signal.SIGINT, lambda s, f: _shutdown_children(get_procs_callable, s, f))
-        signal.signal(signal.SIGTERM, lambda s, f: _shutdown_children(get_procs_callable, s, f))
+        signal.signal(signal.SIGINT, lambda s, f: _shutdown(get_procs_callable, s, f))
+        signal.signal(signal.SIGTERM, lambda s, f: _shutdown(get_procs_callable, s, f))
     except Exception:
         # Best-effort: some environments may not allow signal registration
         pass
