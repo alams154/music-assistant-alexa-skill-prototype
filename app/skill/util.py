@@ -116,6 +116,46 @@ def push_alexa_metadata(url):
             logging.exception('Unexpected error while pushing Alexa metadata')
 
 
+def _now_playing_metadata(hostname):
+    """Build AudioItemMetadata (title, subtitle, cover art) for the Play directive.
+
+    Screen Echo devices render this on their native "now playing" screen when
+    the APL flow is disabled. Without it the screen only shows the skill name.
+
+    The shared store is written either by MA (/ma/push-url: title, artist,
+    album, imageUrl) or by the Alexa API (/alexa/push-url: title, secondary,
+    imageUrl), so both shapes are handled. data.info is used as a fallback.
+    """
+    store = {}
+    try:
+        import shared_store
+        store = shared_store._store or {}
+    except Exception:
+        store = {}
+
+    title = store.get('title') or data.info.get('primaryText') or ''
+    subtitle = (store.get('secondary')
+                or ' - '.join(x for x in (store.get('artist'), store.get('album')) if x)
+                or data.info.get('secondaryText') or '')
+    image = store.get('imageUrl') or data.info.get('coverImageSource') or ''
+
+    if not (title or subtitle or image):
+        return None
+
+    art = None
+    if image:
+        if hostname:
+            image = replace_ip_in_url(image, hostname)
+        art = display.Image(sources=[display.ImageInstance(url=image)])
+
+    return AudioItemMetadata(
+        title=title[:150] or None,
+        subtitle=subtitle[:150] or None,
+        art=art,
+        background_image=art,
+    )
+
+
 def play(url, offset, text, response_builder, supports_apl=False):
     if supports_apl and apl_enabled():
         add_apl(response_builder)
@@ -167,7 +207,8 @@ def play(url, offset, text, response_builder, supports_apl=False):
                         url=url,
                         offset_in_milliseconds=offset,
                         expected_previous_token=None
-                    )
+                    ),
+                    metadata=_now_playing_metadata(hostname)
                 )
             )
         )
@@ -240,7 +281,8 @@ def play_later(url, response_builder, expected_previous_token=None):
                     url=url,
                     offset_in_milliseconds=0,
                     expected_previous_token=expected_previous_token
-                )
+                ),
+                metadata=_now_playing_metadata(hostname)
             )
         )
     )

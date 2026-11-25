@@ -2,6 +2,7 @@
 
 - en-US, US
 - en-US, PT
+- fr-FR, FR
 
 ## Supported Devices (tested)
 
