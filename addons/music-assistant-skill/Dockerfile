@@ -88,6 +88,9 @@ ENV AWS_DEFAULT_REGION=us-east-1
 # Timezone (defaults to UTC) — can be overridden at runtime via TZ env
 ENV TZ=UTC
 
+# Home Assistant add-ons persist /data across restarts and updates
+ENV DEVICE_MAPPING_PATH=/data/device_players.json
+
 # Host configuration:
 # MA_HOSTNAME: hostname for the Music Assistant stream
 # SKILL_HOSTNAME: hostname used when creating the Alexa skill manifest and endpoints

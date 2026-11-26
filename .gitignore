@@ -87,3 +87,10 @@ addons/music-assistant-skill/scripts
 
 # ASK CLI data
 ask_data/
+
+# Local secrets: only the *.example templates are tracked
+secrets/*
+!secrets/*.example
+
+# Persistent runtime data (device -> MA player mapping)
+instance_data/

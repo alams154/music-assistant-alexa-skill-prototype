@@ -19,6 +19,7 @@ services:
       - 5678:5678 # Must match DEBUG_PORT #optional
     volumes:
       - ./ask_data:/root/.ask
+      - ./instance_data:/app/instance_data # persists the Alexa device -> MA player mapping
     restart: no
 
 secrets:

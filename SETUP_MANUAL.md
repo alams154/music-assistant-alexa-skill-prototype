@@ -11,8 +11,9 @@ The easiest way to run the project is with Docker Compose. This will build and s
 
 1. **Copy the docker-compose.yml** and ensure Docker and Docker Compose are installed
 2. **Set up secrets or proceed to step 3:**
-    - Place your APP username in `./secrets/app_username.txt` (Relative to your docker-compose.yml file)
-    - Place your APP password in `./secrets/app_password.txt` (Relative to your docker-compose.yml file)
+    - Copy `./secrets/app_username.txt.example` to `./secrets/app_username.txt` and set your APP username (relative to your docker-compose.yml file)
+    - Copy `./secrets/app_password.txt.example` to `./secrets/app_password.txt` and set a strong APP password
+    - Do not keep the placeholder values
 3. **Edit environment variables** in `docker-compose.yml` as needed (e.g., `MA_HOSTNAME`, `PORT`, `APP_USERNAME`, `APP_PASSWORD`)
 4. **Start the service:**
 
