@@ -18,8 +18,14 @@ The easiest way to run the project is with Docker Compose. This will build and s
 #### Steps:
 
 1. Ensure `docker-compose.yml` is present and edit environment variables as needed (e.g., `SKILL_HOSTNAME`, `MA_HOSTNAME`, `PORT`). See the [Environment Variables](#environment-variables) section below for details on each variable.
-2. (Optional) Create `./secrets/app_username.txt` and `./secrets/app_password.txt` to provide `APP_USERNAME` and `APP_PASSWORD` for basic authentication of the web UI and API.
+2. Create your credentials for the web UI and API (basic authentication). The example `docker-compose.yml` expects both secret files to exist:
+   ```
+   cp secrets/app_username.txt.example secrets/app_username.txt
+   cp secrets/app_password.txt.example secrets/app_password.txt
+   ```
+   Then edit both files and set your own values. **Do not keep the placeholders**: without credentials `/setup`, `/devices` and the API are unprotected. If you really want to run without authentication, remove the `secrets` entries from `docker-compose.yml`.
 3. (Optional) To persist ASK CLI credentials across container restarts, mount a volume to `./<host directory>:/root/.ask`, `./ask_data` is used by default.
+   The device mapping (see [Device Mapping](#device-mapping)) is persisted in `./instance_data`, which the example compose file mounts to `/app/instance_data`.
 4. Start the service:
 
     ```sh
@@ -59,7 +65,10 @@ docker run --rm \
     -e PORT=5000 \
     -e LOCALE=en-US \
     -e AWS_DEFAULT_REGION=us-east-1 \
+    -e APP_USERNAME=/run/secrets/APP_USERNAME \
+    -e APP_PASSWORD=/run/secrets/APP_PASSWORD \
     -v "$(pwd)/ask_data:/root/.ask" \
+    -v "$(pwd)/instance_data:/app/instance_data" \
     -v "$(pwd)/secrets/app_username.txt:/run/secrets/APP_USERNAME:ro" \
     -v "$(pwd)/secrets/app_password.txt:/run/secrets/APP_PASSWORD:ro" \
     ghcr.io/alams154/music-assistant-alexa-skill-prototype:latest
@@ -68,6 +77,8 @@ docker run --rm \
 Notes:
 - Adjust `SKILL_HOSTNAME` to the public HTTPS host you'll use in the skill manifest.
 - The `ask_data` volume persists ASK CLI credentials so the setup flow can reuse them.
+- The `instance_data` volume persists the Alexa device to Music Assistant player mapping. Without it the mapping is lost whenever the container is recreated.
+- `APP_USERNAME`/`APP_PASSWORD` must point to the mounted secret files (as above), otherwise the app does not enforce authentication.
 - Mounting files into `/run/secrets` is a simple way to provide secrets for local testing; for production use Docker secrets or your platform's secret manager.
 
 ### Environment Variables
@@ -92,6 +103,7 @@ Notes:
 **Secrets and persistence**
 
 - The example [docker-compose.yml](docker-compose.yml) demonstrates using Docker secrets for `APP_USERNAME` and `APP_PASSWORD` (files in `./secrets`). When using Docker secrets, the container environment will contain the path to the secret file (for example `/run/secrets/APP_PASSWORD`) and the service reads the file content.
+- Copy `secrets/*.example` to `secrets/app_username.txt` and `secrets/app_password.txt` and choose your own values. The real files are git-ignored.
 - To persist ASK CLI credentials between container runs, mount a host directory as `/root/.ask` (the example uses `./ask_data:/root/.ask`). This allows the setup flow to reuse existing ASK credentials and skip the browser auth flow when present.
 
 **Notes on values**
@@ -107,6 +119,8 @@ Returns a simple status page showing the local API health and an ASK CLI driven 
 
 ### Device Mapping
 `/devices`
+
+The mapping is stored in `/app/instance_data/device_players.json` (override the location with `DEVICE_MAPPING_PATH`). Mount `/app/instance_data` as a volume, as the example compose file does, otherwise the mapping is lost whenever the container is recreated.
 
 Alexa's Custom Skill API only exposes an opaque, per-skill device id in each request — there is no way to resolve it to a friendly device name or to a Music Assistant player. This page lets you pair each Echo's device id with the corresponding MA `player_id` so voice-controlled Next/Previous can be routed to the right player. To pair a new device: trigger any voice command from it (e.g. "next"), reload this page (it lists every device id seen in the current session), then enter the matching MA player_id.
 
