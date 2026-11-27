@@ -660,6 +660,8 @@ def _sync_now_playing_from_ma(handler_input):
         return None
     if info["queue_item_id"] == state["id"]:
         return _apl_time_commands(info) if _time_needs_resend(player_id, state, info, now) else None
+    prev_id, prev_duration = state.get("last_id"), state.get("last_duration")
+    state["exact"] = False
     state["id"] = info["queue_item_id"]
     state["since"] = now
     state["resent"] = 0
@@ -667,6 +669,8 @@ def _sync_now_playing_from_ma(handler_input):
                 (info.get("title") or "")[:30], info.get("elapsed_ms", 0) / 1000, info.get("duration_ms", 0) / 1000)
     if not info.get("duration_ms"):
         state["id"] = None   # MA does not know the duration yet: ask again
+    else:
+        state["last_id"], state["last_duration"] = info["queue_item_id"], info["duration_ms"]
 
     store = shared_store._store
     if store is not None and store.get("streamUrl") and store.get("title") != info["title"]:
@@ -676,7 +680,9 @@ def _sync_now_playing_from_ma(handler_input):
         if info["imageUrl"]:
             store["imageUrl"] = info["imageUrl"]
         logger.info("Now playing changed on %s: %s", player_id, info["title"])
-    return _seek_time_commands(player_id, state, info, now) or _apl_time_commands(info)
+    return (_seek_time_commands(player_id, state, info, now)
+            or _flow_time_commands(player_id, state, info, prev_id, prev_duration)
+            or _apl_time_commands(info))
 
 
 
@@ -708,7 +714,8 @@ def _handle_live_page(handler_input):
             is_playing = parts[1].strip().lower() == 'true'
             shared_store.set_report(player_id, 'PLAYING' if is_playing else 'PAUSED',
                                     float(parts[0] or 0),
-                                    shared_store._rendered_stream.get(player_id))
+                                    shared_store._rendered_stream.get(player_id),
+                                    observed_at=_report_clock(parts))
             offset = float(parts[2]) if len(parts) > 2 and parts[2].strip() else None
             _screen_report(device_id, player_id, float(parts[0] or 0), is_playing, offset)
         except (TypeError, ValueError, IndexError):
@@ -1136,6 +1143,8 @@ def _screen_restarted(player_id):
 def _time_needs_resend(player_id, state, info, now):
     """Same track as already synced: send the time again ~6 s later (MA may have
     answered 0 at first), then whenever the screen is more than 3 s off."""
+    if state.get("exact"):
+        return False     # offset computed exactly: MA's (later) elapsed would only degrade it
     age = now - state.get("since", now)
     if age > _TIME_WINDOW:
         return False
@@ -1198,12 +1207,44 @@ def _seek_time_commands(player_id, state, info, now):
     if not hint or now - hint[1] > 20 or hint[2] != info.get("queue_item_id"):
         return None
     state["resent"] = 1          # no second pass: this offset is exact
+    state["exact"] = True
     total = info.get("duration_ms", 0)
     logger.info("Time sync %s: new stream starts at the seek position %.0fs", player_id, hint[0])
     return [
         {"type": "SetValue", "componentId": "AudioPlayerRoot", "property": "trackTotal", "value": total},
         {"type": "SetValue", "componentId": "videoPlayer", "property": "trackOffset",
          "value": -int(hint[0] * 1000)},
+        {"type": "SetValue", "componentId": "videoPlayer", "property": "needsResync", "value": False},
+        {"type": "SetValue", "componentId": "slider", "property": "totalValue", "value": total},
+    ]
+
+
+# Exact offsets without MA's (late) elapsed time.
+def _report_clock(parts):
+    """Device clock of the screen's report, in seconds, if plausible."""
+    try:
+        stamp = float(parts[3]) / 1000.0
+    except (IndexError, ValueError):
+        return None
+    return stamp if abs(_time.time() - stamp) < 10 else None
+
+
+def _flow_time_commands(player_id, state, info, prev_id, prev_duration):
+    pos = _screen_pos.get(player_id)
+    if (prev_id and prev_duration and prev_id != info["queue_item_id"] and pos
+            and pos.get("offset") is not None and _time.time() - pos["t"] < 5):
+        offset, why = pos["offset"] + prev_duration, "right after the previous track"
+    elif not prev_id and info.get("elapsed_ms", 10 ** 9) < 4000:
+        offset, why = 0, "stream starts with the track"
+    else:
+        return None
+    state["resent"] = 1
+    state["exact"] = True
+    total = info.get("duration_ms", 0)
+    logger.info("Time sync %s: %s (offset %.1fs)", player_id, why, offset / 1000)
+    return [
+        {"type": "SetValue", "componentId": "AudioPlayerRoot", "property": "trackTotal", "value": total},
+        {"type": "SetValue", "componentId": "videoPlayer", "property": "trackOffset", "value": int(offset)},
         {"type": "SetValue", "componentId": "videoPlayer", "property": "needsResync", "value": False},
         {"type": "SetValue", "componentId": "slider", "property": "totalValue", "value": total},
     ]

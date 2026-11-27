@@ -38,10 +38,10 @@ def pop_pending(player_id):
         return _pending.pop(player_id, [])
 
 
-def set_report(player_id, activity, offset_ms, stream_url):
+def set_report(player_id, activity, offset_ms, stream_url, observed_at=None):
     with _live_lock:
         _reports[player_id] = {"activity": activity, "offsetMs": int(offset_ms),
-                               "observedAt": _time.time(), "streamUrl": stream_url}
+                               "observedAt": observed_at or _time.time(), "streamUrl": stream_url}
 
 
 def get_report(player_id):
