@@ -161,6 +161,8 @@ def _check_app_basic_auth():
     # Allow the Alexa skill POST endpoint to be called without app-level auth
     if request.path == '/' and request.method == 'POST':
         return None
+    if request.path == '/ma-voice-next.mp3' and request.method in ('GET', 'HEAD'):
+        return None
     # Read credentials from secrets (APP_USERNAME/APP_PASSWORD)
     app_user = get_env_secret('APP_USERNAME')
     app_pass = get_env_secret('APP_PASSWORD')
@@ -695,6 +697,18 @@ def setup_stop():
             pass
         _setup_proc = None
     return jsonify({'status':'stopped'})
+
+
+# One second of silence (MPEG-1 Layer III, 128 kb/s, 44.1 kHz, zeroed frames).
+_VOICE_NEXT_MP3 = (bytes.fromhex("fffb9064") + bytes(413)) * 38
+
+
+@app.route('/ma-voice-next.mp3', methods=['GET'])
+def _voice_next_audio():
+    """Second source of the screen's Video, reached when the Echo skips ("Alexa, next")."""
+    resp = Response(_VOICE_NEXT_MP3, mimetype='audio/mpeg')
+    resp.headers['Cache-Control'] = 'public, max-age=86400'
+    return resp
 
 
 if __name__ == "__main__":

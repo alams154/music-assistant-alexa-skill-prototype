@@ -65,7 +65,9 @@
         {
           "name": "AMAZON.NavigateHomeIntent",
           "samples": []
-        }
+        },
+        {"name": "AMAZON.NextIntent", "samples": []},
+        {"name": "AMAZON.PreviousIntent", "samples": []}
       ],
       "types": []
     }

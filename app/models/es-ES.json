@@ -69,7 +69,10 @@
         },
         {
           "name": "AMAZON.StartOverIntent"
-        }
+        },
+        {"name": "AMAZON.NextIntent", "samples": []},
+        {"name": "AMAZON.PreviousIntent", "samples": []},
+        {"name": "AMAZON.FallbackIntent", "samples": []}
       ]
     }
   }

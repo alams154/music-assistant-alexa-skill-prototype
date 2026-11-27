@@ -157,6 +157,11 @@
           "description": "Determinate for full control of the slider with transport control. Indeterminate is an ambient progress bar with animation.",
           "type": "string",
           "default": "determinate"
+        },
+        {
+          "name": "audioNextSource",
+          "type": "string",
+          "description": "Dummy second source: moving to it means 'next'."
         }
       ],
       "item": [
@@ -189,16 +194,96 @@
               "name": "refreshTick",
               "type": "number",
               "value": 0
+            },
+            {
+              "name": "trackOffset",
+              "type": "number",
+              "value": 0
+            },
+            {
+              "name": "trackTotal",
+              "type": "number",
+              "value": 0
+            },
+            {
+              "name": "pendingElapsed",
+              "type": "number",
+              "value": 0
+            },
+            {
+              "name": "needsResync",
+              "type": "boolean",
+              "value": false
+            },
+            {
+              "name": "videoPlaying",
+              "type": "boolean",
+              "value": true
+            },
+            {
+              "name": "lyricsLines",
+              "type": "any",
+              "value": []
+            },
+            {
+              "name": "lyricsVisible",
+              "type": "boolean",
+              "value": false
+            },
+            {
+              "name": "lyricsAvailable",
+              "type": "boolean",
+              "value": false
+            },
+            {
+              "name": "lyricsSynced",
+              "type": "boolean",
+              "value": false
+            },
+            {
+              "name": "lyricsIndex",
+              "type": "number",
+              "value": 0
+            },
+            {
+              "name": "trackPos",
+              "type": "number",
+              "value": 0
+            },
+            {
+              "name": "lyricsBuckets",
+              "type": "any",
+              "value": []
+            },
+            {
+              "name": "lyricsTitle",
+              "type": "string",
+              "value": "${primaryText}"
+            },
+            {
+              "name": "lyricsArtist",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "name": "remoteFocus",
+              "type": "number",
+              "value": -1
+            },
+            {
+              "name": "seekTarget",
+              "type": "number",
+              "value": -1
             }
           ],
           "onMount": [
             {
               "type": "Sequential",
-              "repeatCount": -1,
+              "repeatCount": 100000,
               "commands": [
                 {
                   "type": "Idle",
-                  "delay": 500
+                  "delay": 1000
                 },
                 {
                   "type": "SetValue",
@@ -209,18 +294,50 @@
                   "type": "SendEvent",
                   "arguments": [
                     "MetadataRefresh",
-                    "${refreshTick}"
+                    "${refreshTick}",
+                    "${videoProgressValue}",
+                    "${videoPlaying}"
+                  ],
+                  "components": [
+                    "maReport",
+                    "maSeek"
                   ]
                 }
-              ]
+              ],
+              "sequencer": "maRefresh"
             }
           ],
           "items": [
             {
-              "type": "AlexaBackground",
+              "type": "Container",
               "id": "AlexaBackground",
-              "description": "Main backgroud",
-              "backgroundImageSource": "${backgroundImageSource}"
+              "description": "Blurred cover background",
+              "position": "absolute",
+              "width": "100vw",
+              "height": "100vh",
+              "bind": [
+                {
+                  "name": "backgroundImageSource",
+                  "type": "string",
+                  "value": "${backgroundImageSource}"
+                }
+              ],
+              "items": [
+                {
+                  "type": "Image",
+                  "source": "${backgroundImageSource}",
+                  "width": "100%",
+                  "height": "100%",
+                  "scale": "best-fill",
+                  "filters": [
+                    {
+                      "type": "Blur",
+                      "radius": 8
+                    }
+                  ],
+                  "overlayColor": "rgba(0, 0, 0, 0.35)"
+                }
+              ]
             },
             {
               "type": "AlexaHeader",
@@ -229,6 +346,59 @@
               "headerTitle": "${headerTitle}",
               "headerSubtitle": "${headerSubtitle}",
               "headerAttributionImage": "${headerAttributionImage}"
+            },
+            {
+              "type": "Container",
+              "id": "maTopBar",
+              "position": "absolute",
+              "top": "24dp",
+              "left": "@marginHorizontal",
+              "right": "@marginHorizontal",
+              "direction": "row",
+              "alignItems": "start",
+              "items": [
+                {
+                  "type": "Container",
+                  "width": "1dp",
+                  "grow": 1,
+                  "shrink": 1,
+                  "paddingRight": "16dp",
+                  "display": "${lyricsVisible ? 'normal' : 'invisible'}",
+                  "items": [
+                    {
+                      "type": "Text",
+                      "id": "maLyricsTitle",
+                      "text": "${lyricsTitle}",
+                      "width": "100%",
+                      "maxLines": 1,
+                      "fontSize": "20dp",
+                      "fontWeight": "bold",
+                      "textAlign": "left",
+                      "color": "#FFFFFF"
+                    },
+                    {
+                      "type": "Text",
+                      "id": "maLyricsArtist",
+                      "text": "${lyricsArtist}",
+                      "width": "100%",
+                      "maxLines": 1,
+                      "fontSize": "16dp",
+                      "textAlign": "left",
+                      "color": "#FFFFFFB3",
+                      "display": "${lyricsArtist ? 'normal' : 'none'}"
+                    }
+                  ]
+                },
+                {
+                  "type": "VectorGraphic",
+                  "id": "maLogo",
+                  "source": "maLogo",
+                  "width": "44dp",
+                  "height": "44dp",
+                  "scale": "best-fit",
+                  "opacity": 0.85
+                }
+              ]
             },
             {
               "type": "Container",
@@ -302,7 +472,42 @@
                         }
                       ]
                     }
-                  ]
+                  ],
+                  "display": "${lyricsVisible ? 'none' : 'normal'}"
+                },
+                {
+                  "type": "Container",
+                  "id": "maLyricsPanel",
+                  "description": "Lyrics",
+                  "width": "100%",
+                  "height": "46vh",
+                  "paddingLeft": "@marginHorizontal",
+                  "paddingRight": "@marginHorizontal",
+                  "display": "${lyricsVisible ? 'normal' : 'none'}",
+                  "items": [
+                    {
+                      "type": "Sequence",
+                      "id": "maLyrics",
+                      "width": "100%",
+                      "height": "1dp",
+                      "scrollDirection": "vertical",
+                      "data": "${Array.range(200)}",
+                      "item": {
+                        "type": "Text",
+                        "width": "100%",
+                        "paddingTop": "6dp",
+                        "paddingBottom": "6dp",
+                        "display": "${data < lyricsLines.length ? 'normal' : 'none'}",
+                        "text": "${data < lyricsLines.length ? lyricsLines[data].t : ''}",
+                        "textAlign": "center",
+                        "fontSize": "${lyricsSynced ? '30dp' : '24dp'}",
+                        "fontWeight": "${lyricsSynced ? 'bold' : 'normal'}",
+                        "color": "${data < lyricsLines.length && lyricsLines[data].s >= 0 && trackPos >= lyricsLines[data].s && trackPos < lyricsLines[data].e ? '#FFFFFF' : (lyricsSynced ? '#FFFFFF66' : '#FFFFFFDD')}"
+                      },
+                      "grow": 1
+                    }
+                  ],
+                  "direction": "column"
                 },
                 {
                   "type": "Container",
@@ -321,13 +526,33 @@
                       "scale": "best-fill",
                       "autoplay": true,
                       "audioTrack": "background",
-                      "source": "${audioSources}",
+                      "source": [
+                        "${audioSources}",
+                        "${audioNextSource}"
+                      ],
                       "position": "absolute",
                       "onPlay": [
                         {
                           "type": "SetValue",
                           "property": "videoTotalValue",
                           "value": "${event.duration}"
+                        },
+                        {
+                          "type": "SetValue",
+                          "property": "videoPlaying",
+                          "value": true
+                        },
+                        {
+                          "type": "SetValue",
+                          "componentId": "maReport",
+                          "property": "text",
+                          "value": "${event.currentTime}|${event.paused ? 'false' : 'true'}|${trackOffset}|${utcTime}|${lyricsVisible ? 1 : 0}"
+                        },
+                        {
+                          "type": "SetValue",
+                          "componentId": "playPauseToggleButtonId",
+                          "property": "checked",
+                          "value": true
                         }
                       ],
                       "onTrackUpdate": [
@@ -335,6 +560,19 @@
                           "type": "SetValue",
                           "property": "videoTotalValue",
                           "value": "${event.duration}"
+                        },
+                        {
+                          "type": "Sequential",
+                          "sequencer": "maVoice",
+                          "when": "${event.trackIndex == 1}",
+                          "commands": [
+                            {
+                              "type": "SendEvent",
+                              "arguments": [
+                                "VoiceNext"
+                              ]
+                            }
+                          ]
                         }
                       ],
                       "onTimeUpdate": [
@@ -344,15 +582,63 @@
                           "value": "${event.currentTime}"
                         },
                         {
+                          "type": "Sequential",
+                          "when": "${needsResync}",
+                          "commands": [
+                            {
+                              "type": "SetValue",
+                              "property": "trackOffset",
+                              "value": "${event.currentTime - pendingElapsed}"
+                            },
+                            {
+                              "type": "SetValue",
+                              "property": "needsResync",
+                              "value": false
+                            }
+                          ]
+                        },
+                        {
+                          "type": "SetValue",
+                          "componentId": "AudioPlayerRoot",
+                          "property": "trackPos",
+                          "value": "${event.currentTime - trackOffset}"
+                        },
+                        {
                           "type": "SetValue",
                           "componentId": "slider",
                           "property": "progressValue",
-                          "value": "${videoProgressValue}"
+                          "value": "${seekTarget >= 0 ? seekTarget : (videoProgressValue > trackOffset ? videoProgressValue - trackOffset : 0)}"
                         },
                         {
                           "type": "SetValue",
                           "property": "videoTotalValue",
                           "value": "${event.duration}"
+                        },
+                        {
+                          "type": "SetValue",
+                          "componentId": "maReport",
+                          "property": "text",
+                          "value": "${event.currentTime}|${event.paused ? 'false' : 'true'}|${trackOffset}|${utcTime}|${lyricsVisible ? 1 : 0}"
+                        },
+                        {
+                          "type": "Sequential",
+                          "sequencer": "maScroll",
+                          "when": "${lyricsSynced && (event.currentTime >= trackOffset && Math.floor((event.currentTime - trackOffset) / 250) < lyricsBuckets.length ? lyricsBuckets[Math.floor((event.currentTime - trackOffset) / 250)] : -1) >= 0 && (event.currentTime >= trackOffset && Math.floor((event.currentTime - trackOffset) / 250) < lyricsBuckets.length ? lyricsBuckets[Math.floor((event.currentTime - trackOffset) / 250)] : -1) != lyricsIndex}",
+                          "commands": [
+                            {
+                              "type": "SetValue",
+                              "componentId": "AudioPlayerRoot",
+                              "property": "lyricsIndex",
+                              "value": "${(event.currentTime >= trackOffset && Math.floor((event.currentTime - trackOffset) / 250) < lyricsBuckets.length ? lyricsBuckets[Math.floor((event.currentTime - trackOffset) / 250)] : -1)}"
+                            },
+                            {
+                              "type": "ScrollToIndex",
+                              "componentId": "maLyrics",
+                              "index": "${(event.currentTime >= trackOffset && Math.floor((event.currentTime - trackOffset) / 250) < lyricsBuckets.length ? lyricsBuckets[Math.floor((event.currentTime - trackOffset) / 250)] : -1)}",
+                              "align": "center",
+                              "when": "${lyricsVisible}"
+                            }
+                          ]
                         }
                       ],
                       "onTrackReady": [
@@ -367,6 +653,66 @@
                           "type": "SetValue",
                           "property": "videoTotalValue",
                           "value": "0"
+                        },
+                        {
+                          "type": "SetValue",
+                          "property": "videoPlaying",
+                          "value": false
+                        }
+                      ],
+                      "onPause": [
+                        {
+                          "type": "SetValue",
+                          "property": "videoPlaying",
+                          "value": false
+                        },
+                        {
+                          "type": "SetValue",
+                          "componentId": "maReport",
+                          "property": "text",
+                          "value": "${event.currentTime}|${event.paused ? 'false' : 'true'}|${trackOffset}|${utcTime}|${lyricsVisible ? 1 : 0}"
+                        },
+                        {
+                          "type": "SetValue",
+                          "componentId": "playPauseToggleButtonId",
+                          "property": "checked",
+                          "value": false
+                        }
+                      ],
+                      "onEnd": [
+                        {
+                          "type": "SetValue",
+                          "property": "videoPlaying",
+                          "value": false
+                        },
+                        {
+                          "type": "SetValue",
+                          "componentId": "maReport",
+                          "property": "text",
+                          "value": "${event.currentTime}|end|${trackOffset}|${utcTime}|${lyricsVisible ? 1 : 0}"
+                        },
+                        {
+                          "type": "SetValue",
+                          "componentId": "playPauseToggleButtonId",
+                          "property": "checked",
+                          "value": false
+                        }
+                      ],
+                      "bind": [
+                        {
+                          "name": "trackOffset",
+                          "type": "number",
+                          "value": 0
+                        },
+                        {
+                          "name": "pendingElapsed",
+                          "type": "number",
+                          "value": 0
+                        },
+                        {
+                          "name": "needsResync",
+                          "type": "boolean",
+                          "value": false
                         }
                       ]
                     },
@@ -383,47 +729,201 @@
                           "alignItems": "center",
                           "item": [
                             {
-                              "type": "AlexaSlider",
-                              "id": "slider",
-                              "progressValue": "${videoProgressValue}",
-                              "totalValue": "${videoTotalValue}",
-                              "positionPropertyName": "sliderThumbPosition",
-                              "metadataDisplayed": true,
-                              "metadataPosition": "above_right",
+                              "type": "Frame",
                               "width": "100%",
-                              "theme": "${viewport.theme}",
-                              "onUpCommand": [
-                                {
-                                  "type": "ControlMedia",
-                                  "componentId": "videoPlayer",
-                                  "command": "seek",
-                                  "value": "${sliderThumbPosition - videoProgressValue}"
-                                }
-                              ],
-                              "onMoveCommand": [
-                                {
-                                  "type": "SetValue",
-                                  "property": "sliderActive",
-                                  "value": true
-                                }
-                              ],
-                              "onDownCommand": [
-                                {
-                                  "type": "SetValue",
-                                  "property": "sliderActive",
-                                  "value": true
-                                }
-                              ]
+                              "item": {
+                                "type": "AlexaSlider",
+                                "id": "slider",
+                                "progressValue": "${videoProgressValue > trackOffset ? videoProgressValue - trackOffset : 0}",
+                                "totalValue": "${trackTotal}",
+                                "positionPropertyName": "sliderThumbPosition",
+                                "metadataDisplayed": true,
+                                "metadataPosition": "above_right",
+                                "width": "100%",
+                                "theme": "${viewport.theme}",
+                                "onUpCommand": [
+                                  {
+                                    "type": "SetValue",
+                                    "property": "sliderActive",
+                                    "value": false
+                                  },
+                                  {
+                                    "type": "SetValue",
+                                    "componentId": "maSeek",
+                                    "property": "text",
+                                    "value": "${sliderThumbPosition}@${elapsedTime}"
+                                  }
+                                ],
+                                "onMoveCommand": [
+                                  {
+                                    "type": "SetValue",
+                                    "property": "sliderActive",
+                                    "value": true
+                                  }
+                                ],
+                                "onDownCommand": [
+                                  {
+                                    "type": "SetValue",
+                                    "property": "sliderActive",
+                                    "value": true
+                                  }
+                                ]
+                              },
+                              "opacity": "${remoteFocus < 0 || remoteFocus == 10 ? 1 : 0.35}"
                             },
                             {
-                              "type": "AlexaTransportControls",
-                              "mediaComponentId": "videoPlayer",
-                              "playPauseToggleButtonId": "playPauseToggleButtonId",
-                              "primaryControlSize": "@primaryControlSize",
-                              "secondaryControls": "${audioControlType}",
-                              "secondaryControlSize": "@secondaryControlSize",
-                              "autoplay": true,
-                              "theme": "${viewport.theme}"
+                              "type": "Container",
+                              "id": "MaSkipButtons",
+                              "direction": "row",
+                              "alignItems": "center",
+                              "justifyContent": "center",
+                              "items": [
+                                {
+                                  "type": "TouchWrapper",
+                                  "width": "@secondaryControlSize",
+                                  "height": "@secondaryControlSize",
+                                  "onPress": [
+                                    {
+                                      "type": "Sequential",
+                                      "commands": [
+                                        {
+                                          "type": "SetValue",
+                                          "property": "opacity",
+                                          "value": 0.35
+                                        },
+                                        {
+                                          "type": "SendEvent",
+                                          "arguments": [
+                                            "Previous"
+                                          ]
+                                        },
+                                        {
+                                          "type": "Idle",
+                                          "delay": 250
+                                        }
+                                      ],
+                                      "finally": [
+                                        {
+                                          "type": "SetValue",
+                                          "property": "opacity",
+                                          "value": 1
+                                        }
+                                      ]
+                                    }
+                                  ],
+                                  "item": {
+                                    "type": "Frame",
+                                    "item": {
+                                      "type": "VectorGraphic",
+                                      "source": "maSkipPrevious",
+                                      "width": "100%",
+                                      "height": "100%",
+                                      "scale": "best-fit"
+                                    },
+                                    "opacity": "${remoteFocus < 0 || remoteFocus == 0 ? 1 : 0.35}",
+                                    "width": "100%",
+                                    "height": "100%"
+                                  }
+                                },
+                                {
+                                  "type": "Frame",
+                                  "item": {
+                                    "type": "AlexaTransportControls",
+                                    "mediaComponentId": "videoPlayer",
+                                    "playPauseToggleButtonId": "playPauseToggleButtonId",
+                                    "primaryControlSize": "@primaryControlSize",
+                                    "secondaryControls": "none",
+                                    "secondaryControlSize": "@secondaryControlSize",
+                                    "autoplay": true,
+                                    "theme": "${viewport.theme}"
+                                  },
+                                  "opacity": "${remoteFocus < 0 || remoteFocus == 1 ? 1 : 0.35}"
+                                },
+                                {
+                                  "type": "TouchWrapper",
+                                  "width": "@secondaryControlSize",
+                                  "height": "@secondaryControlSize",
+                                  "onPress": [
+                                    {
+                                      "type": "Sequential",
+                                      "commands": [
+                                        {
+                                          "type": "SetValue",
+                                          "property": "opacity",
+                                          "value": 0.35
+                                        },
+                                        {
+                                          "type": "SendEvent",
+                                          "arguments": [
+                                            "Next"
+                                          ]
+                                        },
+                                        {
+                                          "type": "Idle",
+                                          "delay": 250
+                                        }
+                                      ],
+                                      "finally": [
+                                        {
+                                          "type": "SetValue",
+                                          "property": "opacity",
+                                          "value": 1
+                                        }
+                                      ]
+                                    }
+                                  ],
+                                  "item": {
+                                    "type": "Frame",
+                                    "item": {
+                                      "type": "VectorGraphic",
+                                      "source": "maSkipNext",
+                                      "width": "100%",
+                                      "height": "100%",
+                                      "scale": "best-fit"
+                                    },
+                                    "opacity": "${remoteFocus < 0 || remoteFocus == 2 ? 1 : 0.35}",
+                                    "width": "100%",
+                                    "height": "100%"
+                                  }
+                                },
+                                {
+                                  "type": "TouchWrapper",
+                                  "id": "maLyricsButton",
+                                  "width": "@secondaryControlSize",
+                                  "height": "@secondaryControlSize",
+                                  "spacing": "@spacingMedium",
+                                  "display": "${lyricsAvailable ? 'normal' : 'invisible'}",
+                                  "onPress": [
+                                    {
+                                      "type": "SetValue",
+                                      "componentId": "AudioPlayerRoot",
+                                      "property": "lyricsVisible",
+                                      "value": "${!lyricsVisible}"
+                                    },
+                                    {
+                                      "type": "ScrollToIndex",
+                                      "componentId": "maLyrics",
+                                      "index": "${lyricsIndex}",
+                                      "align": "center",
+                                      "when": "${lyricsVisible}"
+                                    }
+                                  ],
+                                  "item": {
+                                    "type": "Frame",
+                                    "item": {
+                                      "type": "VectorGraphic",
+                                      "source": "maLyrics",
+                                      "width": "100%",
+                                      "height": "100%",
+                                      "scale": "best-fit",
+                                      "opacity": "${lyricsVisible ? 1 : 0.6}"
+                                    },
+                                    "opacity": "${remoteFocus < 0 || remoteFocus == 3 ? 1 : 0.35}",
+                                    "width": "100%",
+                                    "height": "100%"
+                                  }
+                                }
+                              ]
                             }
                           ]
                         }
@@ -448,8 +948,262 @@
                   ]
                 }
               ]
+            },
+            {
+              "type": "Text",
+              "id": "maReport",
+              "text": "0|true",
+              "position": "absolute",
+              "width": 1,
+              "height": 1,
+              "opacity": 0
+            },
+            {
+              "type": "Text",
+              "id": "maSeek",
+              "text": "",
+              "position": "absolute",
+              "width": 1,
+              "height": 1,
+              "opacity": 0
+            },
+            {
+              "type": "TouchWrapper",
+              "id": "maRemote",
+              "position": "absolute",
+              "top": 0,
+              "left": 0,
+              "width": "1dp",
+              "height": "1dp",
+              "item": {
+                "type": "Frame",
+                "width": "1dp",
+                "height": "1dp"
+              },
+              "handleKeyDown": [
+                {
+                  "when": "${(event.keyboard.code == 'ArrowLeft' || event.keyboard.key == 'ArrowLeft') && remoteFocus == 10}",
+                  "commands": [
+                    {
+                      "type": "SetValue",
+                      "componentId": "AudioPlayerRoot",
+                      "property": "seekTarget",
+                      "value": "${Math.max(0, Math.min(trackTotal - 2000, (seekTarget >= 0 ? seekTarget : (videoProgressValue > trackOffset ? videoProgressValue - trackOffset : 0)) -10000))}"
+                    },
+                    {
+                      "type": "SetValue",
+                      "componentId": "slider",
+                      "property": "progressValue",
+                      "value": "${seekTarget}"
+                    },
+                    {
+                      "type": "Sequential",
+                      "sequencer": "maSeekKeys",
+                      "commands": [
+                        {
+                          "type": "Idle",
+                          "delay": 1200
+                        },
+                        {
+                          "type": "SetValue",
+                          "componentId": "maSeek",
+                          "property": "text",
+                          "value": "${seekTarget}@${utcTime}"
+                        },
+                        {
+                          "type": "Idle",
+                          "delay": 8000
+                        },
+                        {
+                          "type": "SetValue",
+                          "componentId": "AudioPlayerRoot",
+                          "property": "seekTarget",
+                          "value": -1
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "when": "${(event.keyboard.code == 'ArrowRight' || event.keyboard.key == 'ArrowRight') && remoteFocus == 10}",
+                  "commands": [
+                    {
+                      "type": "SetValue",
+                      "componentId": "AudioPlayerRoot",
+                      "property": "seekTarget",
+                      "value": "${Math.max(0, Math.min(trackTotal - 2000, (seekTarget >= 0 ? seekTarget : (videoProgressValue > trackOffset ? videoProgressValue - trackOffset : 0)) +10000))}"
+                    },
+                    {
+                      "type": "SetValue",
+                      "componentId": "slider",
+                      "property": "progressValue",
+                      "value": "${seekTarget}"
+                    },
+                    {
+                      "type": "Sequential",
+                      "sequencer": "maSeekKeys",
+                      "commands": [
+                        {
+                          "type": "Idle",
+                          "delay": 1200
+                        },
+                        {
+                          "type": "SetValue",
+                          "componentId": "maSeek",
+                          "property": "text",
+                          "value": "${seekTarget}@${utcTime}"
+                        },
+                        {
+                          "type": "Idle",
+                          "delay": 8000
+                        },
+                        {
+                          "type": "SetValue",
+                          "componentId": "AudioPlayerRoot",
+                          "property": "seekTarget",
+                          "value": -1
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "when": "${event.keyboard.code == 'ArrowLeft' || event.keyboard.key == 'ArrowLeft'}",
+                  "commands": [
+                    {
+                      "type": "SetValue",
+                      "componentId": "AudioPlayerRoot",
+                      "property": "remoteFocus",
+                      "value": "${Math.max(0, remoteFocus - 1)}"
+                    }
+                  ]
+                },
+                {
+                  "when": "${event.keyboard.code == 'ArrowRight' || event.keyboard.key == 'ArrowRight'}",
+                  "commands": [
+                    {
+                      "type": "SetValue",
+                      "componentId": "AudioPlayerRoot",
+                      "property": "remoteFocus",
+                      "value": "${Math.min(lyricsAvailable ? 3 : 2, remoteFocus + 1)}"
+                    }
+                  ]
+                },
+                {
+                  "when": "${event.keyboard.code == 'ArrowUp' || event.keyboard.key == 'ArrowUp'}",
+                  "commands": [
+                    {
+                      "type": "SetValue",
+                      "componentId": "AudioPlayerRoot",
+                      "property": "remoteFocus",
+                      "value": 10
+                    }
+                  ]
+                },
+                {
+                  "when": "${event.keyboard.code == 'ArrowDown' || event.keyboard.key == 'ArrowDown'}",
+                  "commands": [
+                    {
+                      "type": "SetValue",
+                      "componentId": "AudioPlayerRoot",
+                      "property": "remoteFocus",
+                      "value": "${remoteFocus == 10 ? 1 : remoteFocus}"
+                    }
+                  ]
+                },
+                {
+                  "when": "${event.keyboard.code == 'Enter' || event.keyboard.key == 'Enter' || event.keyboard.code == 'NumpadEnter' || event.keyboard.key == 'NumpadEnter'}",
+                  "commands": [
+                    {
+                      "type": "SendEvent",
+                      "arguments": [
+                        "Previous"
+                      ],
+                      "when": "${remoteFocus == 0}"
+                    },
+                    {
+                      "type": "SetValue",
+                      "componentId": "playPauseToggleButtonId",
+                      "property": "checked",
+                      "value": "${!videoPlaying}",
+                      "when": "${remoteFocus == 1}"
+                    },
+                    {
+                      "type": "ControlMedia",
+                      "componentId": "videoPlayer",
+                      "command": "${videoPlaying ? 'pause' : 'play'}",
+                      "when": "${remoteFocus == 1}"
+                    },
+                    {
+                      "type": "SendEvent",
+                      "arguments": [
+                        "Next"
+                      ],
+                      "when": "${remoteFocus == 2}"
+                    },
+                    {
+                      "type": "SetValue",
+                      "componentId": "AudioPlayerRoot",
+                      "property": "lyricsVisible",
+                      "value": "${!lyricsVisible}",
+                      "when": "${remoteFocus == 3}"
+                    },
+                    {
+                      "type": "Sequential",
+                      "sequencer": "maLyricsOpen",
+                      "when": "${remoteFocus == 3 && lyricsVisible}",
+                      "commands": [
+                        {
+                          "type": "Idle",
+                          "delay": 150
+                        },
+                        {
+                          "type": "ScrollToIndex",
+                          "componentId": "maLyrics",
+                          "index": "${lyricsIndex}",
+                          "align": "center"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "when": "${event.keyboard.code == 'MediaRewind' || event.keyboard.key == 'MediaRewind' || event.keyboard.code == 'MediaPreviousTrack' || event.keyboard.key == 'MediaPreviousTrack' || event.keyboard.code == 'MediaTrackPrevious' || event.keyboard.key == 'MediaTrackPrevious'}",
+                  "commands": [
+                    {
+                      "type": "SendEvent",
+                      "arguments": [
+                        "Previous"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "when": "${event.keyboard.code == 'MediaFastForward' || event.keyboard.key == 'MediaFastForward' || event.keyboard.code == 'MediaNextTrack' || event.keyboard.key == 'MediaNextTrack' || event.keyboard.code == 'MediaTrackNext' || event.keyboard.key == 'MediaTrackNext'}",
+                  "commands": [
+                    {
+                      "type": "SendEvent",
+                      "arguments": [
+                        "Next"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "when": "${event.keyboard.code == 'MediaPlayPause' || event.keyboard.key == 'MediaPlayPause' || event.keyboard.code == 'MediaPlay' || event.keyboard.key == 'MediaPlay' || event.keyboard.code == 'MediaPause' || event.keyboard.key == 'MediaPause'}",
+                  "commands": [
+                    {
+                      "type": "SendEvent",
+                      "arguments": [
+                        "PlayPause"
+                      ]
+                    }
+                  ]
+                }
+              ]
             }
-          ]
+          ],
+          "id": "MaTimeRoot"
         }
       ]
     }
@@ -470,8 +1224,163 @@
         "headerSubtitle": "${headerSubtitle}",
         "primaryText": "${primaryText}",
         "secondaryText": "${secondaryText}",
-        "sliderType": "determinate"
+        "sliderType": "determinate",
+        "audioNextSource": "${audioNextSource}"
       }
     ]
-  }
+  },
+  "graphics": {
+    "maSkipPrevious": {
+      "type": "AVG",
+      "version": "1.2",
+      "width": 24,
+      "height": 24,
+      "items": [
+        {
+          "type": "path",
+          "pathData": "M6 6h2v12H6zm3.5 6l8.5 6V6z",
+          "fill": "white"
+        }
+      ]
+    },
+    "maSkipNext": {
+      "type": "AVG",
+      "version": "1.2",
+      "width": 24,
+      "height": 24,
+      "items": [
+        {
+          "type": "path",
+          "pathData": "M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z",
+          "fill": "white"
+        }
+      ]
+    },
+    "maLyrics": {
+      "type": "AVG",
+      "version": "1.2",
+      "width": 24,
+      "height": 24,
+      "items": [
+        {
+          "type": "path",
+          "fill": "white",
+          "pathData": "M9,3A4,4 0 0,1 13,7H5A4,4 0 0,1 9,3M11.84,9.82L11,18H10V19A2,2 0 0,0 12,21A2,2 0 0,0 14,19V14A4,4 0 0,1 18,10H20L19,11L20,12H18A2,2 0 0,0 16,14V19A4,4 0 0,1 12,23A4,4 0 0,1 8,19V18H7L6.16,9.82C5.67,9.32 5.31,8.7 5.13,8H12.87C12.69,8.7 12.33,9.32 11.84,9.82Z"
+        }
+      ]
+    },
+    "maLogo": {
+      "type": "AVG",
+      "version": "1.2",
+      "width": 256,
+      "height": 256,
+      "items": [
+        {
+          "type": "path",
+          "fill": "transparent",
+          "stroke": "white",
+          "strokeWidth": 14,
+          "strokeLineJoin": "round",
+          "pathData": "M128,16 L240,98 Q246,103 246,111 V232 Q246,242 236,242 H20 Q10,242 10,232 V111 Q10,103 16,98 Z"
+        },
+        {
+          "type": "path",
+          "fill": "transparent",
+          "stroke": "white",
+          "strokeWidth": 17,
+          "strokeLineCap": "round",
+          "pathData": "M42,138 V212 M76,138 V212 M110,138 V212 M150,212 L174,138 M192,138 L216,212"
+        }
+      ]
+    }
+  },
+  "settings": {
+    "idleTimeout": 600000
+  },
+  "handleKeyDown": [
+    {
+      "when": "${event.keyboard.code == 'ArrowUp' || event.keyboard.key == 'ArrowUp'}",
+      "commands": [
+        {
+          "type": "SetValue",
+          "componentId": "AudioPlayerRoot",
+          "property": "remoteFocus",
+          "value": 10
+        },
+        {
+          "type": "SetFocus",
+          "componentId": "maRemote"
+        }
+      ]
+    },
+    {
+      "when": "${event.keyboard.code == 'ArrowLeft' || event.keyboard.key == 'ArrowLeft' || event.keyboard.code == 'ArrowRight' || event.keyboard.key == 'ArrowRight' || event.keyboard.code == 'ArrowDown' || event.keyboard.key == 'ArrowDown'}",
+      "commands": [
+        {
+          "type": "SetValue",
+          "componentId": "AudioPlayerRoot",
+          "property": "remoteFocus",
+          "value": 1
+        },
+        {
+          "type": "SetFocus",
+          "componentId": "maRemote"
+        }
+      ]
+    },
+    {
+      "when": "${event.keyboard.code == 'Enter' || event.keyboard.key == 'Enter' || event.keyboard.code == 'NumpadEnter' || event.keyboard.key == 'NumpadEnter'}",
+      "commands": [
+        {
+          "type": "SendEvent",
+          "arguments": [
+            "PlayPause"
+          ]
+        },
+        {
+          "type": "SetValue",
+          "componentId": "AudioPlayerRoot",
+          "property": "remoteFocus",
+          "value": 1
+        },
+        {
+          "type": "SetFocus",
+          "componentId": "maRemote"
+        }
+      ]
+    },
+    {
+      "when": "${event.keyboard.code == 'MediaRewind' || event.keyboard.key == 'MediaRewind' || event.keyboard.code == 'MediaPreviousTrack' || event.keyboard.key == 'MediaPreviousTrack' || event.keyboard.code == 'MediaTrackPrevious' || event.keyboard.key == 'MediaTrackPrevious'}",
+      "commands": [
+        {
+          "type": "SendEvent",
+          "arguments": [
+            "Previous"
+          ]
+        }
+      ]
+    },
+    {
+      "when": "${event.keyboard.code == 'MediaFastForward' || event.keyboard.key == 'MediaFastForward' || event.keyboard.code == 'MediaNextTrack' || event.keyboard.key == 'MediaNextTrack' || event.keyboard.code == 'MediaTrackNext' || event.keyboard.key == 'MediaTrackNext'}",
+      "commands": [
+        {
+          "type": "SendEvent",
+          "arguments": [
+            "Next"
+          ]
+        }
+      ]
+    },
+    {
+      "when": "${event.keyboard.code == 'MediaPlayPause' || event.keyboard.key == 'MediaPlayPause' || event.keyboard.code == 'MediaPlay' || event.keyboard.key == 'MediaPlay' || event.keyboard.code == 'MediaPause' || event.keyboard.key == 'MediaPause'}",
+      "commands": [
+        {
+          "type": "SendEvent",
+          "arguments": [
+            "PlayPause"
+          ]
+        }
+      ]
+    }
+  ]
 }

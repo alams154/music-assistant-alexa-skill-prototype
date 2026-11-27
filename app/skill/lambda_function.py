@@ -176,6 +176,9 @@ class LaunchRequestOrPlayAudioHandler(AbstractRequestHandler):
     def handle(self, handler_input):
         # type: (HandlerInput) -> Response
         logger.info("In LaunchRequestOrPlayAudioHandler")
+        live_response = _play_audio_on_live_page(handler_input)
+        if live_response is not None:
+            return live_response
 
         _ = handler_input.attributes_manager.request_attributes["_"]
         request = handler_input.request_envelope.request
@@ -199,6 +202,7 @@ class LaunchRequestOrPlayAudioHandler(AbstractRequestHandler):
             return handler_input.response_builder.response
 
         logger.info("Playing URL: %s", url)
+        _reset_screen_state(handler_input, url)
         return util.play(
             url=url,
             offset=0,
@@ -242,6 +246,10 @@ class UnhandledIntentHandler(AbstractRequestHandler):
     def handle(self, handler_input):
         # type: (HandlerInput) -> Response
         logger.info("In UnhandledIntentHandler")
+        _player = device_mapping.get_player_for_device(_device_id_from(handler_input))
+        if _page_is_live(_player):
+            logger.info("Fallback while the screen plays on %s: ignored", _player)
+            return handler_input.response_builder.set_should_end_session(None).response
         _ = handler_input.attributes_manager.request_attributes["_"]
         handler_input.response_builder.speak(
             _(data.UNHANDLED_MSG)).set_should_end_session(True)
@@ -250,9 +258,17 @@ class UnhandledIntentHandler(AbstractRequestHandler):
 
 def _device_id_from(handler_input):
     try:
-        return handler_input.request_envelope.context.system.device.device_id
+        device_id = handler_input.request_envelope.context.system.device.device_id
     except Exception:
         return None
+    try:
+        # voice requests: a pause seen on the screen meanwhile is the Echo listening
+        if getattr(handler_input.request_envelope.request, "object_type", "") == "IntentRequest":
+            import time as _t
+            _last_intent_at[device_id] = _t.time()
+    except Exception:
+        pass
+    return device_id
 
 
 def _sync_to_ma_unless_echo(handler_input, command):
@@ -274,7 +290,7 @@ def _sync_to_ma_unless_echo(handler_input, command):
         return
 
     ma_control.mark_ma_triggered(device_id, command)
-    if not ma_control.send_player_command(player_id, command):
+    if not ma_control.send_player_command(player_id, command, ref_item_id=_shown_item_id(player_id)):
         logger.warning("Failed to sync %s to MA player %s", command, player_id)
 
 
@@ -288,7 +304,9 @@ class NextOrPreviousIntentHandler(AbstractRequestHandler):
     def can_handle(self, handler_input):
         # type: (HandlerInput) -> bool
         return (is_intent_name("AMAZON.NextIntent")(handler_input) or
-                is_intent_name("AMAZON.PreviousIntent")(handler_input))
+                is_intent_name("AMAZON.PreviousIntent")(handler_input) or
+                is_intent_name("MaNextIntent")(handler_input) or
+                is_intent_name("MaPreviousIntent")(handler_input))
 
     def handle(self, handler_input):
         # type: (HandlerInput) -> Response
@@ -296,7 +314,7 @@ class NextOrPreviousIntentHandler(AbstractRequestHandler):
         _ = handler_input.attributes_manager.request_attributes["_"]
 
         intent_name = handler_input.request_envelope.request.intent.name
-        command = "next" if intent_name == "AMAZON.NextIntent" else "previous"
+        command = "next" if intent_name in ("AMAZON.NextIntent", "MaNextIntent") else "previous"
 
         device_id = _device_id_from(handler_input)
         player_id = device_mapping.get_player_for_device(device_id)
@@ -306,12 +324,14 @@ class NextOrPreviousIntentHandler(AbstractRequestHandler):
                 _(data.DEVICE_NOT_MAPPED_MSG)).set_should_end_session(True)
             return handler_input.response_builder.response
 
-        if not ma_control.send_player_command(player_id, command):
+        if not ma_control.send_player_command(player_id, command, ref_item_id=_shown_item_id(player_id)):
             handler_input.response_builder.speak(
                 _(data.MA_COMMAND_FAILED_MSG)).set_should_end_session(True)
             return handler_input.response_builder.response
 
-        handler_input.response_builder.set_should_end_session(True)
+        # keep the session, hence the screen, open on a screen Echo showing MA
+        logger.info("Voice %s on %s (screen live: %s)", command, player_id, _page_is_live(player_id))
+        handler_input.response_builder.set_should_end_session(None if _page_is_live(player_id) else True)
         return handler_input.response_builder.response
 
 
@@ -407,7 +427,7 @@ class StartOverIntentHandler(AbstractRequestHandler):
                 _(data.DEVICE_NOT_MAPPED_MSG)).set_should_end_session(True)
             return handler_input.response_builder.response
 
-        if not ma_control.send_player_command(player_id, "start_over"):
+        if not ma_control.send_player_command(player_id, "start_over", ref_item_id=_shown_item_id(player_id)):
             handler_input.response_builder.speak(
                 _(data.MA_COMMAND_FAILED_MSG)).set_should_end_session(True)
             return handler_input.response_builder.response
@@ -578,6 +598,241 @@ class ExceptionEncounteredHandler(AbstractRequestHandler):
 # ########## APL INTERFACE HANDLERS #################################
 # This section contains handlers related to APL interface
 
+
+class APLSkipEventHandler(AbstractRequestHandler):
+    """Next/Previous buttons of the APL screen -> Music Assistant.
+
+    The stock AlexaTransportControls skip buttons act on the hidden Video
+    component, which only holds the current flow stream, so they just restart
+    it. The patched APL document sends UserEvent ["Next"] / ["Previous"].
+    """
+    def can_handle(self, handler_input):
+        if not is_request_type("Alexa.Presentation.APL.UserEvent")(handler_input):
+            return False
+        args = getattr(handler_input.request_envelope.request, 'arguments', None) or []
+        return bool(args) and args[0] in ("Next", "Previous", "VoiceNext")
+
+    def handle(self, handler_input):
+        args = handler_input.request_envelope.request.arguments
+        # VoiceNext: the Video moved to its dummy second source ("Alexa, next", or stream end)
+        command = {"Next": "next", "Previous": "previous", "VoiceNext": "advance"}[args[0]]
+        device_id = _device_id_from(handler_input)
+        player_id = device_mapping.get_player_for_device(device_id)
+        logger.info("In APLSkipEventHandler: %s (player=%s)", command, player_id)
+        if player_id:
+            ma_control.send_player_command(player_id, command, ref_item_id=_shown_item_id(player_id))
+        else:
+            logger.warning("No MA player mapped for device_id=%s (APL %s)", device_id, command)
+        return handler_input.response_builder.set_should_end_session(None).response
+
+
+
+# Follow track changes inside the MA flow stream on the APL screen.
+_NOW_PLAYING_POLL_SECONDS = 4
+_now_playing_state = {}
+
+
+def _apl_time_commands(info):
+    """SetValue commands giving the APL slider the per-track elapsed/total."""
+    return [
+        {"type": "SetValue", "componentId": "AudioPlayerRoot",
+         "property": "trackTotal", "value": info.get("duration_ms", 0)},
+        {"type": "SetValue", "componentId": "videoPlayer",
+         "property": "pendingElapsed", "value": info.get("elapsed_ms", 0)},
+        {"type": "SetValue", "componentId": "videoPlayer",
+         "property": "needsResync", "value": True},
+        {"type": "SetValue", "componentId": "slider",
+         "property": "totalValue", "value": info.get("duration_ms", 0)},
+    ]
+
+
+def _sync_now_playing_from_ma(handler_input):
+    """Every few seconds, ask MA which queue item is playing on the mapped
+    player. On a track change (or when the APL document was re-rendered),
+    update the shared store metadata and return SetValue commands for the
+    per-track time. The stream URL is left untouched."""
+    import time
+    import shared_store
+    device_id = _device_id_from(handler_input)
+    player_id = device_mapping.get_player_for_device(device_id)
+    if not player_id:
+        return None
+    state = _now_playing_state.setdefault(player_id, {"t": 0.0, "id": None, "tick": -1})
+
+    # refreshTick restarts from 0 when a new APL document is rendered.
+    try:
+        args = handler_input.request_envelope.request.arguments or []
+        tick = int(float(args[1])) if len(args) > 1 else None
+    except Exception:
+        tick = None
+    if tick is not None:
+        if tick < state["tick"]:
+            state["id"] = None
+            state["t"] = 0.0
+        state["tick"] = tick
+
+    now = time.time()
+    if now - state["t"] < _NOW_PLAYING_POLL_SECONDS:
+        return None
+    state["t"] = now
+    info = ma_control.get_now_playing(player_id)
+    if not info:
+        return None
+    if info["queue_item_id"] == state["id"]:
+        return _apl_time_commands(info) if _time_needs_resend(player_id, state, info, now) else None
+    prev_id, prev_duration = state.get("last_id"), state.get("last_duration")
+    state["exact"] = False
+    state["id"] = info["queue_item_id"]
+    state["since"] = now
+    state["resent"] = 0
+    logger.info("Time sync %s: track %s (%s), MA at %.0fs/%.0fs", player_id, info["queue_item_id"],
+                (info.get("title") or "")[:30], info.get("elapsed_ms", 0) / 1000, info.get("duration_ms", 0) / 1000)
+    if not info.get("duration_ms"):
+        state["id"] = None   # MA does not know the duration yet: ask again
+    else:
+        state["last_id"], state["last_duration"] = info["queue_item_id"], info["duration_ms"]
+
+    store = shared_store._store
+    if store is not None and store.get("streamUrl") and store.get("title") != info["title"]:
+        secondary = " - ".join(x for x in (info["artist"], info["album"]) if x)
+        store.update({"title": info["title"], "artist": info["artist"],
+                      "album": info["album"], "secondary": secondary})
+        if info["imageUrl"]:
+            store["imageUrl"] = info["imageUrl"]
+        logger.info("Now playing changed on %s: %s", player_id, info["title"])
+    return (_seek_time_commands(player_id, state, info, now)
+            or _flow_time_commands(player_id, state, info, prev_id, prev_duration)
+            or _apl_time_commands(info))
+
+
+
+# MA 2.11 drives the open APL screen (see shared_store).
+_last_seek_request = {}
+
+def _handle_live_page(handler_input):
+    """Record the open screen and its position; apply what MA queued for it.
+
+    Returns a full response when the screen must be re-rendered (new stream),
+    None otherwise (pause/resume commands are added to the normal refresh)."""
+    import shared_store
+    from ask_sdk_model.interfaces.alexa.presentation.apl import ExecuteCommandsDirective
+    device_id = _device_id_from(handler_input)
+    player_id = device_mapping.get_player_for_device(device_id)
+    if not player_id:
+        return None
+    shared_store.mark_page_live(player_id)
+    store = shared_store._store or {}
+    if player_id not in shared_store._rendered_stream and store.get('streamUrl'):
+        shared_store._rendered_stream[player_id] = store['streamUrl']
+
+    # Position/state written by the Video events into the hidden Text "maReport".
+    components = getattr(handler_input.request_envelope.request, 'components', None) or {}
+    report = components.get('maReport') if isinstance(components, dict) else None
+    if isinstance(report, str) and '|' in report:
+        try:
+            parts = report.split('|')
+            is_playing = parts[1].strip().lower() == 'true'
+            shared_store.set_report(player_id, 'PLAYING' if is_playing else 'PAUSED',
+                                    float(parts[0] or 0),
+                                    shared_store._rendered_stream.get(player_id),
+                                    observed_at=_report_clock(parts))
+            offset = float(parts[2]) if len(parts) > 2 and parts[2].strip() else None
+            _detect_voice_previous(player_id, float(parts[0] or 0), parts[1].strip())
+            if parts[1].strip() == 'end':
+                _expected_state[player_id] = (False, _time.time())   # not a pause
+                _stream_ended(player_id)
+            _screen_report(device_id, player_id, float(parts[0] or 0), is_playing, offset)
+            _shown_lyrics = _lyrics_state.get(player_id) or {}
+            if (len(parts) > 4 and parts[4].strip() in ('0', '1')
+                    and _shown_lyrics.get("sent") and _shown_lyrics.get("lines")):
+                _lyrics_open[player_id] = parts[4].strip() == '1'
+        except (TypeError, ValueError, IndexError):
+            pass
+
+    # Seek requested with the slider (written into the hidden Text "maSeek").
+    seek = components.get('maSeek') if isinstance(components, dict) else None
+    if isinstance(seek, str) and '@' in seek and seek != _last_seek_request.get(player_id):
+        _last_seek_request[player_id] = seek
+        try:
+            seconds = float(seek.split('@', 1)[0]) / 1000.0
+        except ValueError:
+            seconds = None
+        if seconds is not None:
+            logger.info("Live page %s: seek to %.1fs", player_id, seconds)
+            if seconds < 1:
+                logger.info("Live page %s: seek to the start: restarting the track", player_id)
+                ma_control.send_player_command(player_id, "start_over", ref_item_id=_shown_item_id(player_id))
+            else:
+                _seek_hint[player_id] = (seconds, _time.time(), _shown_item_id(player_id))
+                ma_control.seek_player(player_id, seconds)
+
+    actions = shared_store.pop_pending(player_id)
+    if not actions:
+        return None
+    rb = handler_input.response_builder
+    after = actions[actions.index('stream') + 1:] if 'stream' in actions else actions
+    if 'stream' in actions and store.get('streamUrl'):
+        url = store['streamUrl']
+        logger.info("Live page %s: new stream, re-rendering the screen", player_id)
+        # Fresh metadata cache before util.play republishes it
+        try:
+            data.get_latest()
+        except Exception:
+            logger.exception("Failed to refresh metadata before re-render")
+        util.play(url=url, offset=0, text=None, response_builder=rb, supports_apl=True)
+        shared_store._rendered_stream[player_id] = url
+        _now_playing_state.pop(player_id, None)
+        _screen_restarted(player_id)
+    media = [{"type": "ControlMedia", "componentId": "videoPlayer",
+              "command": "pause" if a == 'pause' else "play"}
+             for a in after if a in ('pause', 'resume')]
+    if media:
+        logger.info("Live page %s: %s", player_id, ", ".join(after))
+        _expected_state[player_id] = (media[-1]["command"] == "play", _time.time())
+        rb.add_directive(ExecuteCommandsDirective(commands=media[-1:], token="playbackToken"))
+    if 'stream' not in actions:
+        util.schedule_apl_refresh(rb)
+    rb.set_should_end_session(None)
+    return rb.response
+
+
+
+class APLSeekEventHandler(AbstractRequestHandler):
+    """The APL slider sends ["Seek", ms]; seek the MA queue instead of
+    the (unseekable) flow stream."""
+    def can_handle(self, handler_input):
+        if not is_request_type("Alexa.Presentation.APL.UserEvent")(handler_input):
+            return False
+        args = getattr(handler_input.request_envelope.request, 'arguments', None) or []
+        return bool(args) and args[0] == "Seek"
+
+    def handle(self, handler_input):
+        args = handler_input.request_envelope.request.arguments
+        try:
+            seconds = float(args[1]) / 1000.0
+        except (IndexError, TypeError, ValueError):
+            seconds = None
+        player_id = device_mapping.get_player_for_device(_device_id_from(handler_input))
+        logger.info("In APLSeekEventHandler: %ss (player=%s)", seconds, player_id)
+        if player_id and seconds is not None:
+            ma_control.seek_player(player_id, seconds)
+        return handler_input.response_builder.set_should_end_session(None).response
+
+
+
+def _reset_screen_state(handler_input, url):
+    """A new screen is rendered: restart the time sync for this player."""
+    try:
+        import shared_store
+        player_id = device_mapping.get_player_for_device(_device_id_from(handler_input))
+        if player_id:
+            _now_playing_state.pop(player_id, None)
+            _screen_restarted(player_id)
+            shared_store._rendered_stream[player_id] = (shared_store._store or {}).get('streamUrl') or url
+    except Exception:
+        logger.exception("Failed to reset screen state")
+
+
 class APLUserEventHandler(AbstractRequestHandler):
     """Handler for APL UserEvent requests.
 
@@ -608,8 +863,24 @@ class APLUserEventHandler(AbstractRequestHandler):
         # Fetch latest metadata from Music Assistant
         changed = False
         try:
+            live_response = _handle_live_page(handler_input)
+            if live_response is not None:
+                return live_response
+        except Exception:
+            logger.exception("Failed to handle live page actions")
+
+        time_commands = None
+        try:
+            time_commands = _sync_now_playing_from_ma(handler_input)
+        except Exception:
+            logger.exception("Failed to sync now playing from MA")
+        try:
+            time_commands = (time_commands or []) + _lyrics_commands(handler_input)
+        except Exception:
+            logger.exception("Failed to update the lyrics")
+        try:
             result = data.get_latest()
-            changed = bool(result and result.get('changed'))
+            changed = bool(result and result.get('changed')) and _meta_changed(handler_input)
             if changed:
                 logger.info("Metadata changed")
             else:
@@ -628,6 +899,11 @@ class APLUserEventHandler(AbstractRequestHandler):
                     logger.info("APL metadata update directive added to response")
                 except Exception:
                     logger.exception("Failed to update APL metadata")
+
+        if time_commands:
+            from ask_sdk_model.interfaces.alexa.presentation.apl import ExecuteCommandsDirective
+            handler_input.response_builder.add_directive(
+                ExecuteCommandsDirective(commands=time_commands, token="playbackToken"))
 
         # Always schedule the next refresh so polling continues.
         try:
@@ -702,7 +978,7 @@ class NextOrPreviousCommandHandler(AbstractRequestHandler):
         device_id = _device_id_from(handler_input)
         player_id = device_mapping.get_player_for_device(device_id)
         if player_id:
-            ma_control.send_player_command(player_id, command)
+            ma_control.send_player_command(player_id, command, ref_item_id=_shown_item_id(player_id))
         else:
             logger.warning("No MA player mapped for device_id=%s (hardware command)", device_id)
 
@@ -848,6 +1124,8 @@ sb.add_request_handler(LaunchRequestOrPlayAudioHandler())
 sb.add_request_handler(PlayCommandHandler())
 sb.add_request_handler(HelpIntentHandler())
 sb.add_request_handler(ExceptionEncounteredHandler())
+sb.add_request_handler(APLSeekEventHandler())
+sb.add_request_handler(APLSkipEventHandler())
 sb.add_request_handler(APLUserEventHandler())
 sb.add_request_handler(UnhandledIntentHandler())
 sb.add_request_handler(NextOrPreviousIntentHandler())
@@ -875,3 +1153,504 @@ sb.add_global_response_interceptor(ResponseLogger())
 
 # AWS Lambda handler
 lambda_handler = sb.lambda_handler()
+
+
+# What the screen shows, and what it changes by itself.
+import threading as _threading
+import time as _time
+
+_screen_pos = {}        # player_id -> {"current", "offset", "playing", "t"}
+_screen_started = {}    # player_id -> time the screen (re)started a stream
+_expected_state = {}    # player_id -> (playing, time): change asked by MA
+_TIME_WINDOW = 45       # seconds after a new track/screen during which the time is checked
+_TIME_TOLERANCE_MS = 3000
+
+
+def _shown_item_id(player_id):
+    return (_now_playing_state.get(player_id) or {}).get("id")
+
+
+def _screen_restarted(player_id):
+    _lyrics_screen_reset(player_id)
+    _screen_pos.pop(player_id, None)
+    _expected_state.pop(player_id, None)
+    _screen_started[player_id] = _time.time()
+
+
+def _time_out_of_track(player_id, state, info, now):
+    """The screen shows a time outside the track (its start in the stream was lost)."""
+    pos = _screen_pos.get(player_id)
+    duration = info.get("duration_ms") or 0
+    if (not duration or not pos or not pos["playing"] or pos["offset"] is None
+            or now - pos["t"] > 3 or now - state.get("sane_at", 0) < 20
+            or now - state.get("since", 0) < 10):     # the screen may not report the new offset yet
+        return False
+    shown = pos["current"] - pos["offset"]
+    if -5000 <= shown <= duration + 5000:
+        return False
+    state["sane_at"] = now
+    state["exact"] = False
+    logger.info("Time sync %s: screen shows %.0fs on a %.0fs track: resync from MA (%.0fs)", player_id,
+                shown / 1000, duration / 1000, info.get("elapsed_ms", 0) / 1000)
+    return True
+
+
+def _time_needs_resend(player_id, state, info, now):
+    """Same track as already synced: send the time again ~6 s later (MA may have
+    answered 0 at first), then whenever the screen is more than 3 s off."""
+    if _time_out_of_track(player_id, state, info, now):
+        return True
+    if state.get("exact"):
+        return False     # offset computed exactly: MA's (later) elapsed would only degrade it
+    age = now - state.get("since", now)
+    if age > _TIME_WINDOW:
+        return False
+    if state.get("resent", 0) == 0:
+        if age < 6:
+            return False
+        state["resent"] = 1
+        logger.info("Time sync %s: second pass (%.0fs/%.0fs)", player_id,
+                    info.get("elapsed_ms", 0) / 1000, info.get("duration_ms", 0) / 1000)
+        return True
+    pos = _screen_pos.get(player_id)
+    if age < 8 or not pos or not pos["playing"] or pos["offset"] is None or now - pos["t"] > 3:
+        return False
+    shown = pos["current"] - pos["offset"]
+    if abs(shown - info.get("elapsed_ms", 0)) <= _TIME_TOLERANCE_MS or state["resent"] >= 4:
+        return False
+    state["resent"] += 1
+    logger.info("Time sync %s: screen shows %.0fs, MA says %.0fs: resync", player_id,
+                shown / 1000, info.get("elapsed_ms", 0) / 1000)
+    return True
+
+
+def _screen_report(device_id, player_id, current_ms, playing, offset):
+    """Called on every refresh with the state written by the Video events."""
+    now = _time.time()
+    prev = _screen_pos.get(player_id)
+    _screen_pos[player_id] = {"current": current_ms, "offset": offset, "playing": playing, "t": now}
+    if prev is None or prev["playing"] == playing:
+        return
+    if now - _screen_started.get(player_id, 0) < 5:
+        return      # the stream is starting
+    expected = _expected_state.pop(player_id, None)
+    if expected and expected[0] == playing and now - expected[1] < 15:
+        return      # MA asked for it
+    command = "resume" if playing else "pause"
+    _threading.Thread(target=_forward_screen_command, args=(device_id, player_id, command),
+                      daemon=True).start()
+
+
+def _forward_screen_command(device_id, player_id, command):
+    try:
+        seen_at = _time.time()
+        screen = _screen_started.get(player_id, 0)
+        if _SCREEN_FORWARD_DELAY:
+            _time.sleep(_SCREEN_FORWARD_DELAY)
+        if _last_intent_at.get(device_id, 0) > seen_at - 3:
+            logger.info("Screen %s on %s: voice interaction, not forwarded", command, player_id)
+            return
+        pos = _screen_pos.get(player_id) or {}
+        if _screen_started.get(player_id, 0) != screen or pos.get("playing") != (command == "resume"):
+            logger.info("Screen %s on %s: screen changed meanwhile, not forwarded", command, player_id)
+            return
+        if command == "pause" and _ran_out_at_track_end(player_id, pos):
+            logger.info("Screen paused at the end of the track on %s: stream ran out, starting the next track",
+                        player_id)
+            ma_control.send_player_command(player_id, "advance", ref_item_id=_shown_item_id(player_id))
+            return
+        state = ma_control.get_queue_state(player_id)
+        if (command == "pause" and state != "playing") or (command == "resume" and state != "paused"):
+            logger.info("Screen %s on %s: MA already %s", command, player_id, state)
+            return
+        logger.info("Screen %s on %s: forwarding to MA", command, player_id)
+        ma_control.mark_ma_triggered(device_id, command)
+        if not ma_control.send_player_command(player_id, command):
+            logger.warning("Failed to forward screen %s to MA player %s", command, player_id)
+    except Exception:
+        logger.exception("Failed to forward screen %s to MA", command)
+
+
+# The stream restarted at the position asked with the slider.
+_seek_hint = {}     # player_id -> (seconds, time, queue item shown when seeking)
+
+
+def _seek_time_commands(player_id, state, info, now):
+    hint = _seek_hint.pop(player_id, None)
+    if not hint or now - hint[1] > 20 or hint[2] != info.get("queue_item_id"):
+        return None
+    state["resent"] = 1          # no second pass: this offset is exact
+    state["exact"] = True
+    total = info.get("duration_ms", 0)
+    logger.info("Time sync %s: new stream starts at the seek position %.0fs", player_id, hint[0])
+    return [
+        {"type": "SetValue", "componentId": "AudioPlayerRoot", "property": "trackTotal", "value": total},
+        {"type": "SetValue", "componentId": "videoPlayer", "property": "trackOffset",
+         "value": -int(hint[0] * 1000)},
+        {"type": "SetValue", "componentId": "videoPlayer", "property": "needsResync", "value": False},
+        {"type": "SetValue", "componentId": "slider", "property": "totalValue", "value": total},
+    ]
+
+
+# Synchronized lyrics on the screen (see apl_document: maLyrics).
+import os
+import re as _re
+_lyrics_state = {}      # player_id -> {"id", "lines", "synced", "ready", "sent", "idx"}
+_LRC_TAG = _re.compile(r"\[(\d{1,3}):(\d{1,2}(?:[.:]\d{1,3})?)\]")
+_LYRICS_MAX_LINES = 200
+
+
+def _parse_lyrics(lyrics, lrc, lead=None):
+    """-> (lines [{"s", "e", "t"}], synced). s/e in ms, -1 when not synchronized."""
+    if lrc:
+        timed = []
+        for raw in lrc.splitlines():
+            stamps = _LRC_TAG.findall(raw)
+            text = _LRC_TAG.sub("", raw).strip()
+            for minutes, seconds in stamps:
+                ms = int(minutes) * 60000 + int(round(float(seconds.replace(":", ".")) * 1000))
+                timed.append((ms, text))
+        timed.sort(key=lambda x: x[0])
+        if timed:
+            # lines lit slightly early: what the Echo reports is decoded a bit before it is heard
+            # and a reader needs the line a moment before it is sung (LYRICS_LEAD_MS, default 600)
+            if lead is None:
+                try:
+                    lead = int(os.environ.get("LYRICS_LEAD_MS", "600"))
+                except ValueError:
+                    lead = 600
+            lines = []
+            for i, (start, text) in enumerate(timed[:_LYRICS_MAX_LINES]):
+                end = timed[i + 1][0] if i + 1 < len(timed) else 10 ** 9
+                s0 = max(0, start - lead)
+                lines.append({"s": s0, "e": max(end - lead, s0 + 1), "t": text or "\u266a"})
+            return lines, True
+    if lyrics:
+        lines = [{"s": -1, "e": -1, "t": t.strip()} for t in lyrics.strip().splitlines()]
+        return lines[:_LYRICS_MAX_LINES], False
+    return [], False
+
+
+def _lyrics_screen_reset(player_id):
+    st = _lyrics_state.get(player_id)
+    if st:
+        st["sent"] = False
+        st["idx"] = -2
+
+
+def _fetch_lyrics(player_id, st):
+    try:
+        found = ma_control.get_lyrics(player_id)
+        if found and found.get("queue_item_id") == st["id"]:
+            st["lines"], st["synced"] = _parse_lyrics(found.get("lyrics"), found.get("lrc"),
+                                                      lead=_lyrics_lead(player_id))
+        logger.info("Lyrics %s: %d lines (%s)", player_id, len(st["lines"]),
+                    "synced" if st["synced"] else "plain" if st["lines"] else "none")
+    except Exception:
+        logger.exception("Failed to fetch lyrics for %s", player_id)
+    st["ready"] = True
+
+
+def _set_root(prop, value):
+    return {"type": "SetValue", "componentId": "AudioPlayerRoot", "property": prop, "value": value}
+
+
+def _lyrics_commands(handler_input):
+    player_id = device_mapping.get_player_for_device(_device_id_from(handler_input))
+    current = _shown_item_id(player_id) if player_id else None
+    if not current:
+        return []
+    st = _lyrics_state.get(player_id)
+    commands = []
+    if st is None or st["id"] != current:
+        st = {"id": current, "lines": [], "synced": False, "ready": False, "sent": False, "idx": -2}
+        _lyrics_state[player_id] = st
+        commands += [_set_root("lyricsAvailable", False), _set_root("lyricsLines", [])]
+        _threading.Thread(target=_fetch_lyrics, args=(player_id, st), daemon=True).start()
+    if not st["ready"]:
+        return commands
+    if not st["sent"]:
+        st["sent"] = True
+        st["idx"] = -2
+        commands += _lyrics_heading()
+        commands += [_set_root("lyricsBuckets", _lyrics_buckets(st["lines"]) if st["synced"] else []),
+                     _set_root("lyricsLines", st["lines"]),
+                     _set_root("lyricsSynced", st["synced"]),
+                     _set_root("lyricsAvailable", bool(st["lines"])),
+                     _set_root("lyricsIndex", 0)]
+        if st["lines"] and _lyrics_open.get(player_id):
+            commands.append(_set_root("lyricsVisible", True))
+        if not st["lines"]:
+            commands.append(_set_root("lyricsVisible", False))
+        else:
+            commands.append({"type": "ScrollToIndex", "componentId": "maLyrics", "index": 0, "align": "first"})
+    return commands      # the screen scrolls by itself (lyricsBuckets)
+
+
+# Exact offsets without MA's (late) elapsed time.
+def _report_clock(parts):
+    """Device clock of the screen's report, in seconds, if plausible."""
+    try:
+        stamp = float(parts[3]) / 1000.0
+    except (IndexError, ValueError):
+        return None
+    return stamp if abs(_time.time() - stamp) < 10 else None
+
+
+def _late_screen_on_fresh_stream(player_id, info):
+    """The screen plays, from its start, a stream MA pushed at the start of this track."""
+    import shared_store
+    store = shared_store.store_for(player_id) or {}
+    pushed = store.get("streamAt")
+    rendered = shared_store._rendered_stream.get(player_id)
+    if (not pushed or not store.get("streamUrl") or (store.get("streamTitle") or "") != (info.get("title") or "")
+            or shared_store.stream_key(rendered) != shared_store.stream_key(store["streamUrl"])):
+        return False
+    elapsed = info.get("elapsed_ms", 0)
+    if elapsed - (_time.time() - pushed) * 1000 > 4000:
+        return False             # MA was already into the track when it pushed this stream
+    pos = _screen_pos.get(player_id)
+    if not pos or _time.time() - pos["t"] > 3:
+        return None              # the screen has not reported yet: decide at the next refresh
+    return pos["current"] < elapsed - 3000       # the screen's player is clearly behind MA
+
+
+def _flow_time_commands(player_id, state, info, prev_id, prev_duration):
+    pos = _screen_pos.get(player_id)
+    if (prev_id and prev_duration and prev_id != info["queue_item_id"] and pos
+            and pos.get("offset") is not None and _time.time() - pos["t"] < 5):
+        offset, why = pos["offset"] + prev_duration, "right after the previous track"
+    elif not prev_id and info.get("elapsed_ms", 10 ** 9) < 4000:
+        offset, why = 0, "stream starts with the track"
+    elif ((not prev_id or prev_id == info["queue_item_id"])
+          and (late := _late_screen_on_fresh_stream(player_id, info)) is not False):
+        if late is None:
+            state["id"] = None   # ask again at the next refresh, once the screen reports
+            return [{"type": "Idle", "delay": 0}]
+        offset, why = 0, "stream starts with the track, opened %.0fs after MA started it" % (
+            info.get("elapsed_ms", 0) / 1000)
+    else:
+        return None
+    state["resent"] = 1
+    state["exact"] = True
+    total = info.get("duration_ms", 0)
+    logger.info("Time sync %s: %s (offset %.1fs)", player_id, why, offset / 1000)
+    return [
+        {"type": "SetValue", "componentId": "AudioPlayerRoot", "property": "trackTotal", "value": total},
+        {"type": "SetValue", "componentId": "videoPlayer", "property": "trackOffset", "value": int(offset)},
+        {"type": "SetValue", "componentId": "videoPlayer", "property": "needsResync", "value": False},
+        {"type": "SetValue", "componentId": "slider", "property": "totalValue", "value": total},
+    ]
+
+
+_lyrics_open = {}     # player_id -> lyrics panel open on the screen
+
+
+# The flow stream ended on the screen (Video onEnd reports "end").
+_END_GRACE = 3          # seconds left to MA to push a new stream by itself
+_end_handled = {}       # player_id -> screen start time already handled
+
+
+def _stream_ended(player_id):
+    screen = _screen_started.get(player_id, 0)
+    if _end_handled.get(player_id) == screen:
+        return
+    _end_handled[player_id] = screen
+    _threading.Thread(target=_continue_after_end, args=(player_id, screen), daemon=True).start()
+
+
+def _continue_after_end(player_id, screen):
+    import shared_store
+    try:
+        _time.sleep(_END_GRACE)
+        if _screen_started.get(player_id, 0) != screen or 'stream' in (shared_store._pending.get(player_id) or []):
+            logger.info("Stream ended on %s: MA already sent a new stream", player_id)
+            return
+        state = ma_control.get_queue_state(player_id)
+        if state != "playing":
+            logger.info("Stream ended on %s: MA is %s, nothing to continue", player_id, state)
+            return
+        logger.info("Stream ended on %s while MA plays: starting the next track", player_id)
+        ma_control.send_player_command(player_id, "advance", ref_item_id=_shown_item_id(player_id))
+    except Exception:
+        logger.exception("Failed to continue after the end of the stream on %s", player_id)
+
+
+def _page_is_live(player_id):
+    try:
+        import shared_store
+        return bool(player_id) and shared_store.page_live(player_id)
+    except Exception:
+        return False
+
+
+_LYRICS_BUCKET_MS = 250
+
+
+def _lyrics_buckets(lines):
+    """Line playing in each 250 ms slice, up to 10 s after the last line starts."""
+    if not lines:
+        return []
+    count = min(lines[-1]["s"] // _LYRICS_BUCKET_MS + 40, 4 * 60 * 20)
+    out, i = [], -1
+    for b in range(int(count)):
+        t = b * _LYRICS_BUCKET_MS
+        while i + 1 < len(lines) and lines[i + 1]["s"] <= t:
+            i += 1
+        out.append(i)
+    return out
+
+
+def _lyrics_heading():
+    """Title and artist shown above the lyrics."""
+    import shared_store
+    store = shared_store._store or {}
+    title = store.get("title") or ""
+    artist = store.get("artist") or store.get("secondary") or ""
+    return [_set_root("lyricsTitle", title), _set_root("lyricsArtist", artist)]
+
+
+_last_intent_at = {}        # device_id -> time of the last voice (intent) request
+_SCREEN_FORWARD_DELAY = 6   # seconds before a pause/play seen on the screen goes to MA
+
+
+# "Alexa, précédent": the Echo restarts the Video's stream by itself.
+_PREVIOUS_GUARD_S = 5
+_previous_handled = {}      # player_id -> screen start time already handled
+_last_playing = {}          # player_id -> (position while playing, screen)
+
+
+def _detect_voice_previous(player_id, current_ms, status):
+    """status: 'true' playing, 'false' paused, 'end' stream ended."""
+    screen = _screen_started.get(player_id, 0)
+    if status == "end":
+        _last_playing.pop(player_id, None)
+        return
+    if status != "true":
+        return              # paused (the Echo pauses while listening): keep the last position
+    if _time.time() - screen < _PREVIOUS_GUARD_S:
+        _last_playing.pop(player_id, None)    # a late report of the old page may still arrive
+        return
+    last = _last_playing.get(player_id)
+    _last_playing[player_id] = (current_ms, screen)
+    if (not last or last[1] != screen or last[0] < 6000 or current_ms > last[0] - 4000
+            or _previous_handled.get(player_id) == screen):
+        return
+    _previous_handled[player_id] = screen
+    logger.info("Voice previous on %s: the screen restarted its stream (%.0fs -> %.0fs)",
+                player_id, last[0] / 1000, current_ms / 1000)
+    ref = _shown_item_id(player_id)
+    _threading.Thread(target=lambda: ma_control.send_player_command(player_id, "previous", ref_item_id=ref),
+                      daemon=True).start()
+
+
+_meta_signature = {}        # player/device -> (screen, title, texts, images) last sent
+
+
+def _meta_changed(handler_input):
+    device_id = _device_id_from(handler_input)
+    key = device_mapping.get_player_for_device(device_id) or device_id
+    i = data.info or {}
+    sig = (_screen_started.get(key, 0), i.get("primaryText"), i.get("secondaryText"),
+           i.get("coverImageSource"), i.get("backgroundImageSource"))
+    if _meta_signature.get(key) == sig:
+        return False
+    _meta_signature[key] = sig
+    return True
+
+
+def _play_audio_on_live_page(handler_input):
+    """PlayAudio on an Echo whose MA screen is open: resume instead of restarting."""
+    if not is_intent_name("PlayAudio")(handler_input):
+        return None
+    player_id = device_mapping.get_player_for_device(_device_id_from(handler_input))
+    if not _page_is_live(player_id):
+        return None
+    from ask_sdk_model.interfaces.alexa.presentation.apl import ExecuteCommandsDirective
+    logger.info("PlayAudio on %s while the screen plays: resume only", player_id)
+    rb = handler_input.response_builder
+    rb.add_directive(ExecuteCommandsDirective(
+        commands=[{"type": "ControlMedia", "componentId": "videoPlayer", "command": "play"}],
+        token="playbackToken"))
+    return rb.set_should_end_session(None).response
+
+
+_RAN_OUT_MARGIN_MS = 4000
+
+
+def _ran_out_at_track_end(player_id, pos):
+    """The screen paused within the last seconds of the track it shows."""
+    st = _now_playing_state.get(player_id) or {}
+    duration = st.get("last_duration")
+    if not duration or not pos or pos.get("offset") is None:
+        return False
+    shown = pos["current"] - pos["offset"]
+    return shown >= duration - _RAN_OUT_MARGIN_MS
+
+
+class PlayerContextInterceptor(AbstractRequestInterceptor):
+    """Ties every skill request to the MA player of its Echo (see shared_store._store)."""
+    def process(self, handler_input):
+        try:
+            import shared_store
+            shared_store.set_request_player(device_mapping.get_player_for_device(_device_id_from(handler_input)))
+        except Exception:
+            logger.debug("Could not set the request player", exc_info=True)
+
+
+sb.add_global_request_interceptor(PlayerContextInterceptor())
+
+
+class APLPlayPauseEventHandler(AbstractRequestHandler):
+    """Play/pause key of a TV remote: toggles the screen's player (the pause then reaches MA)."""
+    def can_handle(self, handler_input):
+        if not is_request_type("Alexa.Presentation.APL.UserEvent")(handler_input):
+            return False
+        args = getattr(handler_input.request_envelope.request, 'arguments', None) or []
+        return bool(args) and args[0] == "PlayPause"
+
+    def handle(self, handler_input):
+        from ask_sdk_model.interfaces.alexa.presentation.apl import ExecuteCommandsDirective
+        player_id = device_mapping.get_player_for_device(_device_id_from(handler_input))
+        pos = _screen_pos.get(player_id) or {}
+        command = "pause" if pos.get("playing", True) else "play"
+        logger.info("Remote play/pause on %s: %s", player_id, command)
+        rb = handler_input.response_builder
+        rb.add_directive(ExecuteCommandsDirective(
+            commands=[{"type": "ControlMedia", "componentId": "videoPlayer", "command": command}],
+            token="playbackToken"))
+        return rb.set_should_end_session(None).response
+
+
+sb.add_request_handler(APLPlayPauseEventHandler())
+
+
+_player_on_tv = {}      # player_id -> its screen is a TV
+
+
+def _lyrics_lead(player_id):
+    """How early the lines are lit, in ms (None: the default for an Echo)."""
+    if not _player_on_tv.get(player_id):
+        return None
+    try:
+        return int(os.environ.get("LYRICS_LEAD_MS_TV", "300"))
+    except ValueError:
+        return 300
+
+
+class ScreenModeInterceptor(AbstractRequestInterceptor):
+    """Remember which players show the page on a TV."""
+    def process(self, handler_input):
+        try:
+            viewport = getattr(handler_input.request_envelope.context, 'viewport', None)
+            mode = getattr(viewport, 'mode', None)
+            if mode is None:
+                return
+            player_id = device_mapping.get_player_for_device(_device_id_from(handler_input))
+            if player_id:
+                _player_on_tv[player_id] = str(getattr(mode, 'value', mode)).upper() == "TV"
+        except Exception:
+            pass
+
+
+sb.add_global_request_interceptor(ScreenModeInterceptor())

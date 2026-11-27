@@ -79,7 +79,9 @@
                 {
                     "name": "AMAZON.FallbackIntent",
                     "samples": []
-                }
+                },
+                {"name": "AMAZON.NextIntent", "samples": []},
+                {"name": "AMAZON.PreviousIntent", "samples": []}
             ],
             "types": []
         }
