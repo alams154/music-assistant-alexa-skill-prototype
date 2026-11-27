@@ -88,6 +88,7 @@ Notes:
 | `ENABLE_APL` | No | `false` | Enable rich APL rendering (cover art, title, on-screen playback controls) on Echo Show and other APL-capable devices, instead of the plain AudioPlayer-only flow. Disabled by default for playback stability; set to `true` to opt back into screen rendering and live metadata refresh on supported devices. |
 | `MA_API_URL` | *No | — | ***REQUIRED** for voice-controlled Next/Previous. Base URL of the Music Assistant WebSocket API (e.g. `https://music.example.com`), used to send `next_track`/`previous_track` commands to the MA player paired with the requesting Echo (see [Device Mapping](#device-mapping) below). |
 | `MA_API_TOKEN` | *No | — | ***REQUIRED** alongside `MA_API_URL` if your MA server enforces auth (schema >= 28). A long-lived token created via MA's own auth flow (`auth/token/create`). Can be provided as a Docker secret the same way as `APP_PASSWORD`. |
+| `LYRICS_LEAD_MS` | No | `400` | With `ENABLE_APL`: how early (ms) a synchronized lyrics line is highlighted on Echo Show screens. Raise it if the highlight feels late, `0` for none. |
 
 **Secrets and persistence**
 
@@ -98,6 +99,16 @@ Notes:
 
 - `SKILL_HOSTNAME` must refer to a public HTTPS endpoint reachable by Amazon; it is embedded in the skill manifest and used for endpoint validation.
 - If you override `PORT` or `DEBUG_PORT`, update the `ports` mapping in [docker-compose.yml](docker-compose.yml) accordingly (host:container).
+
+## Echo Show screen (Music Assistant 2.11)
+
+With `ENABLE_APL=true`, `MA_API_URL` and the Echo paired on [`/devices`](#device-mapping), screen Echos show a live now-playing page driven by Music Assistant: cover, title, per-track time and seek bar, previous/next, pause, and synchronized lyrics (microphone button, when MA has lyrics for the track).
+
+- **Requires Music Assistant 2.11 or later.** Its Alexa provider asks the skill whether the screen is open (`pageLive`) and then hands new tracks, pause and resume to the open page instead of relaunching the skill by voice. With 2.10 every track change relaunches the skill ("Here is…") and the screen cannot stay in sync.
+- **Player id:** with MA 2.11 the id to enter on `/devices` is the player id (`pl…`, see the player's settings in MA), not the player name.
+- **Flow Mode sample rate:** set it to **48 kHz** for each Echo player in MA (player settings, advanced). In the default "smart" mode MA ends the stream before a track with a higher sample rate and the Echo cannot tell it ended.
+- **Voice next/previous:** the interaction models include `AMAZON.NextIntent` and `AMAZON.PreviousIntent`. A skill created before this change needs them added (developer console, Build → Intents → Add Intent → built-in) and the model rebuilt.
+- The first launch of a stream, when no Music Assistant page is open on the Echo, still goes through a voice launch.
 
 ## Basic Troubleshooting
 ### Status Page
@@ -110,7 +121,9 @@ Returns a simple status page showing the local API health and an ASK CLI driven 
 
 Alexa's Custom Skill API only exposes an opaque, per-skill device id in each request — there is no way to resolve it to a friendly device name or to a Music Assistant player. This page lets you pair each Echo's device id with the corresponding MA `player_id` so voice-controlled Next/Previous can be routed to the right player. To pair a new device: trigger any voice command from it (e.g. "next"), reload this page (it lists every device id seen in the current session), then enter the matching MA player_id.
 
-Only Next/Previous are routed to MA this way. Pause/Stop/Resume intentionally still control Alexa's own AudioPlayer directly rather than the MA player: for the `alexa` MA player provider, those commands are implemented by speaking the phrase back into the device via `alexapy`, which would re-trigger the same Alexa intent on this skill and loop.
+Voice Next/Previous (and, on screen Echos, the screen's own buttons, seek bar and pause) are routed to MA this way. Commands that MA itself sends back to the Echo are recognized and not forwarded to MA again, so they do not loop.
+
+With Music Assistant 2.11 the MA `player_id` is the player's id (`pl…`), not its name.
 
 ### TLS Support
 TLS 1.3 is not supported
