@@ -116,6 +116,28 @@ def push_alexa_metadata(url):
             logging.exception('Unexpected error while pushing Alexa metadata')
 
 
+def _now_playing_metadata(hostname):
+    """Title/artist/cover for the native Echo Show 'now playing' screen."""
+    try:
+        import shared_store
+        store = shared_store._store or {}
+    except Exception:
+        store = {}
+    title = store.get("title") or ""
+    artist = store.get("artist") or ""
+    album = store.get("album") or ""
+    image = store.get("imageUrl") or ""
+    if not (title or artist or image):
+        return None
+    subtitle = " - ".join(x for x in (artist, album) if x)
+    art = None
+    if image:
+        image = replace_ip_in_url(image, hostname) if hostname else image
+        art = display.Image(sources=[display.ImageInstance(url=image)])
+    return AudioItemMetadata(title=title[:150] or None, subtitle=subtitle[:150] or None,
+                             art=art, background_image=art)
+
+
 def play(url, offset, text, response_builder, supports_apl=False):
     if supports_apl and apl_enabled():
         add_apl(response_builder)
@@ -167,7 +189,8 @@ def play(url, offset, text, response_builder, supports_apl=False):
                         url=url,
                         offset_in_milliseconds=offset,
                         expected_previous_token=None
-                    )
+                    ),
+                    metadata=_now_playing_metadata(hostname)
                 )
             )
         )
@@ -240,7 +263,8 @@ def play_later(url, response_builder, expected_previous_token=None):
                     url=url,
                     offset_in_milliseconds=0,
                     expected_previous_token=expected_previous_token
-                )
+                ),
+                metadata=_now_playing_metadata(hostname)
             )
         )
     )
@@ -406,11 +430,16 @@ def schedule_apl_refresh(response_builder, delay_ms=1000):
                 "type": "SendEvent",
                 "arguments": [
                     "MetadataRefresh",
-                    "${refreshTick}"
-                ]
+                    "${refreshTick}",
+                    "${videoProgressValue}",
+                    "${videoPlaying}"
+                ],
+                "components": ["maReport", "maSeek"]
             }
         ]
 
+        # Own sequencer, so that touching the screen does not stop it
+        commands = [{"type": "Sequential", "sequencer": "maRefresh", "commands": commands}]
         response_builder.add_directive(
             ExecuteCommandsDirective(
                 commands=commands,

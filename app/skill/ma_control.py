@@ -66,7 +66,7 @@ def is_echo_of_ma_command(device_id, command):
     return expires_at is not None and expires_at >= time.time()
 
 
-async def _play_relative_index(client, player_id, offset):
+async def _play_relative_index(client, player_id, offset, ref_item_id=None):
     """Jump the active queue to current_index + offset (clamped to 0).
 
     MA's own queue/cmd/previous restarts the current track instead of
@@ -78,19 +78,36 @@ async def _play_relative_index(client, player_id, offset):
     queue = await client.player_queues.get_active_queue(player_id)
     if queue is None or queue.current_index is None:
         raise ValueError(f"No active queue/current track for player {player_id}")
-    target_index = max(queue.current_index + offset, 0)
+    base_index = queue.current_index
+    # Start from the track shown on the screen; in flow mode MA's
+    # current_index can already point at the next track.
+    if ref_item_id:
+        try:
+            first = max(0, base_index - 25)
+            items = await client.player_queues.get_queue_items(queue.queue_id, limit=50, offset=first)
+            for i, it in enumerate(items):
+                if it.queue_item_id == ref_item_id:
+                    base_index = first + i
+                    break
+        except Exception:
+            logger.debug("Could not read the queue items", exc_info=True)
+    target_index = max(base_index + offset, 0)
+    logger.info("MA queue %s: shown track index %s (MA current_index %s, %s items) -> play index %s",
+                queue.queue_id, base_index, queue.current_index, getattr(queue, 'items', '?'), target_index)
+    if base_index + offset < 0:
+        logger.info("Nothing before this track in the MA queue: restarting it")
     await client.player_queues.play_index(queue.queue_id, target_index)
 
 
-async def _send_command(server_url, token, player_id, command):
+async def _send_command(server_url, token, player_id, command, ref_item_id=None):
     async with aiohttp.ClientSession() as session:
         async with MusicAssistantClient(server_url, session, token=token) as client:
             if command == "next":
                 await client.players.next_track(player_id)
             elif command == "previous":
-                await _play_relative_index(client, player_id, -1)
+                await _play_relative_index(client, player_id, -1, ref_item_id)
             elif command == "start_over":
-                await _play_relative_index(client, player_id, 0)
+                await _play_relative_index(client, player_id, 0, ref_item_id)
             elif command == "pause":
                 await client.players.pause(player_id)
             elif command == "stop":
@@ -104,7 +121,7 @@ async def _send_command(server_url, token, player_id, command):
                 raise ValueError(f"Unsupported MA command: {command}")
 
 
-def send_player_command(player_id, command):
+def send_player_command(player_id, command, ref_item_id=None):
     """Send a command to a Music Assistant player. Returns True on success.
 
     This opens a short-lived connection per call; commands are infrequent
@@ -121,7 +138,7 @@ def send_player_command(player_id, command):
         return False
 
     try:
-        asyncio.run(_send_command(server_url, token, player_id, command))
+        asyncio.run(_send_command(server_url, token, player_id, command, ref_item_id))
         return True
     except (CannotConnect, ConnectionFailed, InvalidServerVersion) as e:
         logger.error("Could not connect to Music Assistant at %s: %s", server_url, e)
@@ -132,3 +149,96 @@ def send_player_command(player_id, command):
     except Exception:
         logger.exception("Unexpected error sending %s command to MA player %s", command, player_id)
         return False
+
+
+
+# Current track of a player, read from Music Assistant.
+async def _get_now_playing(server_url, token, player_id):
+    async with aiohttp.ClientSession() as session:
+        async with MusicAssistantClient(server_url, session, token=token) as client:
+            queue = await client.player_queues.get_active_queue(player_id)
+            item = queue.current_item if queue else None
+            if item is None:
+                return None
+            media = item.media_item
+            title = (getattr(media, "name", None) or item.name or "")
+            artists = getattr(media, "artists", None) or []
+            artist = "/".join(a.name for a in artists if getattr(a, "name", None))
+            album_obj = getattr(media, "album", None)
+            album = getattr(album_obj, "name", "") or ""
+            image = ""
+            try:
+                image = client.get_media_item_image_url(item) or ""
+            except Exception:
+                image = ""
+            import time as _time
+            elapsed = float(getattr(queue, "elapsed_time", 0) or 0)
+            updated = getattr(queue, "elapsed_time_last_updated", None)
+            state = getattr(queue, "state", "")
+            state = str(getattr(state, "value", state) or "").lower()
+            if updated and state == "playing":
+                elapsed += max(0.0, _time.time() - float(updated))
+            duration = float(item.duration or 0)
+            return {"queue_item_id": item.queue_item_id, "title": title,
+                    "artist": artist, "album": album, "imageUrl": image,
+                    "elapsed_ms": int(elapsed * 1000),
+                    "duration_ms": int(duration * 1000)}
+
+
+def get_now_playing(player_id):
+    """Return {queue_item_id, title, artist, album, imageUrl} or None."""
+    server_url = get_env_secret("MA_API_URL")
+    token = get_env_secret("MA_API_TOKEN")
+    if not server_url or not player_id:
+        return None
+    try:
+        return asyncio.run(_get_now_playing(server_url, token, player_id))
+    except Exception:
+        logger.debug("get_now_playing failed for %s", player_id, exc_info=True)
+        return None
+
+
+# Seek the active queue of a player (position in seconds in the current track).
+async def _seek(server_url, token, player_id, seconds):
+    async with aiohttp.ClientSession() as session:
+        async with MusicAssistantClient(server_url, session, token=token) as client:
+            queue = await client.player_queues.get_active_queue(player_id)
+            if queue is None:
+                raise ValueError(f"No active queue for player {player_id}")
+            await client.player_queues.seek(queue.queue_id, int(seconds))
+
+
+def seek_player(player_id, seconds):
+    server_url = get_env_secret("MA_API_URL")
+    token = get_env_secret("MA_API_TOKEN")
+    if not server_url or not player_id:
+        return False
+    try:
+        asyncio.run(_seek(server_url, token, player_id, max(0, seconds)))
+        return True
+    except Exception:
+        logger.exception("Seek to %ss failed for MA player %s", seconds, player_id)
+        return False
+
+
+# Playback state of the active queue of a player ("playing", "paused", ...).
+async def _get_queue_state(server_url, token, player_id):
+    async with aiohttp.ClientSession() as session:
+        async with MusicAssistantClient(server_url, session, token=token) as client:
+            queue = await client.player_queues.get_active_queue(player_id)
+            if queue is None:
+                return None
+            state = getattr(queue, "state", "")
+            return str(getattr(state, "value", state) or "").lower()
+
+
+def get_queue_state(player_id):
+    server_url = get_env_secret("MA_API_URL")
+    token = get_env_secret("MA_API_TOKEN")
+    if not server_url or not player_id:
+        return None
+    try:
+        return asyncio.run(_get_queue_state(server_url, token, player_id))
+    except Exception:
+        logger.debug("get_queue_state failed for %s", player_id, exc_info=True)
+        return None

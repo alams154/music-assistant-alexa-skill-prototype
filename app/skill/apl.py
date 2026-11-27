@@ -47,30 +47,44 @@ def add_apl(response_builder, start_paused=False):
         cover_image = replace_ip_in_url(cover_image, hostname)
         background_image = replace_ip_in_url(background_image, hostname)
 
+    # Encode the audio URL like the AudioPlayer path does (spaces -> %20, flac -> mp3)
+    import re as _re
+    from urllib.parse import quote as _quote
+    audio_src = metadata.get("audioSources", "") or ""
+    audio_src = _re.sub(r'(?i)\.flac(?=$|\?)', '.mp3', audio_src)
+    audio_src = replace_ip_in_url(audio_src, hostname) if hostname else _quote(audio_src, safe=':/%?=&')
+
     # Load the APL document template
     apl_document = _load_apl_template()
 
     # Set the dynamic autoplay value based on start_paused
     autoplay = not start_paused
 
-    # Update autoplay in Video component and AlexaTransportControls
-    try:
-        video_component = apl_document["layouts"]["AudioPlayer"]["item"][0]["items"][2]["items"][1]["items"][0]
-        video_component["autoplay"] = autoplay
-    except (KeyError, IndexError):
-        logging.debug("Could not set video autoplay in APL template")
+    # Update autoplay in Video component and AlexaTransportControls.
+    # Found by type, so that changes to the layout do not break it.
+    def _find_components(node, wanted, found):
+        if isinstance(node, dict):
+            if node.get("type") in wanted:
+                found.append(node)
+            for value in node.values():
+                _find_components(value, wanted, found)
+        elif isinstance(node, list):
+            for value in node:
+                _find_components(value, wanted, found)
+        return found
 
-    try:
-        transport_controls = apl_document["layouts"]["AudioPlayer"]["item"][0]["items"][2]["items"][1]["items"][1]["items"][0]["item"][1]
-        transport_controls["autoplay"] = autoplay
-    except (KeyError, IndexError):
-        logging.debug("Could not set transport autoplay in APL template")
+    targets = _find_components(apl_document.get("layouts", {}),
+                               ("Video", "AlexaTransportControls"), [])
+    if not targets:
+        logging.debug("Could not set autoplay in APL template")
+    for component in targets:
+        component["autoplay"] = autoplay
 
     # Update mainTemplate with metadata values
     try:
         main_template_item = apl_document["mainTemplate"]["items"][0]
         main_template_item.update({
-            "audioSources": metadata.get("audioSources", ""),
+            "audioSources": audio_src,
             "backgroundImageSource": background_image,
             "coverImageSource": cover_image,
             "headerAttributionImage": metadata.get("headerAttributionImage", ""),

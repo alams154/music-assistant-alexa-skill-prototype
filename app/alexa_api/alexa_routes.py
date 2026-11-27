@@ -23,6 +23,27 @@ def register_routes(bp):
         }
         return jsonify({'status': 'ok'})
 
+    @bp.route('/playback-state', methods=['GET'])
+    def playback_state():
+        # What the Echo last reported, for MA's position correction.
+        import time as _time
+        player_id = request.args.get('player_id')
+        report = shared_store.get_report(player_id)
+        if not report:
+            return jsonify({})
+        latest = (shared_store._store or {}).get('streamUrl')
+        activity = report['activity']
+        if activity == 'PLAYING' and not shared_store.page_live(player_id):
+            activity = 'STOPPED'
+        return jsonify({
+            'current': bool(latest) and shared_store.stream_key(report.get('streamUrl'))
+                       == shared_store.stream_key(latest),
+            'activity': activity,
+            'offsetMs': report['offsetMs'],
+            'ageSeconds': max(0.0, _time.time() - report['observedAt']),
+            'observedAt': report['observedAt'],
+        })
+
     @bp.route('/latest-url', methods=['GET'])
     def latest_url():
         if not shared_store._store:

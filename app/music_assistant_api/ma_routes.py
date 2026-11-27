@@ -5,6 +5,8 @@ import os
 import time
 from urllib.parse import urlparse, urlunparse
 import shared_store
+import logging as _logging
+_ma_log = _logging.getLogger('ma_routes')
 
 
 def _rewrite_url(url: str) -> str:
@@ -48,7 +50,33 @@ def register_routes(bp):
             'version': shared_store._version,
             'timestamp': time.time()
         }
-        return jsonify({'status': 'ok', 'version': shared_store._version})
+        # MA 2.11 sends playerId + canSkipSpeech and skips the
+        # voice relaunch when we answer pageLive: true.
+        answer = {'status': 'ok', 'version': shared_store._version}
+        player_id = data.get('playerId')
+        if player_id:
+            live = bool(data.get('canSkipSpeech')) and shared_store.page_live(player_id)
+            if live and shared_store.stream_key(stream_url) != shared_store.stream_key(
+                    shared_store._rendered_stream.get(player_id)):
+                shared_store.add_pending(player_id, 'stream')
+            answer['pageLive'] = live
+            _ma_log.info("push-url %s: pageLive=%s (%s)", player_id, live,
+                         (data.get('title') or '')[:40])
+        return jsonify(answer)
+
+    @bp.route('/control', methods=['POST'])
+    def control():
+        # Pause/resume for the open APL screen.
+        data = request.get_json(silent=True) or {}
+        player_id = data.get('playerId')
+        command = data.get('command')
+        if command not in ('pause', 'resume'):
+            return jsonify({'error': 'Unsupported command', 'pageLive': False}), 400
+        live = bool(data.get('canSkipSpeech')) and shared_store.page_live(player_id)
+        if live:
+            shared_store.add_pending(player_id, command)
+        _ma_log.info("control %s %s: pageLive=%s", player_id, command, live)
+        return jsonify({'pageLive': live})
 
     @bp.route('/latest-url', methods=['GET'])
     def latest_url():
