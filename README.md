@@ -88,7 +88,8 @@ Notes:
 | `ENABLE_APL` | No | `false` | Enable rich APL rendering (cover art, title, on-screen playback controls) on Echo Show and other APL-capable devices, instead of the plain AudioPlayer-only flow. Disabled by default for playback stability; set to `true` to opt back into screen rendering and live metadata refresh on supported devices. |
 | `MA_API_URL` | *No | — | ***REQUIRED** for voice-controlled Next/Previous. Base URL of the Music Assistant WebSocket API (e.g. `https://music.example.com`), used to send `next_track`/`previous_track` commands to the MA player paired with the requesting Echo (see [Device Mapping](#device-mapping) below). |
 | `MA_API_TOKEN` | *No | — | ***REQUIRED** alongside `MA_API_URL` if your MA server enforces auth (schema >= 28). A long-lived token created via MA's own auth flow (`auth/token/create`). Can be provided as a Docker secret the same way as `APP_PASSWORD`. |
-| `LYRICS_LEAD_MS` | No | `400` | With `ENABLE_APL`: how early (ms) a synchronized lyrics line is highlighted on Echo Show screens. Raise it if the highlight feels late, `0` for none. |
+| `LYRICS_LEAD_MS` | No | `600` | With `ENABLE_APL`: how early (ms) a synchronized lyrics line is highlighted on Echo Show screens. Raise it if the highlight feels late, `0` for none. |
+| `LYRICS_LEAD_MS_TV` | No | `300` | Same as `LYRICS_LEAD_MS`, for a TV showing the page (Alexa app on a TV): it has no Echo decoding delay. |
 
 **Secrets and persistence**
 
@@ -109,6 +110,8 @@ With `ENABLE_APL=true`, `MA_API_URL` and the Echo paired on [`/devices`](#device
 - **Flow Mode sample rate:** set it to **48 kHz** for each Echo player in MA (player settings, advanced). In the default "smart" mode MA ends the stream before a track with a higher sample rate and the Echo cannot tell it ended.
 - **Voice next/previous:** the interaction models include `AMAZON.NextIntent` and `AMAZON.PreviousIntent`. A skill created before this change needs them added (developer console, Build → Intents → Add Intent → built-in) and the model rebuilt.
 - The first launch of a stream, when no Music Assistant page is open on the Echo, still goes through a voice launch.
+- **Several Echos:** each MA player keeps its own stream, title and time, so two Echos can play different things.
+- **TV (Alexa app on a TV):** the page works with the remote. The first key selects play/pause; Left/Right move the selection across previous, play/pause, next and lyrics, Up goes to the progress bar (Left/Right then move it by 10 s, MA seeks once the keys stop) and Down comes back; OK presses the selected button. The other controls dim while one is selected; nothing changes on a touch screen. Tested on a Samsung The Frame.
 
 ## Basic Troubleshooting
 ### Status Page

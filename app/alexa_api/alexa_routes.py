@@ -8,9 +8,12 @@ import shared_store
 
 
 def register_routes(bp):
+    bp.before_request(lambda: shared_store.set_request_player(None))
+
     @bp.route('/push-url', methods=['POST'])
     def push_url():
         data = request.get_json(silent=True) or {}
+        shared_store.set_request_player(data.get('playerId'))
         stream_url = data.get('streamUrl')
         if not stream_url:
             return jsonify({'error': 'Missing required fields'}), 400
@@ -28,6 +31,7 @@ def register_routes(bp):
         # What the Echo last reported, for MA's position correction.
         import time as _time
         player_id = request.args.get('player_id')
+        shared_store.set_request_player(player_id)
         report = shared_store.get_report(player_id)
         if not report:
             return jsonify({})

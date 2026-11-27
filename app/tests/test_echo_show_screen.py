@@ -194,3 +194,105 @@ def test_document_invariants():
     # voice "next" applied by the Echo to the Video lands on a dummy second source
     assert video["source"] == ["${audioSources}", "${audioNextSource}"]
     assert DOC["settings"]["idleTimeout"] >= 60000
+
+
+# ----------------------------------------------------------------- several Echos
+def test_each_player_keeps_its_own_now_playing():
+    ma = music_assistant_api.create_ma_app().test_client()
+    for player, title in (("plA", "TA"), ("plB", "TB")):
+        ma.post("/push-url", json={"streamUrl": f"http://ma:8097/flow/s1/{player}/i1/E.flac",
+                                   "title": title, "playerId": player})
+    assert shared_store.store_for("plA")["title"] == "TA"
+    assert shared_store.store_for("plB")["title"] == "TB"
+
+
+# ----------------------------------------------------------------- TV
+def test_voice_next_track_is_served_without_credentials(monkeypatch):
+    import importlib
+    monkeypatch.setenv("APP_USERNAME", "u")
+    monkeypatch.setenv("APP_PASSWORD", "p")
+    client = importlib.import_module("app").app.test_client()
+    track = client.get("/ma-voice-next.mp3")
+    assert track.status_code == 200 and track.mimetype == "audio/mpeg" and track.data[:2] == b"\xff\xfb"
+    assert client.get("/setup").status_code == 401          # the rest stays protected
+
+
+def test_tv_remote_moves_a_selection_and_only_ok_presses():
+    nodes = list(_walk(DOC))
+    page = {h["when"].split("'")[1]: [c["type"] for c in h["commands"]] for h in DOC["handleKeyDown"]}
+    assert page["ArrowLeft"] == ["SetValue", "SetFocus"]     # an arrow alone never acts
+    catcher = [n for n in nodes if n.get("id") == "maRemote"][0]
+    ok = [h for h in catcher["handleKeyDown"] if "'Enter'" in h["when"]][0]["commands"]
+    assert [c["arguments"][0] for c in ok if c["type"] == "SendEvent"] == ["Previous", "Next"]
+    assert any(c["type"] == "ControlMedia" for c in ok)      # play/pause on the page itself
+    dimmed = [n["opacity"] for n in nodes if "remoteFocus" in str(n.get("opacity", ""))]
+    assert len(dimmed) == 5 and all(o.startswith("${remoteFocus < 0 ||") for o in dimmed)
+
+
+def test_play_button_follows_the_player():
+    video = [n for n in _walk(DOC) if n.get("type") == "Video"][0]
+    for event, playing in (("onPlay", True), ("onPause", False), ("onEnd", False)):
+        assert {"type": "SetValue", "componentId": "playPauseToggleButtonId",
+                "property": "checked", "value": playing} in video[event]
+
+
+def test_lyrics_lead_on_an_echo_and_on_a_tv(monkeypatch):
+    monkeypatch.delenv("LYRICS_LEAD_MS", raising=False)
+    monkeypatch.delenv("LYRICS_LEAD_MS_TV", raising=False)
+    lrc = "[00:10.00]a\n[00:12.00]b"
+    assert lf._parse_lyrics(None, lrc)[0][0]["s"] == 9400
+    monkeypatch.setitem(lf._player_on_tv, PLAYER, True)
+    assert lf._parse_lyrics(None, lrc, lead=lf._lyrics_lead(PLAYER))[0][0]["s"] == 9700
+
+
+# ----------------------------------------------------------------- time and transport
+def test_time_beyond_the_track_is_resynced_from_ma():
+    now = lf._time.time()
+    info = {"duration_ms": 200000, "elapsed_ms": 90000}
+    lf._screen_pos[PLAYER] = {"current": 3000000, "offset": 0, "playing": True, "t": now}
+    assert lf._time_needs_resend(PLAYER, {"exact": True, "since": now - 60, "resent": 1}, info, now)
+    # not right after a track change: the screen may still report the previous offset
+    assert not lf._time_needs_resend(PLAYER, {"exact": True, "since": now - 2, "resent": 1}, info, now)
+
+
+def test_screen_opened_late_on_a_fresh_stream_starts_at_zero():
+    url = "http://ma:8097/flow/s1/late/i1/E.mp3"
+    now = lf._time.time()
+    info = {"queue_item_id": "q", "title": "T", "elapsed_ms": 15000, "duration_ms": 200000}
+    shared_store.set_request_player(PLAYER)
+    try:
+        shared_store._store = {"streamUrl": url, "title": "T", "streamTitle": "T", "streamAt": now - 15}
+        shared_store._rendered_stream[PLAYER] = url
+        lf._screen_pos[PLAYER] = {"current": 1000, "offset": 0, "playing": True, "t": now}
+        cmds = lf._flow_time_commands(PLAYER, {}, info, None, None)
+        assert [c["value"] for c in cmds if c["property"] == "trackOffset"] == [0]
+        shared_store._store["streamAt"] = now - 5          # MA was 10 s into the track at the push
+        assert lf._flow_time_commands(PLAYER, {}, info, None, None) is None
+    finally:
+        shared_store.set_request_player(None)
+
+
+def test_late_report_of_the_old_page_is_not_a_voice_previous(_isolated):
+    lf._screen_started[PLAYER] = lf._time.time()
+    lf._detect_voice_previous(PLAYER, 10000, "true")
+    lf._detect_voice_previous(PLAYER, 1000, "true")
+    assert not _isolated
+
+
+def test_seek_to_the_start_restarts_the_track(_isolated):
+    _invoke({"type": "Alexa.Presentation.APL.UserEvent", "source": {}, "token": "",
+             "arguments": ["MetadataRefresh", "", "", ""],
+             "components": {"maReport": "5000|true|0", "maSeek": "0@1"}})
+    assert [c[1] for c in _isolated] == ["start_over"]
+
+
+def test_lyrics_panel_state_is_read_once_the_lyrics_are_shown():
+    lf._lyrics_open[PLAYER] = True
+    lf._lyrics_state[PLAYER] = {"sent": False, "lines": [{"s": 0, "e": 1, "t": "x"}]}
+    report = {"type": "Alexa.Presentation.APL.UserEvent", "source": {}, "token": "",
+              "arguments": ["MetadataRefresh", "", "", ""], "components": {"maReport": "1000|true|0|0|0"}}
+    _invoke(report)                                         # new screen, lyrics still loading
+    assert lf._lyrics_open[PLAYER] is True
+    lf._lyrics_state[PLAYER]["sent"] = True
+    _invoke(report)                                         # shown, then closed by the user
+    assert lf._lyrics_open[PLAYER] is False

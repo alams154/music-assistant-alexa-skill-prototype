@@ -30,9 +30,13 @@ def _rewrite_url(url: str) -> str:
 
 
 def register_routes(bp):
+    # each HTTP request starts without a player (threads are reused)
+    bp.before_request(lambda: shared_store.set_request_player(None))
+
     @bp.route('/push-url', methods=['POST'])
     def push_url():
         data = request.get_json(silent=True) or {}
+        shared_store.set_request_player(data.get('playerId'))   # MA 2.11
         stream_url = data.get('streamUrl')
         if not stream_url:
             return jsonify({'error': 'Missing required fields'}), 400
@@ -40,6 +44,9 @@ def register_routes(bp):
         stream_url = _rewrite_url(stream_url)
         image_url = _rewrite_url(data.get('imageUrl'))
 
+        _prev = shared_store._store or {}
+        _same_stream = bool(_prev.get('streamAt')) and shared_store.stream_key(
+            _prev.get('streamUrl')) == shared_store.stream_key(stream_url)
         shared_store._version += 1
         shared_store._store = {
             'streamUrl': stream_url,
@@ -50,6 +57,9 @@ def register_routes(bp):
             'version': shared_store._version,
             'timestamp': time.time()
         }
+        # when this stream was pushed, and its first title (a metadata upload keeps the stream)
+        shared_store._store['streamAt'] = _prev['streamAt'] if _same_stream else time.time()
+        shared_store._store['streamTitle'] = _prev.get('streamTitle') if _same_stream else data.get('title')
         # MA 2.11 sends playerId + canSkipSpeech and skips the
         # voice relaunch when we answer pageLive: true.
         answer = {'status': 'ok', 'version': shared_store._version}

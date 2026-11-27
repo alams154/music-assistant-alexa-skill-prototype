@@ -58,3 +58,47 @@ def stream_key(url):
     path = unquote(urlparse(str(url)).path or "")
     head, dot, ext = path.rpartition(".")
     return head if dot and "/" not in ext else path
+
+
+# One "now playing" per Music Assistant player.
+# shared_store._store reads/writes the entry of the player tied to the current
+# request (set_request_player), or the latest entry when none is known.
+import sys as _sys
+import types as _types
+
+_request = _threading.local()
+_by_player = {}
+_latest = globals().pop("_store", None)
+
+
+def set_request_player(player_id):
+    _request.player = player_id or None
+
+
+def request_player():
+    return getattr(_request, "player", None)
+
+
+def store_for(player_id):
+    with _live_lock:
+        if player_id and player_id in _by_player:
+            return _by_player[player_id]
+        return _latest
+
+
+class _StoreModule(_types.ModuleType):
+    @property
+    def _store(self):
+        return store_for(request_player())
+
+    @_store.setter
+    def _store(self, value):
+        global _latest
+        player = request_player()
+        with _live_lock:
+            if player:
+                _by_player[player] = value
+            _latest = value
+
+
+_sys.modules[__name__].__class__ = _StoreModule

@@ -95,7 +95,8 @@ def push_alexa_metadata(url):
         'streamUrl': url,
         'title': data.info.get("primaryText"),
         'secondary': data.info.get("secondaryText"),
-        'imageUrl': data.info.get("coverImageSource")
+        'imageUrl': data.info.get("coverImageSource"),
+        'playerId': _request_player()
     }
 
     try:
@@ -449,3 +450,12 @@ def schedule_apl_refresh(response_builder, delay_ms=1000):
         )
     except Exception:
         logging.exception('Error while scheduling APL refresh')
+
+
+def _request_player():
+    """MA player of the Echo this request comes from (for the republished stream)."""
+    try:
+        import shared_store
+        return shared_store.request_player()
+    except Exception:
+        return None

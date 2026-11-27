@@ -264,6 +264,16 @@
               "name": "lyricsArtist",
               "type": "string",
               "value": ""
+            },
+            {
+              "name": "remoteFocus",
+              "type": "number",
+              "value": -1
+            },
+            {
+              "name": "seekTarget",
+              "type": "number",
+              "value": -1
             }
           ],
           "onMount": [
@@ -537,6 +547,12 @@
                           "componentId": "maReport",
                           "property": "text",
                           "value": "${event.currentTime}|${event.paused ? 'false' : 'true'}|${trackOffset}|${utcTime}|${lyricsVisible ? 1 : 0}"
+                        },
+                        {
+                          "type": "SetValue",
+                          "componentId": "playPauseToggleButtonId",
+                          "property": "checked",
+                          "value": true
                         }
                       ],
                       "onTrackUpdate": [
@@ -591,7 +607,7 @@
                           "type": "SetValue",
                           "componentId": "slider",
                           "property": "progressValue",
-                          "value": "${videoProgressValue > trackOffset ? videoProgressValue - trackOffset : 0}"
+                          "value": "${seekTarget >= 0 ? seekTarget : (videoProgressValue > trackOffset ? videoProgressValue - trackOffset : 0)}"
                         },
                         {
                           "type": "SetValue",
@@ -655,6 +671,12 @@
                           "componentId": "maReport",
                           "property": "text",
                           "value": "${event.currentTime}|${event.paused ? 'false' : 'true'}|${trackOffset}|${utcTime}|${lyricsVisible ? 1 : 0}"
+                        },
+                        {
+                          "type": "SetValue",
+                          "componentId": "playPauseToggleButtonId",
+                          "property": "checked",
+                          "value": false
                         }
                       ],
                       "onEnd": [
@@ -668,6 +690,12 @@
                           "componentId": "maReport",
                           "property": "text",
                           "value": "${event.currentTime}|end|${trackOffset}|${utcTime}|${lyricsVisible ? 1 : 0}"
+                        },
+                        {
+                          "type": "SetValue",
+                          "componentId": "playPauseToggleButtonId",
+                          "property": "checked",
+                          "value": false
                         }
                       ],
                       "bind": [
@@ -701,42 +729,47 @@
                           "alignItems": "center",
                           "item": [
                             {
-                              "type": "AlexaSlider",
-                              "id": "slider",
-                              "progressValue": "${videoProgressValue > trackOffset ? videoProgressValue - trackOffset : 0}",
-                              "totalValue": "${trackTotal}",
-                              "positionPropertyName": "sliderThumbPosition",
-                              "metadataDisplayed": true,
-                              "metadataPosition": "above_right",
+                              "type": "Frame",
                               "width": "100%",
-                              "theme": "${viewport.theme}",
-                              "onUpCommand": [
-                                {
-                                  "type": "SetValue",
-                                  "property": "sliderActive",
-                                  "value": false
-                                },
-                                {
-                                  "type": "SetValue",
-                                  "componentId": "maSeek",
-                                  "property": "text",
-                                  "value": "${sliderThumbPosition}@${elapsedTime}"
-                                }
-                              ],
-                              "onMoveCommand": [
-                                {
-                                  "type": "SetValue",
-                                  "property": "sliderActive",
-                                  "value": true
-                                }
-                              ],
-                              "onDownCommand": [
-                                {
-                                  "type": "SetValue",
-                                  "property": "sliderActive",
-                                  "value": true
-                                }
-                              ]
+                              "item": {
+                                "type": "AlexaSlider",
+                                "id": "slider",
+                                "progressValue": "${videoProgressValue > trackOffset ? videoProgressValue - trackOffset : 0}",
+                                "totalValue": "${trackTotal}",
+                                "positionPropertyName": "sliderThumbPosition",
+                                "metadataDisplayed": true,
+                                "metadataPosition": "above_right",
+                                "width": "100%",
+                                "theme": "${viewport.theme}",
+                                "onUpCommand": [
+                                  {
+                                    "type": "SetValue",
+                                    "property": "sliderActive",
+                                    "value": false
+                                  },
+                                  {
+                                    "type": "SetValue",
+                                    "componentId": "maSeek",
+                                    "property": "text",
+                                    "value": "${sliderThumbPosition}@${elapsedTime}"
+                                  }
+                                ],
+                                "onMoveCommand": [
+                                  {
+                                    "type": "SetValue",
+                                    "property": "sliderActive",
+                                    "value": true
+                                  }
+                                ],
+                                "onDownCommand": [
+                                  {
+                                    "type": "SetValue",
+                                    "property": "sliderActive",
+                                    "value": true
+                                  }
+                                ]
+                              },
+                              "opacity": "${remoteFocus < 0 || remoteFocus == 10 ? 1 : 0.35}"
                             },
                             {
                               "type": "Container",
@@ -779,22 +812,32 @@
                                     }
                                   ],
                                   "item": {
-                                    "type": "VectorGraphic",
-                                    "source": "maSkipPrevious",
+                                    "type": "Frame",
+                                    "item": {
+                                      "type": "VectorGraphic",
+                                      "source": "maSkipPrevious",
+                                      "width": "100%",
+                                      "height": "100%",
+                                      "scale": "best-fit"
+                                    },
+                                    "opacity": "${remoteFocus < 0 || remoteFocus == 0 ? 1 : 0.35}",
                                     "width": "100%",
-                                    "height": "100%",
-                                    "scale": "best-fit"
+                                    "height": "100%"
                                   }
                                 },
                                 {
-                                  "type": "AlexaTransportControls",
-                                  "mediaComponentId": "videoPlayer",
-                                  "playPauseToggleButtonId": "playPauseToggleButtonId",
-                                  "primaryControlSize": "@primaryControlSize",
-                                  "secondaryControls": "none",
-                                  "secondaryControlSize": "@secondaryControlSize",
-                                  "autoplay": true,
-                                  "theme": "${viewport.theme}"
+                                  "type": "Frame",
+                                  "item": {
+                                    "type": "AlexaTransportControls",
+                                    "mediaComponentId": "videoPlayer",
+                                    "playPauseToggleButtonId": "playPauseToggleButtonId",
+                                    "primaryControlSize": "@primaryControlSize",
+                                    "secondaryControls": "none",
+                                    "secondaryControlSize": "@secondaryControlSize",
+                                    "autoplay": true,
+                                    "theme": "${viewport.theme}"
+                                  },
+                                  "opacity": "${remoteFocus < 0 || remoteFocus == 1 ? 1 : 0.35}"
                                 },
                                 {
                                   "type": "TouchWrapper",
@@ -830,11 +873,17 @@
                                     }
                                   ],
                                   "item": {
-                                    "type": "VectorGraphic",
-                                    "source": "maSkipNext",
+                                    "type": "Frame",
+                                    "item": {
+                                      "type": "VectorGraphic",
+                                      "source": "maSkipNext",
+                                      "width": "100%",
+                                      "height": "100%",
+                                      "scale": "best-fit"
+                                    },
+                                    "opacity": "${remoteFocus < 0 || remoteFocus == 2 ? 1 : 0.35}",
                                     "width": "100%",
-                                    "height": "100%",
-                                    "scale": "best-fit"
+                                    "height": "100%"
                                   }
                                 },
                                 {
@@ -860,12 +909,18 @@
                                     }
                                   ],
                                   "item": {
-                                    "type": "VectorGraphic",
-                                    "source": "maLyrics",
+                                    "type": "Frame",
+                                    "item": {
+                                      "type": "VectorGraphic",
+                                      "source": "maLyrics",
+                                      "width": "100%",
+                                      "height": "100%",
+                                      "scale": "best-fit",
+                                      "opacity": "${lyricsVisible ? 1 : 0.6}"
+                                    },
+                                    "opacity": "${remoteFocus < 0 || remoteFocus == 3 ? 1 : 0.35}",
                                     "width": "100%",
-                                    "height": "100%",
-                                    "scale": "best-fit",
-                                    "opacity": "${lyricsVisible ? 1 : 0.6}"
+                                    "height": "100%"
                                   }
                                 }
                               ]
@@ -911,6 +966,241 @@
               "width": 1,
               "height": 1,
               "opacity": 0
+            },
+            {
+              "type": "TouchWrapper",
+              "id": "maRemote",
+              "position": "absolute",
+              "top": 0,
+              "left": 0,
+              "width": "1dp",
+              "height": "1dp",
+              "item": {
+                "type": "Frame",
+                "width": "1dp",
+                "height": "1dp"
+              },
+              "handleKeyDown": [
+                {
+                  "when": "${(event.keyboard.code == 'ArrowLeft' || event.keyboard.key == 'ArrowLeft') && remoteFocus == 10}",
+                  "commands": [
+                    {
+                      "type": "SetValue",
+                      "componentId": "AudioPlayerRoot",
+                      "property": "seekTarget",
+                      "value": "${Math.max(0, Math.min(trackTotal - 2000, (seekTarget >= 0 ? seekTarget : (videoProgressValue > trackOffset ? videoProgressValue - trackOffset : 0)) -10000))}"
+                    },
+                    {
+                      "type": "SetValue",
+                      "componentId": "slider",
+                      "property": "progressValue",
+                      "value": "${seekTarget}"
+                    },
+                    {
+                      "type": "Sequential",
+                      "sequencer": "maSeekKeys",
+                      "commands": [
+                        {
+                          "type": "Idle",
+                          "delay": 1200
+                        },
+                        {
+                          "type": "SetValue",
+                          "componentId": "maSeek",
+                          "property": "text",
+                          "value": "${seekTarget}@${utcTime}"
+                        },
+                        {
+                          "type": "Idle",
+                          "delay": 8000
+                        },
+                        {
+                          "type": "SetValue",
+                          "componentId": "AudioPlayerRoot",
+                          "property": "seekTarget",
+                          "value": -1
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "when": "${(event.keyboard.code == 'ArrowRight' || event.keyboard.key == 'ArrowRight') && remoteFocus == 10}",
+                  "commands": [
+                    {
+                      "type": "SetValue",
+                      "componentId": "AudioPlayerRoot",
+                      "property": "seekTarget",
+                      "value": "${Math.max(0, Math.min(trackTotal - 2000, (seekTarget >= 0 ? seekTarget : (videoProgressValue > trackOffset ? videoProgressValue - trackOffset : 0)) +10000))}"
+                    },
+                    {
+                      "type": "SetValue",
+                      "componentId": "slider",
+                      "property": "progressValue",
+                      "value": "${seekTarget}"
+                    },
+                    {
+                      "type": "Sequential",
+                      "sequencer": "maSeekKeys",
+                      "commands": [
+                        {
+                          "type": "Idle",
+                          "delay": 1200
+                        },
+                        {
+                          "type": "SetValue",
+                          "componentId": "maSeek",
+                          "property": "text",
+                          "value": "${seekTarget}@${utcTime}"
+                        },
+                        {
+                          "type": "Idle",
+                          "delay": 8000
+                        },
+                        {
+                          "type": "SetValue",
+                          "componentId": "AudioPlayerRoot",
+                          "property": "seekTarget",
+                          "value": -1
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "when": "${event.keyboard.code == 'ArrowLeft' || event.keyboard.key == 'ArrowLeft'}",
+                  "commands": [
+                    {
+                      "type": "SetValue",
+                      "componentId": "AudioPlayerRoot",
+                      "property": "remoteFocus",
+                      "value": "${Math.max(0, remoteFocus - 1)}"
+                    }
+                  ]
+                },
+                {
+                  "when": "${event.keyboard.code == 'ArrowRight' || event.keyboard.key == 'ArrowRight'}",
+                  "commands": [
+                    {
+                      "type": "SetValue",
+                      "componentId": "AudioPlayerRoot",
+                      "property": "remoteFocus",
+                      "value": "${Math.min(lyricsAvailable ? 3 : 2, remoteFocus + 1)}"
+                    }
+                  ]
+                },
+                {
+                  "when": "${event.keyboard.code == 'ArrowUp' || event.keyboard.key == 'ArrowUp'}",
+                  "commands": [
+                    {
+                      "type": "SetValue",
+                      "componentId": "AudioPlayerRoot",
+                      "property": "remoteFocus",
+                      "value": 10
+                    }
+                  ]
+                },
+                {
+                  "when": "${event.keyboard.code == 'ArrowDown' || event.keyboard.key == 'ArrowDown'}",
+                  "commands": [
+                    {
+                      "type": "SetValue",
+                      "componentId": "AudioPlayerRoot",
+                      "property": "remoteFocus",
+                      "value": "${remoteFocus == 10 ? 1 : remoteFocus}"
+                    }
+                  ]
+                },
+                {
+                  "when": "${event.keyboard.code == 'Enter' || event.keyboard.key == 'Enter' || event.keyboard.code == 'NumpadEnter' || event.keyboard.key == 'NumpadEnter'}",
+                  "commands": [
+                    {
+                      "type": "SendEvent",
+                      "arguments": [
+                        "Previous"
+                      ],
+                      "when": "${remoteFocus == 0}"
+                    },
+                    {
+                      "type": "SetValue",
+                      "componentId": "playPauseToggleButtonId",
+                      "property": "checked",
+                      "value": "${!videoPlaying}",
+                      "when": "${remoteFocus == 1}"
+                    },
+                    {
+                      "type": "ControlMedia",
+                      "componentId": "videoPlayer",
+                      "command": "${videoPlaying ? 'pause' : 'play'}",
+                      "when": "${remoteFocus == 1}"
+                    },
+                    {
+                      "type": "SendEvent",
+                      "arguments": [
+                        "Next"
+                      ],
+                      "when": "${remoteFocus == 2}"
+                    },
+                    {
+                      "type": "SetValue",
+                      "componentId": "AudioPlayerRoot",
+                      "property": "lyricsVisible",
+                      "value": "${!lyricsVisible}",
+                      "when": "${remoteFocus == 3}"
+                    },
+                    {
+                      "type": "Sequential",
+                      "sequencer": "maLyricsOpen",
+                      "when": "${remoteFocus == 3 && lyricsVisible}",
+                      "commands": [
+                        {
+                          "type": "Idle",
+                          "delay": 150
+                        },
+                        {
+                          "type": "ScrollToIndex",
+                          "componentId": "maLyrics",
+                          "index": "${lyricsIndex}",
+                          "align": "center"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "when": "${event.keyboard.code == 'MediaRewind' || event.keyboard.key == 'MediaRewind' || event.keyboard.code == 'MediaPreviousTrack' || event.keyboard.key == 'MediaPreviousTrack' || event.keyboard.code == 'MediaTrackPrevious' || event.keyboard.key == 'MediaTrackPrevious'}",
+                  "commands": [
+                    {
+                      "type": "SendEvent",
+                      "arguments": [
+                        "Previous"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "when": "${event.keyboard.code == 'MediaFastForward' || event.keyboard.key == 'MediaFastForward' || event.keyboard.code == 'MediaNextTrack' || event.keyboard.key == 'MediaNextTrack' || event.keyboard.code == 'MediaTrackNext' || event.keyboard.key == 'MediaTrackNext'}",
+                  "commands": [
+                    {
+                      "type": "SendEvent",
+                      "arguments": [
+                        "Next"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "when": "${event.keyboard.code == 'MediaPlayPause' || event.keyboard.key == 'MediaPlayPause' || event.keyboard.code == 'MediaPlay' || event.keyboard.key == 'MediaPlay' || event.keyboard.code == 'MediaPause' || event.keyboard.key == 'MediaPause'}",
+                  "commands": [
+                    {
+                      "type": "SendEvent",
+                      "arguments": [
+                        "PlayPause"
+                      ]
+                    }
+                  ]
+                }
+              ]
             }
           ],
           "id": "MaTimeRoot"
@@ -1006,5 +1296,91 @@
   },
   "settings": {
     "idleTimeout": 600000
-  }
+  },
+  "handleKeyDown": [
+    {
+      "when": "${event.keyboard.code == 'ArrowUp' || event.keyboard.key == 'ArrowUp'}",
+      "commands": [
+        {
+          "type": "SetValue",
+          "componentId": "AudioPlayerRoot",
+          "property": "remoteFocus",
+          "value": 10
+        },
+        {
+          "type": "SetFocus",
+          "componentId": "maRemote"
+        }
+      ]
+    },
+    {
+      "when": "${event.keyboard.code == 'ArrowLeft' || event.keyboard.key == 'ArrowLeft' || event.keyboard.code == 'ArrowRight' || event.keyboard.key == 'ArrowRight' || event.keyboard.code == 'ArrowDown' || event.keyboard.key == 'ArrowDown'}",
+      "commands": [
+        {
+          "type": "SetValue",
+          "componentId": "AudioPlayerRoot",
+          "property": "remoteFocus",
+          "value": 1
+        },
+        {
+          "type": "SetFocus",
+          "componentId": "maRemote"
+        }
+      ]
+    },
+    {
+      "when": "${event.keyboard.code == 'Enter' || event.keyboard.key == 'Enter' || event.keyboard.code == 'NumpadEnter' || event.keyboard.key == 'NumpadEnter'}",
+      "commands": [
+        {
+          "type": "SendEvent",
+          "arguments": [
+            "PlayPause"
+          ]
+        },
+        {
+          "type": "SetValue",
+          "componentId": "AudioPlayerRoot",
+          "property": "remoteFocus",
+          "value": 1
+        },
+        {
+          "type": "SetFocus",
+          "componentId": "maRemote"
+        }
+      ]
+    },
+    {
+      "when": "${event.keyboard.code == 'MediaRewind' || event.keyboard.key == 'MediaRewind' || event.keyboard.code == 'MediaPreviousTrack' || event.keyboard.key == 'MediaPreviousTrack' || event.keyboard.code == 'MediaTrackPrevious' || event.keyboard.key == 'MediaTrackPrevious'}",
+      "commands": [
+        {
+          "type": "SendEvent",
+          "arguments": [
+            "Previous"
+          ]
+        }
+      ]
+    },
+    {
+      "when": "${event.keyboard.code == 'MediaFastForward' || event.keyboard.key == 'MediaFastForward' || event.keyboard.code == 'MediaNextTrack' || event.keyboard.key == 'MediaNextTrack' || event.keyboard.code == 'MediaTrackNext' || event.keyboard.key == 'MediaTrackNext'}",
+      "commands": [
+        {
+          "type": "SendEvent",
+          "arguments": [
+            "Next"
+          ]
+        }
+      ]
+    },
+    {
+      "when": "${event.keyboard.code == 'MediaPlayPause' || event.keyboard.key == 'MediaPlayPause' || event.keyboard.code == 'MediaPlay' || event.keyboard.key == 'MediaPlay' || event.keyboard.code == 'MediaPause' || event.keyboard.key == 'MediaPause'}",
+      "commands": [
+        {
+          "type": "SendEvent",
+          "arguments": [
+            "PlayPause"
+          ]
+        }
+      ]
+    }
+  ]
 }
