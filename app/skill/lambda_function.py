@@ -615,7 +615,7 @@ _now_playing_state = {}
 def _apl_time_commands(info):
     """SetValue commands giving the APL slider the per-track elapsed/total."""
     return [
-        {"type": "SetValue", "componentId": "MaTimeRoot",
+        {"type": "SetValue", "componentId": "AudioPlayerRoot",
          "property": "trackTotal", "value": info.get("duration_ms", 0)},
         {"type": "SetValue", "componentId": "videoPlayer",
          "property": "pendingElapsed", "value": info.get("elapsed_ms", 0)},
@@ -1201,7 +1201,7 @@ def _seek_time_commands(player_id, state, info, now):
     total = info.get("duration_ms", 0)
     logger.info("Time sync %s: new stream starts at the seek position %.0fs", player_id, hint[0])
     return [
-        {"type": "SetValue", "componentId": "MaTimeRoot", "property": "trackTotal", "value": total},
+        {"type": "SetValue", "componentId": "AudioPlayerRoot", "property": "trackTotal", "value": total},
         {"type": "SetValue", "componentId": "videoPlayer", "property": "trackOffset",
          "value": -int(hint[0] * 1000)},
         {"type": "SetValue", "componentId": "videoPlayer", "property": "needsResync", "value": False},
