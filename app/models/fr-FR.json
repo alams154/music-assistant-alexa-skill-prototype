@@ -65,7 +65,12 @@
           },
           {
             "name": "AMAZON.StartOverIntent"
-          }
+          },
+          {"name": "AMAZON.NextIntent", "samples": []},
+          {"name": "AMAZON.PreviousIntent", "samples": []},
+          {"name": "AMAZON.FallbackIntent", "samples": []},
+          {"name": "MaNextIntent", "slots": [], "samples": ["suivante", "chanson suivante", "titre suivant", "morceau suivant", "la chanson d'après"]},
+          {"name": "MaPreviousIntent", "slots": [], "samples": ["précédente", "chanson précédente", "titre précédent", "morceau précédent", "la chanson d'avant", "reviens en arrière"]}
         ]
       }
     }

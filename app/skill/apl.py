@@ -61,7 +61,7 @@ def add_apl(response_builder, start_paused=False):
     autoplay = not start_paused
 
     # Update autoplay in Video component and AlexaTransportControls.
-    # Found by type, so that changes to the layout do not break it.
+    # Found by type, the document layout is patched (buttons container).
     def _find_components(node, wanted, found):
         if isinstance(node, dict):
             if node.get("type") in wanted:
@@ -91,7 +91,8 @@ def add_apl(response_builder, start_paused=False):
             "headerTitle": metadata.get("headerTitle", ""),
             "headerSubtitle": metadata.get("headerSubtitle", ""),
             "primaryText": metadata.get("primaryText", ""),
-            "secondaryText": metadata.get("secondaryText", "")
+            "secondaryText": metadata.get("secondaryText", ""),
+            "audioNextSource": _voice_next_url(audio_src)
         })
     except (KeyError, IndexError):
         logging.warning("Could not update mainTemplate in APL document")
@@ -150,3 +151,14 @@ def _build_secondary_text(store):
     elif album:
         return album
     return ""
+
+
+def _voice_next_url(audio_src):
+    """Dummy second source of the Video (see the "VoiceNext" event)."""
+    import os
+    host = (os.environ.get("SKILL_HOSTNAME") or "").strip().rstrip("/")
+    if host:
+        if not host.startswith("http"):
+            host = "https://" + host
+        return host + "/ma-voice-next.mp3"
+    return (audio_src or "") + "?ma_voice_next=1"

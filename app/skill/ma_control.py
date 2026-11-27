@@ -33,7 +33,7 @@ from env_secrets import get_env_secret
 
 logger = logging.getLogger(__name__)
 
-SUPPORTED_COMMANDS = ("next", "previous", "start_over", "pause", "stop", "resume")
+SUPPORTED_COMMANDS = ("next", "previous", "start_over", "pause", "stop", "resume", "advance")
 
 # How long to suppress the echoed intent caused by pause/stop/resume.
 # Alexa.TextCommand is a direct API call (not acoustic), so the round trip
@@ -106,6 +106,9 @@ async def _send_command(server_url, token, player_id, command, ref_item_id=None)
                 await client.players.next_track(player_id)
             elif command == "previous":
                 await _play_relative_index(client, player_id, -1, ref_item_id)
+            elif command == "advance":
+                # next track after the one shown (the flow stream ended)
+                await _play_relative_index(client, player_id, 1, ref_item_id)
             elif command == "start_over":
                 await _play_relative_index(client, player_id, 0, ref_item_id)
             elif command == "pause":
@@ -241,4 +244,39 @@ def get_queue_state(player_id):
         return asyncio.run(_get_queue_state(server_url, token, player_id))
     except Exception:
         logger.debug("get_queue_state failed for %s", player_id, exc_info=True)
+        return None
+
+
+# Lyrics of the current track of a player: {"queue_item_id", "lyrics", "lrc"} or None.
+async def _get_lyrics(server_url, token, player_id):
+    async with aiohttp.ClientSession() as session:
+        async with MusicAssistantClient(server_url, session, token=token) as client:
+            queue = await client.player_queues.get_active_queue(player_id)
+            item = queue.current_item if queue else None
+            track = getattr(item, "media_item", None)
+            if track is None:
+                return None
+            lyrics = lrc = None
+            try:
+                result = await client.send_command("metadata/get_track_lyrics", track=track)
+                if result:
+                    lyrics, lrc = result[0], result[1]
+            except Exception:
+                logger.debug("metadata/get_track_lyrics failed", exc_info=True)
+            if not (lyrics or lrc):
+                meta = getattr(track, "metadata", None)
+                lyrics = getattr(meta, "lyrics", None)
+                lrc = getattr(meta, "lrc_lyrics", None)
+            return {"queue_item_id": item.queue_item_id, "lyrics": lyrics, "lrc": lrc}
+
+
+def get_lyrics(player_id):
+    server_url = get_env_secret("MA_API_URL")
+    token = get_env_secret("MA_API_TOKEN")
+    if not server_url or not player_id:
+        return None
+    try:
+        return asyncio.run(_get_lyrics(server_url, token, player_id))
+    except Exception:
+        logger.debug("get_lyrics failed for %s", player_id, exc_info=True)
         return None

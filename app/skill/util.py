@@ -416,8 +416,9 @@ def update_apl_metadata(response_builder):
 def schedule_apl_refresh(response_builder, delay_ms=1000):
     """Schedule the next APL metadata refresh via a UserEvent.
 
-    This keeps refreshes alive even if the onMount loop does not repeat.
+    Kept for compatibility: the APL document now refreshes by itself.
     """
+    return  # the document's own onMount loop (sequencer maRefresh) sends the refreshes
     if not apl_enabled():
         return
     try:
